@@ -14,14 +14,6 @@ export async function POST(request: NextRequest) {
 
   const { error, data } = await supabase.auth.signInWithPassword({ email, password })
 
-  console.log('LOGIN ATTEMPT v2:', {
-    email,
-    success: !error,
-    hasSession: !!data?.session,
-    hasAccessToken: !!data?.session?.access_token,
-    error: error?.message,
-  })
-
   if (error || !data.session) {
     return NextResponse.redirect(
       new URL(`/login?error=${encodeURIComponent(error?.message || 'No session')}`, request.url),
@@ -37,16 +29,20 @@ export async function POST(request: NextRequest) {
   const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || 'default'
   const cookieName = `sb-${projectRef}-auth-token`
 
-  const sessionPayload = JSON.stringify({
+  // @supabase/ssr expects base64-prefixed JSON
+  const sessionPayload = {
     access_token: data.session.access_token,
     refresh_token: data.session.refresh_token,
     expires_at: data.session.expires_at,
     expires_in: data.session.expires_in,
     token_type: data.session.token_type,
     user: data.session.user,
-  })
+  }
 
-  response.cookies.set(cookieName, sessionPayload, {
+  const base64Value = 'base64-' + Buffer.from(JSON.stringify(sessionPayload)).toString('base64')
+
+  // Supabase chunks large cookies; for ~3KB session, single cookie works
+  response.cookies.set(cookieName, base64Value, {
     path: '/',
     httpOnly: false,
     secure: true,
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest) {
     maxAge: 60 * 60 * 24 * 7,
   })
 
-  console.log('COOKIE SET:', { cookieName, size: sessionPayload.length })
+  console.log('COOKIE SET v3:', { cookieName, format: 'base64', size: base64Value.length })
 
   return response
 }
