@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { STAGES, type WorkOrder, type WoStage } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 
@@ -44,6 +45,22 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   const [stageHistory, setStageHistory] = useState<StageHistoryEntry[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  // Auto-open WO from ?wo=X param (when arriving from Clients or All Work Orders)
+  useEffect(() => {
+    const woId = searchParams?.get('wo')
+    if (woId && workOrders.length > 0) {
+      const found = workOrders.find(w => w.id === woId)
+      if (found) {
+        setSelectedWo(found)
+        // Clear the param so refresh doesn't re-open
+        router.replace('/dashboard', { scroll: false })
+      }
+    }
+  }, [searchParams, workOrders, router])
+
 
   // Load stage history when a non-new WO is selected
   useEffect(() => {
