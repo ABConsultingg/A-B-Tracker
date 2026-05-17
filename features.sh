@@ -1,3 +1,13 @@
+#!/bin/bash
+# ab-tracker — features pass: +New WO button + drag-and-drop
+# Run from inside ~/ab-tracker: bash features.sh
+
+set -e
+cd ~/ab-tracker
+
+echo "→ Adding +New WO button + drag-and-drop to BoardClient..."
+
+cat > components/work-orders/BoardClient.tsx << 'EOF'
 'use client'
 import { useState, useMemo } from 'react'
 import { STAGES, type WorkOrder, type WoStage } from '@/lib/types'
@@ -505,3 +515,11 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     </div>
   )
 }
+EOF
+
+echo ""
+echo "✅ Features added!"
+echo ""
+echo "Next: build + push"
+echo "  cd ~/ab-tracker && npm run build && git add -A && git commit -m 'Features: +New WO + drag-and-drop' && git push"
+echo ""
