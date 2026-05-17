@@ -19,7 +19,7 @@ export default async function ClientsPage() {
             {(clients || []).map((c: any) => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-6 py-3 font-medium text-gray-900">{c.name}</td>
-                <td className="px-6 py-3"><span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">{c.status}</span></td>
+                <td className="px-6 py-3"><span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">{c.status || 'active'}</span></td>
                 <td className="px-6 py-3 text-gray-600">{c.account_lead || '—'}</td>
               </tr>
             ))}

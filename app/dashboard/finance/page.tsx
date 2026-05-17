@@ -4,7 +4,7 @@ export default async function FinancePage() {
   const supabase = createClient()
   const { data: wos } = await supabase
     .from('work_orders')
-    .select(`stage, est_cost, add_cost, clients(name)`)
+    .select(`stage, est_cost, add_cost, clients!work_orders_client_id_fkey(name)`)
 
   const invoiced = (wos || []).filter(w => w.stage === 'invoiced')
                               .reduce((s, w) => s + (w.est_cost || 0) + (w.add_cost || 0), 0)

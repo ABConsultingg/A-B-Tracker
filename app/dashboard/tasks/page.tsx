@@ -8,7 +8,11 @@ export default async function MyTasksPage() {
 
   const { data: wos } = await supabase
     .from('work_orders')
-    .select(`*, clients(name), services(name)`)
+    .select(`
+      *,
+      clients!work_orders_client_id_fkey(name),
+      services!work_orders_service_id_fkey(name)
+    `)
     .eq('owner_id', member?.id)
     .not('stage', 'in', '(paid,archived)')
     .order('due_date', { ascending: true })

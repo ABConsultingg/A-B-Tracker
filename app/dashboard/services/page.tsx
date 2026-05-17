@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 
 export default async function ServicesPage() {
   const supabase = createClient()
-  const { data: services } = await supabase.from('services').select('*').order('sort_order')
+  const { data: services } = await supabase.from('services').select('*').order('name')
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Services</h1>

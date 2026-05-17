@@ -5,7 +5,12 @@ export default async function AllWorkOrdersPage() {
   const supabase = createClient()
   const { data: wos } = await supabase
     .from('work_orders')
-    .select(`*, clients(name), services(name), team_members(name)`)
+    .select(`
+      *,
+      clients!work_orders_client_id_fkey(name),
+      services!work_orders_service_id_fkey(name),
+      team_members!work_orders_owner_id_fkey(name)
+    `)
     .order('created_at', { ascending: false })
     .limit(500)
 

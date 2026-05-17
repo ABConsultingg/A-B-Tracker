@@ -1,6 +1,5 @@
 'use client'
-import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 
 const NAV = [
   { href: '/dashboard',           label: 'Board',           icon: '⬜' },
@@ -14,15 +13,7 @@ const NAV = [
 
 export default function Sidebar({ member }: { member: any }) {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
   const isAdmin = member?.role === 'admin'
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
 
   return (
     <aside className="w-56 flex-shrink-0 flex flex-col border-r border-gray-200 bg-white">
@@ -64,10 +55,11 @@ export default function Sidebar({ member }: { member: any }) {
             <div className="text-xs text-gray-400 capitalize">{member?.role}</div>
           </div>
         </div>
-        <button onClick={handleLogout}
-          className="w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg text-left">
-          Sign out
-        </button>
+        <form action="/api/logout" method="POST">
+          <button type="submit" className="w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg text-left">
+            Sign out
+          </button>
+        </form>
       </div>
     </aside>
   )

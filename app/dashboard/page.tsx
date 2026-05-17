@@ -1,37 +1,36 @@
 import { createClient } from '@/lib/supabase/server'
-import { cookies } from 'next/headers'
+import BoardClient from '@/components/work-orders/BoardClient'
 
 export default async function DashboardPage() {
-  const cookieStore = cookies()
-  const allCookies = cookieStore.getAll()
   const supabase = createClient()
-  
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  const start = Date.now()
-  let workOrders = null
-  let queryError = null
-  if (user) {
-    const result = await supabase.from('work_orders').select('id, title, stage').limit(10)
-    workOrders = result.data
-    queryError = result.error
-  }
-  const elapsed = Date.now() - start
+
+  const { data: workOrders } = await supabase
+    .from('work_orders')
+    .select(`
+      *,
+      clients!work_orders_client_id_fkey(name),
+      services!work_orders_service_id_fkey(name, category),
+      team_members!work_orders_owner_id_fkey(name)
+    `)
+    .not('stage', 'eq', 'archived')
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  const { data: clients } = await supabase
+    .from('clients').select('id, name').order('name')
+
+  const { data: services } = await supabase
+    .from('services').select('id, name, category, base_price, occurrence').order('name')
+
+  const { data: team } = await supabase
+    .from('team_members').select('id, name, role').order('name')
 
   return (
-    <div style={{ padding: 40, fontFamily: 'monospace', fontSize: 14 }}>
-      <h1>Dashboard Diagnostic</h1>
-      <h2>Auth</h2>
-      <p>User: {user?.email || 'NOT LOGGED IN'}</p>
-      <p>Auth error: {authError ? JSON.stringify(authError) : 'none'}</p>
-      <h2>Cookies sent ({allCookies.length})</h2>
-      <pre style={{ background: '#f5f5f5', padding: 10 }}>
-        {allCookies.map(c => c.name + ' (' + c.value.length + ' chars)').join('\n')}
-      </pre>
-      <h2>Data query</h2>
-      <p>Time: {elapsed}ms</p>
-      <p>Error: {queryError ? JSON.stringify(queryError) : 'none'}</p>
-      <p>Rows: {workOrders?.length || 0}</p>
-    </div>
+    <BoardClient
+      initialWorkOrders={workOrders || []}
+      clients={clients || []}
+      services={services || []}
+      team={team || []}
+    />
   )
 }
