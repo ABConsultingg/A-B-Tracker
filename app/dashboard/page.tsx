@@ -23,7 +23,7 @@ export default async function DashboardPage() {
     .from('services').select('id, name, category, base_price, occurrence').order('name')
 
   const { data: team } = await supabase
-    .from('team_members').select('id, name, role').order('name')
+    .from('team_members').select('id, name, role, auth_user_id').order('name')
 
   return (
     <BoardClient
