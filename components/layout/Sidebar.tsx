@@ -9,6 +9,7 @@ const NAV = [
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true },
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️',  adminOnly: true },
   { href: '/dashboard/tasks',     label: 'My Tasks',        icon: '✓' },
+  { href: '/dashboard/recent',    label: 'Recent Changes',  icon: '🔔' },
   { href: '/dashboard/all',       label: 'All Work Orders', icon: '☰' },
 ]
 
