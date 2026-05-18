@@ -58,8 +58,10 @@ function ClientDate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-export default function BoardClient({ initialWorkOrders, clients, services, team }: {
-  initialWorkOrders: WorkOrder[]; clients: any[]; services: any[]; team: any[]
+export default function BoardClient({ initialWorkOrders, clients, services, team, taskAggregates, assignmentsByWo }: {
+  initialWorkOrders: WorkOrder[]; clients: any[]; services: any[]; team: any[];
+  taskAggregates?: Record<string, { total: number; done: number; overdue: number }>;
+  assignmentsByWo?: Record<string, string[]>;
 }) {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(initialWorkOrders)
   const [mounted, setMounted] = useState(false)
@@ -529,9 +531,79 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         <div className="text-xs text-gray-500 space-y-0.5">
           {card.clients?.name && <div className="truncate">🏢 {card.clients.name}</div>}
           {card.services?.name && <div className="truncate">⚙️ {card.services.name}</div>}
-          {card.team_members?.name && <div className="truncate">👤 {card.team_members.name}</div>}
           {card.due_date && <div>📅 <ClientDate>{new Date(card.due_date).toLocaleDateString()}</ClientDate></div>}
         </div>
+
+        {/* Task tag */}
+        {(() => {
+          const agg = taskAggregates?.[card.id]
+          if (!agg || agg.total === 0) return null
+          const allDone = agg.done === agg.total
+          const hasOverdue = agg.overdue > 0
+          const colorClass = allDone
+            ? 'bg-green-50 text-green-700 border-green-200'
+            : hasOverdue
+              ? 'bg-red-50 text-red-700 border-red-200'
+              : 'bg-gray-50 text-gray-600 border-gray-200'
+          const tooltipLabel = hasOverdue
+            ? `${agg.overdue} overdue · ${agg.done}/${agg.total} done`
+            : `${agg.done}/${agg.total} done`
+          return (
+            <div className="mt-2">
+              <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-semibold border ${colorClass}`}
+                title={tooltipLabel}>
+                ✓ {agg.done}/{agg.total} tasks
+              </span>
+            </div>
+          )
+        })()}
+
+        {/* Avatar stack + assignee footer */}
+        {(() => {
+          const ownerId = card.owner_id
+          const assigneeIds = assignmentsByWo?.[card.id] || []
+          // Build a deduped, ordered list: owner first, then unique assignees not equal to owner
+          const ordered: { id: string; name: string; isOwner: boolean }[] = []
+          if (ownerId) {
+            const name = teamById[ownerId] || card.team_members?.name || '?'
+            ordered.push({ id: ownerId, name, isOwner: true })
+          }
+          assigneeIds.forEach(aid => {
+            if (aid === ownerId) return
+            const name = teamById[aid] || '?'
+            ordered.push({ id: aid, name, isOwner: false })
+          })
+          if (ordered.length === 0) {
+            return <div className="text-xs text-gray-400 mt-2 italic">Unassigned</div>
+          }
+          const footer =
+            ordered.length === 1 ? ordered[0].name :
+            ordered.length === 2 ? `${ordered[0].name} +1` :
+            `${ordered[0].name} +${ordered.length - 1}`
+          return (
+            <div className="flex items-center gap-2 mt-2">
+              <div className="flex -space-x-1.5">
+                {ordered.slice(0, 4).map(m => (
+                  <div key={m.id}
+                    title={m.isOwner ? `${m.name} (owner)` : m.name}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white border border-white ${
+                      m.isOwner ? 'ring-1 ring-amber-400' : ''
+                    }`}
+                    style={{ background: '#2d4a7c' }}>
+                    {m.name[0]?.toUpperCase()}
+                  </div>
+                ))}
+                {ordered.length > 4 && (
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-gray-600 bg-gray-100 border border-white">
+                    +{ordered.length - 4}
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-gray-600 truncate">{footer}</div>
+            </div>
+          )
+        })()}
+
         {((card.est_cost || 0) + (card.add_cost || 0) + ((card as any).ad_spend || 0) > 0) && (
           <div className="text-xs font-mono text-gray-700 mt-2 font-semibold">
             ${((card.est_cost || 0) + (card.add_cost || 0) + ((card as any).ad_spend || 0)).toLocaleString()}
