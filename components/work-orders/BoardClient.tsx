@@ -397,7 +397,10 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
           draggedId === card.id ? 'opacity-30' : ''
         }`}>
         <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{card.title}</div>
+          <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
+            {(card as any).flagged && <span className="text-red-600 mr-1" title="Flagged with issue">⚑</span>}
+            {card.title}
+          </div>
           {card.priority && (
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${PRIORITY_COLORS[card.priority]}`}>
               {card.priority[0].toUpperCase()}
@@ -927,6 +930,61 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
               {/* ─── Details ─── */}
               <div className="space-y-3">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">Details</div>
+
+                {/* Flag with issue */}
+                <div className={`rounded-lg border ${
+                  (isNew ? (newWo as any).flagged : (wo as any)?.flagged)
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-gray-200 bg-white'
+                }`}>
+                  <label className="flex items-start gap-2 px-3 py-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                      checked={!!(isNew ? (newWo as any).flagged : (wo as any)?.flagged)}
+                      onChange={e => {
+                        const next = e.target.checked
+                        if (isNew) {
+                          setNewWo({ ...newWo, flagged: next, ...(next ? {} : { issue: null }) } as any)
+                        } else {
+                          updateWo({ flagged: next, ...(next ? {} : { issue: null }) } as any)
+                        }
+                      }}
+                    />
+                    <div className="flex-1">
+                      <div className={`text-sm font-semibold ${
+                        (isNew ? (newWo as any).flagged : (wo as any)?.flagged) ? 'text-red-700' : 'text-gray-700'
+                      }`}>
+                        <span className="mr-1">⚑</span> Flag with issue
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Surface this work order to the team as needing attention
+                      </div>
+                    </div>
+                  </label>
+                  {(isNew ? (newWo as any).flagged : (wo as any)?.flagged) && (
+                    <div className="px-3 pb-3 -mt-1">
+                      {isNew ? (
+                        <textarea
+                          value={(newWo as any).issue || ''}
+                          onChange={e => setNewWo({ ...newWo, issue: e.target.value } as any)}
+                          rows={3}
+                          placeholder="Describe the issue — what's broken, blocked, or needs the team's eyes."
+                          className="w-full text-sm text-red-900 placeholder-red-300 px-3 py-2 border border-red-200 rounded bg-red-50/40 resize-none focus:border-red-500 focus:outline-none"
+                        />
+                      ) : (
+                        <textarea
+                          defaultValue={(wo as any)?.issue || ''}
+                          onBlur={e => e.target.value !== ((wo as any)?.issue || '') && updateWo({ issue: e.target.value || null } as any)}
+                          rows={3}
+                          placeholder="Describe the issue — what's broken, blocked, or needs the team's eyes."
+                          className="w-full text-sm text-red-900 placeholder-red-300 px-3 py-2 border border-red-200 rounded bg-red-50/40 resize-none focus:border-red-500 focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Deliverables Link</label>
                   {isNew ? (
