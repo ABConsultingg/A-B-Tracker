@@ -41,16 +41,20 @@ export async function POST(request: NextRequest) {
 
   const base64Value = 'base64-' + Buffer.from(JSON.stringify(sessionPayload)).toString('base64')
 
+  // Detect if we're running locally vs in production
+  // secure:true forbids the cookie on http://localhost, so we relax it in dev only
+  const isProduction = process.env.NODE_ENV === 'production'
+
   // Supabase chunks large cookies; for ~3KB session, single cookie works
   response.cookies.set(cookieName, base64Value, {
     path: '/',
     httpOnly: false,
-    secure: true,
+    secure: isProduction,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
   })
 
-  console.log('COOKIE SET v3:', { cookieName, format: 'base64', size: base64Value.length })
+  console.log('COOKIE SET v4:', { cookieName, format: 'base64', size: base64Value.length, secure: isProduction })
 
   return response
 }
