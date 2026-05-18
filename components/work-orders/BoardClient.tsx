@@ -50,16 +50,19 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
 
   // Auto-open WO from ?wo=X param (when arriving from Clients or All Work Orders)
   useEffect(() => {
-    const woId = searchParams?.get('wo')
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const woId = params.get('wo')
     if (woId && workOrders.length > 0) {
       const found = workOrders.find(w => w.id === woId)
       if (found) {
         setSelectedWo(found)
-        // Clear the param so refresh doesn't re-open
-        router.replace('/dashboard', { scroll: false })
+        // Clear the param without triggering re-render
+        window.history.replaceState({}, '', '/dashboard')
       }
     }
-  }, [searchParams, workOrders, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workOrders.length])
 
 
   // Load stage history when a non-new WO is selected
