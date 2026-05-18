@@ -3,6 +3,8 @@ export type WoStage =
   | 'sent-for-approval' | 'revisions-received' | 'approved'
   | 'deliverables-executed' | 'invoiced' | 'paid' | 'on-hold' | 'archived'
 
+export type WoOccurrence = 'One-time' | 'Recurring' | 'Quarterly' | 'Weekly'
+
 export const STAGES: { id: WoStage; label: string; color: string }[] = [
   { id: 'submitted',              label: 'Submitted',          color: '#94a3b8' },
   { id: 'not-started',            label: 'Not Started',        color: '#64748b' },
@@ -27,9 +29,19 @@ export interface WorkOrder {
   owner_id?: string
   stage: WoStage
   priority: 'low' | 'medium' | 'high' | 'urgent'
+  occurrence?: WoOccurrence
   est_cost?: number
   add_cost?: number
+  ad_spend?: number
   due_date?: string
+  submitted_at?: string
+  branch?: string | null
+  vendor?: string | null
+  deliverables_link?: string | null
+  notes_link?: string | null
+  notes?: string | null
+  flagged?: boolean
+  issue?: string | null
   created_at: string
   updated_at: string
   clients?: { name: string }
