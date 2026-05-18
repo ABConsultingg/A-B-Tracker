@@ -94,6 +94,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   const [tasks, setTasks] = useState<Task[]>([])
   const [newTaskDesc, setNewTaskDesc] = useState('')
   const [addingTask, setAddingTask] = useState(false)
+  const [assignees, setAssignees] = useState<string[]>([])
+  const [togglingAssignee, setTogglingAssignee] = useState<string | null>(null)
   const supabase = createClient()
 
   // Auto-open WO from ?wo=X param (when arriving from Clients or All Work Orders)
@@ -145,6 +147,16 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
       .eq('work_order_id', wo.id)
       .order('sort_order', { ascending: true })
       .then(({ data }) => setTasks((data || []) as Task[]))
+  }, [selectedWo, supabase])
+
+  // Load assignees when a non-new WO is selected
+  useEffect(() => {
+    if (!selectedWo || (selectedWo as any).__new) { setAssignees([]); return }
+    const wo = selectedWo as WorkOrder
+    supabase.from('wo_assignees')
+      .select('team_member_id')
+      .eq('work_order_id', wo.id)
+      .then(({ data }) => setAssignees((data || []).map((r: any) => r.team_member_id)))
   }, [selectedWo, supabase])
 
   function handleCommentInput(value: string, cursorPos: number) {
@@ -287,6 +299,35 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     setTasks(prev => prev.filter(t => t.id !== taskId))
     const { error } = await supabase.from('wo_tasks').delete().eq('id', taskId)
     if (error) alert('Failed to delete task: ' + error.message)
+  }
+
+  async function toggleAssignee(teamMemberId: string) {
+    if (!selectedWo || (selectedWo as any).__new) return
+    const wo = selectedWo as WorkOrder
+    const isAssigned = assignees.includes(teamMemberId)
+    setTogglingAssignee(teamMemberId)
+    if (isAssigned) {
+      // optimistic remove
+      setAssignees(prev => prev.filter(id => id !== teamMemberId))
+      const { error } = await supabase.from('wo_assignees')
+        .delete()
+        .eq('work_order_id', wo.id)
+        .eq('team_member_id', teamMemberId)
+      if (error) {
+        alert('Failed to remove: ' + error.message)
+        setAssignees(prev => [...prev, teamMemberId]) // rollback
+      }
+    } else {
+      // optimistic add
+      setAssignees(prev => [...prev, teamMemberId])
+      const { error } = await supabase.from('wo_assignees')
+        .insert({ work_order_id: wo.id, team_member_id: teamMemberId })
+      if (error) {
+        alert('Failed to assign: ' + error.message)
+        setAssignees(prev => prev.filter(id => id !== teamMemberId)) // rollback
+      }
+    }
+    setTogglingAssignee(null)
   }
 
   const filtered = useMemo(() => {
@@ -862,6 +903,59 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
               {/* ─── Ownership & Priority ─── */}
               <div className="space-y-3">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">Ownership &amp; Priority</div>
+
+                {/* Assigned To (multi-select chip list) */}
+                {isNew ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
+                      Assigned To
+                    </label>
+                    <div className="text-xs text-gray-400 italic px-1">
+                      Save the work order first, then assign team members.
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
+                      Assigned To {assignees.length > 0 && (
+                        <span className="ml-1 normal-case text-gray-400 font-normal">({assignees.length})</span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {team.map((t: any) => {
+                        const assigned = assignees.includes(t.id)
+                        const busy = togglingAssignee === t.id
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => toggleAssignee(t.id)}
+                            disabled={busy}
+                            className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all ${
+                              busy ? 'opacity-50' : ''
+                            } ${
+                              assigned
+                                ? 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100'
+                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                            }`}
+                            title={assigned ? `Remove ${t.name}` : `Assign ${t.name}`}
+                          >
+                            <span className={`inline-flex w-4 h-4 rounded-full items-center justify-center text-[10px] font-bold text-white ${
+                              assigned ? '' : 'opacity-40'
+                            }`} style={{ background: '#2d4a7c' }}>
+                              {t.name[0]}
+                            </span>
+                            <span className="font-medium">{t.name}</span>
+                            {assigned && <span className="text-blue-400 ml-0.5">×</span>}
+                          </button>
+                        )
+                      })}
+                      {team.length === 0 && (
+                        <span className="text-xs text-gray-400 italic">No team members to assign.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Owner</label>
