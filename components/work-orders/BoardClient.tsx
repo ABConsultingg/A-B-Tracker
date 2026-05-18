@@ -143,16 +143,12 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   }
 
   function extractMentionedIds(body: string): string[] {
-    console.log('[mention-debug] team:', team)
-    console.log('[mention-debug] body:', body)
     const ids: string[] = []
     const seen = new Set<string>()
     const matches = body.match(/@(\w+)/g) || []
-    console.log('[mention-debug] regex matches:', matches)
     matches.forEach(m => {
       const name = m.substring(1).toLowerCase()
       const member = team.find((t: any) => t.name.toLowerCase() === name || t.name.toLowerCase().startsWith(name))
-      console.log('[mention-debug] match for', name, ':', member)
       if (member && member.auth_user_id && !seen.has(member.auth_user_id)) {
         seen.add(member.auth_user_id)
         ids.push(member.auth_user_id)
