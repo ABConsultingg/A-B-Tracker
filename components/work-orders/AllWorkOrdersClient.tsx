@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { STAGES, type WoStage } from '@/lib/types'
 
 type WO = {
@@ -13,6 +13,8 @@ type SortKey = 'title' | 'client' | 'service' | 'owner' | 'stage' | 'priority' |
 export default function AllWorkOrdersClient({ workOrders, clients, services, team }: {
   workOrders: WO[]; clients: any[]; services: any[]; team: any[]
 }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const [search, setSearch] = useState('')
   const [filterClient, setFilterClient] = useState('')
   const [filterService, setFilterService] = useState('')
@@ -164,7 +166,7 @@ export default function AllWorkOrdersClient({ workOrders, clients, services, tea
             {filteredAndSorted.map((wo) => {
               const stage = STAGES.find(s => s.id === wo.stage)
               const total = (wo.est_cost || 0) + (wo.add_cost || 0)
-              const overdue = wo.due_date && new Date(wo.due_date) < new Date() && !['paid','archived'].includes(wo.stage)
+              const overdue = mounted && wo.due_date && new Date(wo.due_date) < new Date() && !['paid','archived'].includes(wo.stage)
               return (
                 <tr key={wo.id} className="hover:bg-blue-50 cursor-pointer"
                     onClick={() => { window.location.href = `/dashboard?wo=${wo.id}` }}>

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { STAGES } from '@/lib/types'
 
 type Event = {
@@ -15,6 +15,8 @@ type Event = {
 }
 
 export default function RecentChangesClient({ events }: { events: Event[] }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const [range, setRange] = useState<'24h' | '7d' | '30d' | 'all'>('7d')
 
   const filtered = useMemo(() => {
@@ -89,7 +91,7 @@ export default function RecentChangesClient({ events }: { events: Event[] }) {
                 </div>
                 <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-2">
                   {e.clientName && <><span>🏢 {e.clientName}</span><span>·</span></>}
-                  <span title={new Date(e.at).toLocaleString()}>{relativeTime(e.at)}</span>
+                  <span title={new Date(e.at).toLocaleString()}>{mounted ? relativeTime(e.at) : new Date(e.at).toLocaleDateString()}</span>
                   {e.by && <><span>·</span><span>by {e.by}</span></>}
                 </div>
               </div>
