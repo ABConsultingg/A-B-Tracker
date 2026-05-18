@@ -136,11 +136,9 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   }, [workOrders, search, filterClient, filterService, filterOwner])
 
   async function moveStage(woId: string, newStage: WoStage) {
-    console.log('[moveStage] dragging WO', woId, 'to stage', newStage)
     const prevState = workOrders
     setWorkOrders(prev => prev.map(w => w.id === woId ? { ...w, stage: newStage } : w))
     const { data, error } = await supabase.from('work_orders').update({ stage: newStage }).eq('id', woId).select()
-    console.log('[moveStage] response:', { data, error })
     if (error) {
       alert('Move failed: ' + error.message)
       setWorkOrders(prevState) // rollback
