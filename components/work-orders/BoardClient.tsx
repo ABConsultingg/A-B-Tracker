@@ -490,6 +490,22 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     return map
   }, [team])
 
+  // Group services by category for the picker. Recurring categories sorted before One-time.
+  const servicesByCategory = useMemo(() => {
+    const groups: Record<string, any[]> = {}
+    services.forEach((s: any) => {
+      const key = s.category || 'Other'
+      if (!groups[key]) groups[key] = []
+      groups[key].push(s)
+    })
+    // Sort each group by name
+    Object.values(groups).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)))
+    // Return groups sorted alphabetically by category
+    return Object.fromEntries(
+      Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+    )
+  }, [services])
+
   // Auth user → team_member lookup so we can show "by Adrian" in history
   const [authUserMap, setAuthUserMap] = useState<Record<string, string>>({})
   useEffect(() => {
@@ -984,18 +1000,56 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service {isNew && '*'}</label>
                     {isNew ? (
                       <select value={newWo.service_id || ''}
-                        onChange={e => setNewWo({ ...newWo, service_id: e.target.value })}
+                        onChange={e => {
+                          const newServiceId = e.target.value
+                          const picked = services.find((s: any) => s.id === newServiceId)
+                          const patch: any = { service_id: newServiceId }
+                          // Auto-fill due date from service's lead time on new WOs only
+                          if (picked?.lead_time_days != null) {
+                            const target = new Date()
+                            target.setDate(target.getDate() + picked.lead_time_days)
+                            patch.due_date = target.toISOString().substring(0, 10)
+                          }
+                          setNewWo({ ...newWo, ...patch })
+                        }}
                         className="w-full text-sm px-2 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none">
                         <option value="">— Select —</option>
-                        {services.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        {Object.entries(servicesByCategory).map(([category, list]) => (
+                          <optgroup key={category} label={category}>
+                            {(list as any[]).map((s: any) => (
+                              <option key={s.id} value={s.id} title={s.description || ''}>
+                                {s.name}{s.lead_time_days != null ? ` · ${s.lead_time_days}d` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
                       </select>
                     ) : (
                       <select value={wo?.service_id || ''}
                         onChange={e => updateWo({ service_id: e.target.value })}
                         className="w-full text-sm px-2 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none">
-                        {services.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        {Object.entries(servicesByCategory).map(([category, list]) => (
+                          <optgroup key={category} label={category}>
+                            {(list as any[]).map((s: any) => (
+                              <option key={s.id} value={s.id} title={s.description || ''}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
                       </select>
                     )}
+                    {/* Description hint under dropdown if a service is selected */}
+                    {(() => {
+                      const sid = isNew ? newWo.service_id : wo?.service_id
+                      const picked = services.find((s: any) => s.id === sid)
+                      if (!picked?.description) return null
+                      return (
+                        <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--text-muted)' }}>
+                          {picked.description}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Branch / Location</label>

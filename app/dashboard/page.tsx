@@ -20,7 +20,7 @@ export default async function DashboardPage() {
     .from('clients').select('id, name').order('name')
 
   const { data: services } = await supabase
-    .from('services').select('id, name, category, base_price, occurrence').order('name')
+    .from('services').select('id, name, category, base_price, occurrence, lead_time_days, description').order('name')
 
   const { data: team } = await supabase
     .from('team_members').select('id, name, role, auth_user_id').order('name')
