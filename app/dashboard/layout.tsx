@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Sidebar, { type SidebarCounts, type ClientBadge } from '@/components/layout/Sidebar'
+import Sidebar, { type SidebarCounts, type ClientBadge, type TeamMemberBadge } from '@/components/layout/Sidebar'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -101,7 +101,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   counts.overdue = overdueCount
 
   // ----- Clients section: each active client with WO count -----
-  // Active = has >=1 non-archived WO.
   const { data: allClients } = await supabase
     .from('clients')
     .select('id, name')
@@ -122,9 +121,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .map((c: any) => ({ id: c.id, name: c.name, count: woCountByClient.get(c.id) || 0 }))
     .filter(c => c.count > 0)
 
+  // ----- Team Tasks section: list every team member for quick-switch -----
+  const { data: allTeam } = await supabase
+    .from('team_members')
+    .select('id, name, role')
+    .order('name')
+
+  const teamMemberBadges: TeamMemberBadge[] = (allTeam || []).map((m: any) => ({
+    id: m.id,
+    name: m.name,
+    slug: m.name.toLowerCase().split(/\s+/)[0],
+    isAdmin: m.role === 'admin',
+  }))
+
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)' }}>
-      <Sidebar member={member} counts={counts} clientBadges={clientBadges} />
+      <Sidebar
+        member={member}
+        counts={counts}
+        clientBadges={clientBadges}
+        teamMemberBadges={teamMemberBadges}
+      />
       <main className="flex-1 overflow-y-auto pt-14 md:pt-0">{children}</main>
     </div>
   )

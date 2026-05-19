@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
   { href: '/dashboard/all',       label: 'All Work Orders', icon: '☰', countKey: 'allWos', section: 'views' },
   { href: '/dashboard/tasks',     label: 'My Tasks',        icon: '✓', countKey: 'myTasks',  section: 'filters' },
+  { href: '/dashboard/tasks/all', label: 'All Tasks',       icon: '✓✓', section: 'filters' },
   { href: '/dashboard/mentions',  label: 'My Mentions',     icon: '@', section: 'filters' },
   { href: '/dashboard/recent',    label: 'Recent Changes',  icon: '🔔', section: 'filters' },
 ]
@@ -58,19 +59,31 @@ export type ClientBadge = {
   count: number
 }
 
+export type TeamMemberBadge = {
+  id: string
+  name: string
+  slug: string
+  isAdmin: boolean
+}
+
 export default function Sidebar({
   member,
   counts = {},
   clientBadges = [],
+  teamMemberBadges = [],
 }: {
   member: any
   counts?: SidebarCounts
   clientBadges?: ClientBadge[]
+  teamMemberBadges?: TeamMemberBadge[]
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [teamTasksOpen, setTeamTasksOpen] = useState(() =>
+    pathname.startsWith('/dashboard/tasks/') && pathname !== '/dashboard/tasks/all'
+  )
   const isAdmin = member?.role === 'admin'
   const [viewMode, setViewMode] = useViewMode(isAdmin)
   // In team mode, admin-only items are hidden even for admins.
@@ -86,8 +99,6 @@ export default function Sidebar({
   const onBoardOrAll = pathname === '/dashboard' || pathname === '/dashboard/all'
   const activeClient = searchParams.get('client') || ''
 
-  // Toggle a board filter. If active, clears it. If not active, sets it.
-  // Stays on Board/All Work Orders if already there; navigates to Board otherwise.
   function toggleBoardFilter(key: BoardFilter['key']) {
     const isCurrentlyActive = searchParams.get(key) === '1'
     const params = new URLSearchParams(searchParams.toString())
@@ -256,6 +267,71 @@ export default function Sidebar({
               )
             })}
           </div>
+
+          {/* TEAM TASKS section — collapsible list of team members */}
+          {teamMemberBadges.length > 0 && (
+            <>
+              <button
+                onClick={() => setTeamTasksOpen(o => !o)}
+                className="w-full text-left text-[10px] font-semibold uppercase px-2.5 pt-3 pb-1.5 flex items-center justify-between hover:text-white/60 transition-colors"
+                style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: '0.12em' }}
+              >
+                <span>Team Tasks</span>
+                <span className="text-[10px]">{teamTasksOpen ? '▾' : '▸'}</span>
+              </button>
+              {teamTasksOpen && (
+                <div className="flex flex-col gap-0.5 mb-2">
+                  {teamMemberBadges.map(m => {
+                    const href = `/dashboard/tasks/${m.slug}`
+                    const active = pathname === href
+                    return (
+                      <a
+                        key={m.id}
+                        href={href}
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors"
+                        style={
+                          active
+                            ? {
+                                background: 'rgba(217, 158, 43, 0.15)',
+                                color: 'white',
+                                boxShadow: 'inset 2px 0 0 var(--brand-accent)',
+                              }
+                            : { color: 'rgba(255,255,255,0.85)' }
+                        }
+                        onMouseEnter={e => {
+                          if (!active) {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                            e.currentTarget.style.color = 'white'
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!active) {
+                            e.currentTarget.style.background = 'transparent'
+                            e.currentTarget.style.color = 'rgba(255,255,255,0.85)'
+                          }
+                        }}
+                      >
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                          style={{
+                            background: active ? 'var(--brand-accent)' : '#2d4a7c',
+                            color: active ? 'var(--brand-navy)' : 'white',
+                          }}
+                        >
+                          {m.name[0]?.toUpperCase()}
+                        </span>
+                        <span className="flex-1 truncate">{m.name}</span>
+                        {m.isAdmin && (
+                          <span className="text-[10px]" style={{ color: 'var(--brand-accent)' }}>★</span>
+                        )}
+                      </a>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
 
           {/* CLIENTS section */}
           {clientBadges.length > 0 && (
