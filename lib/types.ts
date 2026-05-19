@@ -35,6 +35,7 @@ export interface WorkOrder {
   ad_spend?: number
   due_date?: string
   submitted_at?: string
+  stage_entered_at?: string | null
   branch?: string | null
   vendor?: string | null
   deliverables_link?: string | null
