@@ -509,48 +509,94 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   }, [supabase])
 
   function renderCard(card: WorkOrder) {
+    const priority = card.priority || 'medium'
+    const priorityColor =
+      priority === 'urgent' ? 'var(--pri-urgent)' :
+      priority === 'high'   ? 'var(--pri-high)'   :
+      priority === 'low'    ? 'var(--pri-low)'    :
+                              'var(--pri-medium)'
+    const flagged = (card as any).flagged
+    const priorityBadgeClasses: Record<string, string> = {
+      urgent: 'bg-[#fee2e2] text-[#991b1b]',
+      high:   'bg-[#ffedd5] text-[#9a3412]',
+      medium: 'bg-[#fef9c3] text-[#854d0e]',
+      low:    'bg-[#f1f5f9] text-[#475569]',
+    }
+    const occurrence = (card as any).occurrence
     return (
       <div key={card.id} draggable
         onDragStart={(e) => handleDragStart(e, card.id)}
         onDragEnd={handleDragEnd}
         onClick={() => setSelectedWo(card)}
-        className={`bg-white rounded-lg border border-gray-200 p-3 hover:shadow-md hover:border-gray-300 transition-all cursor-grab active:cursor-grabbing ${
+        className={`bg-white rounded-lg px-3 py-2.5 cursor-grab active:cursor-grabbing transition-all hover:shadow-[0_2px_8px_rgba(15,27,52,0.08)] ${
           draggedId === card.id ? 'opacity-30' : ''
-        }`}>
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">
-            {(card as any).flagged && <span className="text-red-600 mr-1" title="Flagged with issue">⚑</span>}
-            {card.title}
-          </div>
-          {card.priority && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${PRIORITY_COLORS[card.priority]}`}>
-              {card.priority[0].toUpperCase()}
+        }`}
+        style={{
+          border: '1px solid var(--border)',
+          borderLeftWidth: '3px',
+          borderLeftColor: flagged ? 'var(--red)' : priorityColor,
+        }}>
+
+        {/* Top row: WO-ID + priority badge */}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="font-mono text-[10px] tracking-wider" style={{ color: 'var(--text-faint)' }}>
+            {card.id.startsWith('WO-') ? card.id : `WO-${card.id.substring(0, 8)}`}
+          </span>
+          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-[1px] rounded ${priorityBadgeClasses[priority]}`}>
+            {priority}
+          </span>
+        </div>
+
+        {/* Title */}
+        <div className="text-[13px] font-[550] leading-snug line-clamp-2 mb-1.5" style={{ color: 'var(--brand-navy)', letterSpacing: '-0.005em' }}>
+          {flagged && <span className="mr-1" style={{ color: 'var(--red)' }} title="Flagged with issue">⚑</span>}
+          {card.title}
+        </div>
+
+        {/* Pill tags row */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          {card.clients?.name && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'var(--blue-soft)', color: 'var(--blue)' }}>
+              {card.clients.name}
+            </span>
+          )}
+          {card.services?.name && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'var(--purple-soft)', color: 'var(--purple)' }}>
+              {card.services.name}
+            </span>
+          )}
+          {occurrence && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: '#ecfeff', color: '#0e7490' }}>
+              {occurrence}
             </span>
           )}
         </div>
-        <div className="text-xs text-gray-500 space-y-0.5">
-          {card.clients?.name && <div className="truncate">🏢 {card.clients.name}</div>}
-          {card.services?.name && <div className="truncate">⚙️ {card.services.name}</div>}
-          {card.due_date && <div>📅 <ClientDate>{new Date(card.due_date).toLocaleDateString()}</ClientDate></div>}
-        </div>
 
-        {/* Task tag */}
+        {/* Due date */}
+        {card.due_date && (
+          <div className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            📅 <span className="font-mono tabular-nums"><ClientDate>{new Date(card.due_date).toLocaleDateString()}</ClientDate></span>
+          </div>
+        )}
+
+        {/* Task tag (Batch 7) */}
         {(() => {
           const agg = taskAggregates?.[card.id]
           if (!agg || agg.total === 0) return null
           const allDone = agg.done === agg.total
           const hasOverdue = agg.overdue > 0
-          const colorClass = allDone
-            ? 'bg-green-50 text-green-700 border-green-200'
+          const colorStyle = allDone
+            ? { background: 'var(--green-soft)', color: 'var(--green)', borderColor: '#a7f3d0' }
             : hasOverdue
-              ? 'bg-red-50 text-red-700 border-red-200'
-              : 'bg-gray-50 text-gray-600 border-gray-200'
+              ? { background: 'var(--red-soft)', color: 'var(--red)', borderColor: '#fecaca' }
+              : { background: 'var(--bg-sunken)', color: 'var(--text-muted)', borderColor: 'var(--border)' }
           const tooltipLabel = hasOverdue
             ? `${agg.overdue} overdue · ${agg.done}/${agg.total} done`
             : `${agg.done}/${agg.total} done`
           return (
             <div className="mt-2">
-              <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-semibold border ${colorClass}`}
+              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded font-semibold border"
+                style={colorStyle}
                 title={tooltipLabel}>
                 ✓ {agg.done}/{agg.total} tasks
               </span>
@@ -558,11 +604,10 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
           )
         })()}
 
-        {/* Avatar stack + assignee footer */}
+        {/* Avatar stack (Batch 7) + footer with cost */}
         {(() => {
           const ownerId = card.owner_id
           const assigneeIds = assignmentsByWo?.[card.id] || []
-          // Build a deduped, ordered list: owner first, then unique assignees not equal to owner
           const ordered: { id: string; name: string; isOwner: boolean }[] = []
           if (ownerId) {
             const name = teamById[ownerId] || card.team_members?.name || '?'
@@ -573,62 +618,80 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
             const name = teamById[aid] || '?'
             ordered.push({ id: aid, name, isOwner: false })
           })
+          const cost = (card.est_cost || 0) + (card.add_cost || 0) + ((card as any).ad_spend || 0)
           if (ordered.length === 0) {
-            return <div className="text-xs text-gray-400 mt-2 italic">Unassigned</div>
+            return (
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[11px] italic" style={{ color: 'var(--text-faint)' }}>Unassigned</span>
+                {cost > 0 && (
+                  <span className="text-[11px] font-mono tabular-nums font-semibold px-1.5 py-0.5 rounded"
+                    style={{ background: 'var(--brand-accent-soft)', color: 'var(--brand-navy)' }}>
+                    ${cost.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )
           }
           const footer =
             ordered.length === 1 ? ordered[0].name :
             ordered.length === 2 ? `${ordered[0].name} +1` :
             `${ordered[0].name} +${ordered.length - 1}`
           return (
-            <div className="flex items-center gap-2 mt-2">
-              <div className="flex -space-x-1.5">
-                {ordered.slice(0, 4).map(m => (
-                  <div key={m.id}
-                    title={m.isOwner ? `${m.name} (owner)` : m.name}
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white border border-white ${
-                      m.isOwner ? 'ring-1 ring-amber-400' : ''
-                    }`}
-                    style={{ background: '#2d4a7c' }}>
-                    {m.name[0]?.toUpperCase()}
-                  </div>
-                ))}
-                {ordered.length > 4 && (
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-gray-600 bg-gray-100 border border-white">
-                    +{ordered.length - 4}
-                  </div>
-                )}
+            <div className="flex items-center justify-between mt-2 gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex">
+                  {ordered.slice(0, 4).map((m, idx) => (
+                    <div key={m.id}
+                      title={m.isOwner ? `${m.name} (owner)` : m.name}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0"
+                      style={{
+                        background: m.isOwner ? 'var(--brand-accent)' : 'var(--brand-navy)',
+                        color:      m.isOwner ? 'var(--brand-navy)'   : 'white',
+                        marginLeft: idx === 0 ? 0 : '-6px',
+                        border:     idx === 0 ? 'none' : '1.5px solid var(--bg-elevated)',
+                        letterSpacing: '0.02em',
+                      }}>
+                      {m.name[0]?.toUpperCase()}
+                    </div>
+                  ))}
+                  {ordered.length > 4 && (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold flex-shrink-0"
+                      style={{ background: 'var(--bg-sunken)', color: 'var(--text-muted)', marginLeft: '-6px', border: '1.5px solid var(--bg-elevated)' }}>
+                      +{ordered.length - 4}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{footer}</span>
               </div>
-              <div className="text-xs text-gray-600 truncate">{footer}</div>
+              {cost > 0 && (
+                <span className="text-[11px] font-mono tabular-nums font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
+                  style={{ background: 'var(--brand-accent-soft)', color: 'var(--brand-navy)' }}>
+                  ${cost.toLocaleString()}
+                </span>
+              )}
             </div>
           )
         })()}
-
-        {((card.est_cost || 0) + (card.add_cost || 0) + ((card as any).ad_spend || 0) > 0) && (
-          <div className="text-xs font-mono text-gray-700 mt-2 font-semibold">
-            ${((card.est_cost || 0) + (card.add_cost || 0) + ((card as any).ad_spend || 0)).toLocaleString()}
-          </div>
-        )}
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      <div className="px-4 md:px-6 py-4 md:py-5 bg-white border-b border-gray-200 shadow-sm">
+    <div className="h-full flex flex-col" style={{ background: 'var(--bg)' }}>
+      <div className="px-4 md:px-6 py-4 md:py-5 bg-white border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between mb-3 md:mb-4">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Work Order Board</h1>
-            <p className="hidden md:block text-xs text-gray-500 mt-0.5">Drag cards between columns · Click any card to edit</p>
+            <h1 className="font-serif text-2xl md:text-[28px] font-semibold tracking-tight" style={{ color: 'var(--brand-navy)' }}>Board</h1>
+            <p className="hidden md:block text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Drag cards between columns · Click any card to edit</p>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
-            <div className="hidden md:block text-xs text-gray-500">
-              <span className="font-semibold text-gray-900">{filtered.length}</span> of {workOrders.length}
+            <div className="hidden md:block text-xs font-mono tabular-nums" style={{ color: 'var(--text-muted)' }}>
+              <span className="font-semibold" style={{ color: 'var(--brand-navy)' }}>{filtered.length}</span> of {workOrders.length}
             </div>
             <button onClick={openNewWo}
-              className="px-3 md:px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-sm hover:shadow transition-all flex items-center gap-1.5"
-              style={{ background: '#d99e2b' }}>
-              <span className="text-base">+</span> <span className="hidden sm:inline">New Work Order</span><span className="sm:hidden">New</span>
+              className="px-3 md:px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-1.5"
+              style={{ background: 'var(--brand-accent)', color: 'var(--brand-navy)' }}>
+              <span className="text-base">+</span> <span className="hidden sm:inline">New work order</span><span className="sm:hidden">New</span>
             </button>
           </div>
         </div>
@@ -809,22 +872,23 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                 onDragOver={(e) => handleDragOver(e, stageId)}
                 onDrop={(e) => handleDrop(e, stageId)}
                 onDragLeave={() => setDragOverStage(null)}>
-                <div className="bg-white rounded-t-lg border border-gray-200 border-b-0 px-3 py-2.5"
-                     style={{ borderTopColor: stage.color, borderTopWidth: 3 }}>
+                <div className="bg-white rounded-t-lg border border-b-0 px-3 py-2.5"
+                     style={{ borderColor: 'var(--border)', borderTopColor: stage.color, borderTopWidth: 3 }}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{stage.label}</span>
+                      <div className="w-2 h-2 rounded-sm" style={{ background: stage.color }} />
+                      <span className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-navy)' }}>{stage.label}</span>
                     </div>
-                    <span className="text-xs text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">{cards.length}</span>
+                    <span className="text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-faint)' }}>{cards.length}</span>
                   </div>
                   {total > 0 && (
-                    <div className="text-xs text-gray-500 mt-1 font-mono">${total.toLocaleString()}</div>
+                    <div className="text-[11px] mt-1 font-mono tabular-nums" style={{ color: 'var(--text-muted)' }}>${total.toLocaleString()}</div>
                   )}
                 </div>
-                <div className={`border border-gray-200 border-t-0 rounded-b-lg p-2 space-y-2 min-h-[120px] transition-colors ${
-                  isDragOver ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-gray-50'
-                }`}>
+                <div className={`border border-t-0 rounded-b-lg p-2 space-y-2 min-h-[120px] transition-colors ${
+                  isDragOver ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : ''
+                }`}
+                  style={!isDragOver ? { background: 'var(--bg-sunken)', borderColor: 'var(--border)' } : {}}>
                   {cards.length === 0 && !isDragOver && (
                     <div className="text-xs text-gray-300 text-center py-6">No work orders</div>
                   )}

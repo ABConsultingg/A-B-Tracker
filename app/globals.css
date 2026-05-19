@@ -2,7 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Google Fonts — Inter Tight (sans), Fraunces (serif), JetBrains Mono (mono) */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;550;600;700&family=Fraunces:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 :root {
+  /* Brand */
+  --brand-navy:        #0f1b34;
+  --brand-accent:      #d99e2b;
+  --brand-accent-soft: #fdf6e8;
+
+  /* Backgrounds */
+  --bg:          #f8f9fb;
+  --bg-elevated: #ffffff;
+  --bg-sunken:   #eef1f5;
+  --bg-hover:    #e7ebf1;
+
+  /* Borders */
+  --border:        #dde2eb;
+  --border-strong: #c5cdd9;
+
+  /* Text */
+  --text:       #0f1b34;
+  --text-muted: #5a6577;
+  --text-faint: #94a0b3;
+
+  /* Semantic */
+  --green:  #15803d; --green-soft:  #ecfdf5;
+  --amber:  #b45309; --amber-soft:  #fffbeb;
+  --red:    #b91c1c; --red-soft:    #fef2f2;
+  --blue:   #1e40af; --blue-soft:   #eff6ff;
+  --purple: #6b21a8; --purple-soft: #faf5ff;
+  --slate:  #475569; --slate-soft:  #f1f5f9;
+
+  /* Priority left-border colors */
+  --pri-urgent: #dc2626;
+  --pri-high:   #ea580c;
+  --pri-medium: #ca8a04;
+  --pri-low:    #64748b;
+
+  /* Legacy (keep — referenced elsewhere) */
   --navy: #1a2b4a;
   --navy-light: #2d4a7c;
   --gold: #d99e2b;
@@ -10,9 +48,27 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+body {
+  margin: 0;
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
 
+/* Scrollbar — page-level */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Sidebar scrollbar — dark mode for the navy aside */
+aside.sidebar-navy::-webkit-scrollbar-track { background: transparent; }
+aside.sidebar-navy::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+aside.sidebar-navy::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* Kanban card stale state gradient (referenced by classes below) */
+.card-stale { background: linear-gradient(to right, var(--amber-soft) 0%, var(--bg-elevated) 30%); }
+.card-stale-critical { background: linear-gradient(to right, var(--red-soft) 0%, var(--bg-elevated) 30%); }
