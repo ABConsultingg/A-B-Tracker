@@ -9,3 +9,6 @@ node_modules/
 # One-off development helper scripts (not for production)
 *.sh
 docs/
+
+# TypeScript incremental build cache (local-only)
+*.tsbuildinfo
