@@ -78,3 +78,34 @@ export interface ClientRate {
   effective_from?: string  // date
   created_at: string
 }
+
+/**
+ * A printable product (e.g., Flyers, Door Hangers, Business Cards) sold via
+ * a print vendor (default: Accurate Printing). Pricing is keyed by quantity
+ * tiers — see PrintProductTier and lib/print-pricing.ts.
+ */
+export interface PrintProduct {
+  id: string         // slug
+  name: string
+  spec?: string | null
+  vendor: string     // default 'Accurate Printing'
+  sort_order: number
+  active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+/**
+ * A quantity tier for a print product. The `price` is the TOTAL job price
+ * (not unit price) for ordering `qty` units of `product_id`. Unit price is
+ * derived as price / qty when displayed.
+ *
+ * Unique on (product_id, qty).
+ */
+export interface PrintProductTier {
+  id: string
+  product_id: string
+  qty: number
+  price: number
+  sort_order: number
+}

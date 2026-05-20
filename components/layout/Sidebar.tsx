@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', adminOnly: true, section: 'views' },
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
+  { href: '/dashboard/print-pricing', label: 'Print Pricing', icon: '🖨', adminOnly: true, section: 'views' },
   { href: '/dashboard/all',       label: 'All Work Orders', icon: '☰', countKey: 'allWos', section: 'views' },
   { href: '/dashboard/tasks',     label: 'My Tasks',        icon: '✓', countKey: 'myTasks',  section: 'filters' },
   { href: '/dashboard/tasks/all', label: 'All Tasks',       icon: '✓✓', section: 'filters' },
