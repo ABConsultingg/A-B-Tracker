@@ -28,11 +28,23 @@ export default async function ServicesPage() {
     if (r.service_id) usageCounts[r.service_id] = (usageCounts[r.service_id] || 0) + 1
   })
 
+  // Per-client price overrides + minimal client list for the override picker
+  const { data: clientRates } = await supabase
+    .from('client_rates')
+    .select('id, client_id, service_id, price, notes, effective_from')
+
+  const { data: clients } = await supabase
+    .from('clients')
+    .select('id, name')
+    .order('name', { ascending: true })
+
   return (
     <ServicesClient
       services={services || []}
       usageCounts={usageCounts}
       currentMember={currentMember}
+      clientRates={clientRates || []}
+      clients={clients || []}
     />
   )
 }

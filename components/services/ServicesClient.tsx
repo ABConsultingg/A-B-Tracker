@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { WoOccurrence } from '@/lib/types'
+import type { WoOccurrence, ClientRate } from '@/lib/types'
+import { ratesByService, priceDiff } from '@/lib/pricing'
 
 type Service = {
   id: string
@@ -58,10 +59,14 @@ export default function ServicesClient({
   services: initialServices,
   usageCounts,
   currentMember,
+  clientRates: initialRates,
+  clients,
 }: {
   services: Service[]
   usageCounts: Record<string, number>
   currentMember?: { id: string; role: string } | null
+  clientRates: ClientRate[]
+  clients: { id: string; name: string }[]
 }) {
   const isAdmin = currentMember?.role === 'admin'
   const supabase = createClient()
@@ -73,6 +78,13 @@ export default function ServicesClient({
   const [categoryFilter, setCategoryFilter] = useState('')
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
+
+  // Per-client rate overrides (mutable so optimistic updates work)
+  const [clientRates, setClientRates] = useState<ClientRate[]>(initialRates)
+
+  // New-override picker state (per-service in the modal)
+  const [newOverrideClient, setNewOverrideClient] = useState('')
+  const [newOverridePrice, setNewOverridePrice] = useState<string>('')
 
   // Close modal on Escape
   useEffect(() => {
@@ -104,6 +116,9 @@ export default function ServicesClient({
     return list
   }, [services, search, categoryFilter])
 
+  // Group all rates by service_id for fast lookup (used by table column + modal)
+  const ratesByServiceMap = useMemo(() => ratesByService(clientRates), [clientRates])
+
   function openNewService() {
     if (!isAdmin) return
     setIsNew(true)
@@ -124,12 +139,17 @@ export default function ServicesClient({
       revision_hours: s.revision_hours ?? '',
       active: s.active,
     })
+    // Reset the new-override picker when switching services
+    setNewOverrideClient('')
+    setNewOverridePrice('')
   }
 
   function closeModal() {
     setSelected(null)
     setIsNew(false)
     setDraft(EMPTY_DRAFT)
+    setNewOverrideClient('')
+    setNewOverridePrice('')
   }
 
   function updateDraft(patch: Partial<Draft>) {
@@ -210,10 +230,88 @@ export default function ServicesClient({
     closeModal()
   }
 
+  // ── Override mutations ───────────────────────────────────────────────────
+  async function addOverride(serviceId: string, clientId: string, price: number) {
+    if (!isAdmin) return
+    if (!clientId) { alert('Select a client first'); return }
+    if (isNaN(price) || price < 0) { alert('Valid price required'); return }
+    // Optimistic insert with a temporary id so the row renders immediately
+    const tempId = `tmp-${Date.now()}`
+    const optimistic: ClientRate = {
+      id: tempId,
+      client_id: clientId,
+      service_id: serviceId,
+      price,
+      notes: '',
+      effective_from: null,
+    } as ClientRate
+    setClientRates(prev => [...prev, optimistic])
+
+    const { data, error } = await supabase
+      .from('client_rates')
+      .insert({ client_id: clientId, service_id: serviceId, price, notes: '' })
+      .select('id, client_id, service_id, price, notes, effective_from')
+      .single()
+
+    if (error || !data) {
+      setClientRates(prev => prev.filter(r => r.id !== tempId))
+      alert('Failed to add override: ' + (error?.message ?? 'unknown error'))
+      return
+    }
+    setClientRates(prev => prev.map(r => r.id === tempId ? (data as ClientRate) : r))
+    setNewOverrideClient('')
+    setNewOverridePrice('')
+  }
+
+  async function updateOverridePrice(rateId: string, newPrice: number) {
+    const prev = clientRates
+    setClientRates(curr => curr.map(r => r.id === rateId ? { ...r, price: newPrice } : r))
+    const { error } = await supabase
+      .from('client_rates')
+      .update({ price: newPrice })
+      .eq('id', rateId)
+    if (error) {
+      setClientRates(prev)
+      alert('Failed to update price: ' + error.message)
+    }
+  }
+
+  async function updateOverrideNote(rateId: string, newNote: string) {
+    const prev = clientRates
+    setClientRates(curr => curr.map(r => r.id === rateId ? { ...r, notes: newNote } : r))
+    const { error } = await supabase
+      .from('client_rates')
+      .update({ notes: newNote })
+      .eq('id', rateId)
+    if (error) {
+      setClientRates(prev)
+      alert('Failed to update note: ' + error.message)
+    }
+  }
+
+  async function removeOverride(rateId: string, clientName: string) {
+    if (!confirm(`Remove ${clientName}'s custom rate? They'll fall back to the base price for new work orders.`)) return
+    const prev = clientRates
+    setClientRates(curr => curr.filter(r => r.id !== rateId))
+    const { error } = await supabase
+      .from('client_rates')
+      .delete()
+      .eq('id', rateId)
+    if (error) {
+      setClientRates(prev)
+      alert('Failed to remove override: ' + error.message)
+    }
+  }
+
   const showModal = !!selected || isNew
 
   // For the field display, use draft for edit / display values for read-only
   const currentUsage = selected ? (usageCounts[selected.id] || 0) : 0
+
+  // Overrides for the currently-open service (modal)
+  const selectedOverrides = selected ? (ratesByServiceMap[selected.id] || []) : []
+  const overriddenClientIds = new Set(selectedOverrides.map(r => r.client_id))
+  const eligibleClients = clients.filter(c => !overriddenClientIds.has(c.id))
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -265,6 +363,7 @@ export default function ServicesClient({
               <th className="px-4 md:px-6 py-3">Service</th>
               <th className="px-4 md:px-6 py-3 hidden sm:table-cell">Category</th>
               <th className="px-4 md:px-6 py-3 hidden md:table-cell">Occurrence</th>
+              <th className="px-4 md:px-6 py-3 hidden lg:table-cell">Custom Rates</th>
               <th className="px-4 md:px-6 py-3 text-right hidden sm:table-cell">Used in</th>
               <th className="px-4 md:px-6 py-3 text-right">Base Price</th>
             </tr>
@@ -273,6 +372,7 @@ export default function ServicesClient({
             {filteredServices.map(s => {
               const usage = usageCounts[s.id] || 0
               const occ = OCCURRENCE_BADGE[s.occurrence] || OCCURRENCE_BADGE['One-time']
+              const overrideCount = (ratesByServiceMap[s.id] || []).length
               return (
                 <tr key={s.id} onClick={() => openService(s)}
                     className={`hover:bg-blue-50 cursor-pointer transition-colors ${!s.active ? 'opacity-60' : ''}`}>
@@ -295,6 +395,16 @@ export default function ServicesClient({
                       {occ.icon} {s.occurrence}
                     </span>
                   </td>
+                  <td className="px-4 md:px-6 py-3 hidden lg:table-cell">
+                    {overrideCount > 0 ? (
+                      <span className="text-xs px-2 py-0.5 rounded font-mono font-medium"
+                        style={{ background: 'var(--brand-accent-soft, #fdf6e8)', color: 'var(--brand-accent-2, #b8851e)' }}>
+                        {overrideCount} client{overrideCount === 1 ? '' : 's'}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 md:px-6 py-3 text-right font-mono text-gray-700 hidden sm:table-cell">{usage}</td>
                   <td className="px-4 md:px-6 py-3 text-right font-mono font-semibold text-gray-900">
                     ${(s.base_price || 0).toLocaleString()}
@@ -303,7 +413,7 @@ export default function ServicesClient({
               )
             })}
             {filteredServices.length === 0 && (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-12 text-sm">No services match your filters</td></tr>
+              <tr><td colSpan={6} className="text-center text-gray-400 py-12 text-sm">No services match your filters</td></tr>
             )}
           </tbody>
         </table>
@@ -548,10 +658,107 @@ export default function ServicesClient({
                 </div>
               )}
 
-              {/* Placeholder for future client-rate overrides section */}
-              {!isNew && selected && isAdmin && (
-                <div className="text-[11px] text-gray-400 italic border-t border-gray-100 pt-3">
-                  💡 Per-client price overrides for this service will appear here in a future update.
+              {/* Client-specific rate overrides */}
+              {!isNew && selected && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      Client-specific rate overrides
+                    </div>
+                    {selectedOverrides.length > 0 && (
+                      <div className="text-[11px] text-gray-500 font-mono">
+                        {selectedOverrides.length} override{selectedOverrides.length === 1 ? '' : 's'}
+                      </div>
+                    )}
+                  </div>
+
+                  {isAdmin ? (
+                    <>
+                      {selectedOverrides.length === 0 ? (
+                        <div className="text-xs text-gray-400 italic py-1">
+                          No overrides. All clients use the base price.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {selectedOverrides.map(r => {
+                            const clientName = clients.find(c => c.id === r.client_id)?.name || r.client_id
+                            const diff = priceDiff(r.price, selected.base_price || 0)
+                            return (
+                              <div key={r.id}
+                                className="grid items-center gap-2 px-2.5 py-2 bg-gray-50 rounded"
+                                style={{ gridTemplateColumns: '1fr 130px 28px' }}>
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium" style={{ color: 'var(--brand-navy, #1a2b4a)' }}>
+                                    {clientName}
+                                    {diff && diff.direction !== 'same' && (
+                                      <span className="ml-1.5 text-[11px] font-semibold"
+                                        style={{ color: diff.direction === 'up' ? 'var(--green, #15803d)' : 'var(--amber, #b45309)' }}>
+                                        {diff.direction === 'up' ? '+' : '-'}${Math.abs(diff.delta).toLocaleString()} ({diff.direction === 'up' ? '+' : ''}{diff.deltaPct}%)
+                                      </span>
+                                    )}
+                                  </div>
+                                  <input type="text" defaultValue={r.notes ?? ''}
+                                    placeholder="Note (optional)"
+                                    onBlur={e => {
+                                      const v = e.target.value
+                                      if (v !== (r.notes ?? '')) updateOverrideNote(r.id, v)
+                                    }}
+                                    className="w-full text-[11px] text-gray-500 bg-transparent border-none p-0 mt-0.5 focus:outline-none" />
+                                </div>
+                                <input type="number" defaultValue={r.price}
+                                  step="0.01" min="0"
+                                  onBlur={e => {
+                                    const v = Number(e.target.value)
+                                    if (!isNaN(v) && v >= 0 && v !== r.price) updateOverridePrice(r.id, v)
+                                  }}
+                                  className="text-right text-sm font-mono font-semibold border border-gray-200 rounded px-2 py-1 focus:border-blue-500 focus:outline-none"
+                                  style={{ color: 'var(--brand-accent-2, #b8851e)' }} />
+                                <button
+                                  title="Remove override"
+                                  onClick={() => removeOverride(r.id, clientName)}
+                                  className="text-red-600 border border-gray-200 rounded px-1.5 py-1 text-xs hover:bg-red-50">
+                                  ✕
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {eligibleClients.length > 0 && (
+                        <div className="flex gap-2 items-center mt-2">
+                          <select value={newOverrideClient}
+                            onChange={e => setNewOverrideClient(e.target.value)}
+                            className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded bg-white focus:border-blue-500 focus:outline-none">
+                            <option value="">+ Choose a client to override…</option>
+                            {eligibleClients.map(c => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                          <input type="number" value={newOverridePrice}
+                            onChange={e => setNewOverridePrice(e.target.value)}
+                            placeholder={String(selected.base_price || '')}
+                            step="0.01" min="0"
+                            className="w-24 text-right text-xs font-mono px-2 py-1.5 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
+                          <button
+                            onClick={() => addOverride(selected.id, newOverrideClient, Number(newOverridePrice))}
+                            className="px-3 py-1.5 text-xs font-semibold rounded border border-gray-200 hover:bg-gray-50">
+                            Add
+                          </button>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] text-gray-400 italic mt-2">
+                        When set, overrides replace the base price for that client only. Past work orders keep their original price.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-500">
+                      {selectedOverrides.length === 0
+                        ? 'All clients use the base price.'
+                        : `${selectedOverrides.length} client${selectedOverrides.length === 1 ? '' : 's'} have custom rates for this service.`}
+                    </div>
+                  )}
                 </div>
               )}
 
