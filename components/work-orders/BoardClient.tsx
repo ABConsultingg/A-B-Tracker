@@ -1,10 +1,11 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { STAGES, type WorkOrder, type WoStage } from '@/lib/types'
+import { STAGES, type WorkOrder, type WoStage, type ClientRate } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
+import { priceFor } from '@/lib/pricing'
 import WoLineItemsSection from './WoLineItemsSection'
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -61,13 +62,22 @@ function ClientDate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-export default function BoardClient({ initialWorkOrders, clients, services, team, taskAggregates, assignmentsByWo, lineItemTotalsByWo, currentMember }: {
+export default function BoardClient({ initialWorkOrders, clients, services, team, taskAggregates, assignmentsByWo, lineItemTotalsByWo, currentMember, clientRates }: {
   initialWorkOrders: WorkOrder[]; clients: any[]; services: any[]; team: any[];
   taskAggregates?: Record<string, { total: number; done: number; overdue: number }>;
   assignmentsByWo?: Record<string, string[]>;
   lineItemTotalsByWo?: Record<string, number>;
   currentMember?: { id: string; role: string } | null;
+  clientRates?: ClientRate[];
 }) {
+  // Resolved price for the new-WO form. Used to auto-fill est_cost when both
+  // client and service are selected, and to show a Custom / Base rate badge.
+  // Returns null if either id is missing or the service isn't found.
+  const rates = clientRates || []
+  function resolveNewWoPrice(clientId: string | undefined, serviceId: string | undefined) {
+    if (!clientId || !serviceId) return null
+    return priceFor(clientId, serviceId, services as any, rates)
+  }
   const isAdmin = currentMember?.role === 'admin'
   const [viewMode] = useViewMode(isAdmin)
   const showCosts = viewMode === 'admin'
@@ -1127,7 +1137,16 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Client {isNew && '*'}</label>
                     {isNew ? (
                       <select value={newWo.client_id || ''}
-                        onChange={e => setNewWo({ ...newWo, client_id: e.target.value })}
+                        onChange={e => {
+                          const newClientId = e.target.value
+                          const patch: any = { client_id: newClientId }
+                          // Re-resolve est_cost when client changes (only if a service is already picked)
+                          if (newClientId && newWo.service_id) {
+                            const resolved = resolveNewWoPrice(newClientId, newWo.service_id)
+                            if (resolved) patch.est_cost = resolved.price
+                          }
+                          setNewWo({ ...newWo, ...patch })
+                        }}
                         className="w-full text-sm px-2 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none">
                         <option value="">— Select —</option>
                         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1152,6 +1171,13 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                             const target = new Date()
                             target.setDate(target.getDate() + picked.lead_time_days)
                             patch.due_date = target.toISOString().substring(0, 10)
+                          }
+                          // Auto-fill est_cost from priceFor (override if exists, else base)
+                          if (newServiceId && newWo.client_id) {
+                            const resolved = resolveNewWoPrice(newWo.client_id, newServiceId)
+                            if (resolved) patch.est_cost = resolved.price
+                          } else if (picked?.base_price != null) {
+                            patch.est_cost = picked.base_price
                           }
                           setNewWo({ ...newWo, ...patch })
                         }}
@@ -1406,6 +1432,23 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                           className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
                       )}
                     </div>
+                    {isNew && (() => {
+                      const resolved = resolveNewWoPrice(newWo.client_id, newWo.service_id)
+                      if (!resolved) return null
+                      if (resolved.isOverride) {
+                        return (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                            style={{ background: 'var(--brand-accent-soft, #fdf6e8)', color: 'var(--brand-accent-2, #b8851e)' }}>
+                            ★ Custom rate
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded text-gray-500 bg-gray-100">
+                          Base rate
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Ad Spend</label>

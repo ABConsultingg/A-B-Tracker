@@ -30,6 +30,9 @@ export default async function DashboardPage() {
 
   const { data: team } = await supabase
     .from('team_members').select('id, name, role, auth_user_id').order('name')
+  const { data: clientRates } = await supabase
+    .from('client_rates')
+    .select('id, client_id, service_id, price, notes, effective_from, created_at')
 
   // Load all tasks for the visible work orders, then aggregate in-process.
   const woIds = (workOrders || []).map(w => w.id)
@@ -96,6 +99,7 @@ export default async function DashboardPage() {
       assignmentsByWo={assignmentsByWo}
       lineItemTotalsByWo={lineItemTotalsByWo}
       currentMember={currentMember}
+      clientRates={clientRates || []}
     />
   )
 }
