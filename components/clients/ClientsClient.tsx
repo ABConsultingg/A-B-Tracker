@@ -2,6 +2,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { STAGES } from '@/lib/types'
+import type { ClientRate } from '@/lib/types'
+import { priceFor, priceDiff } from '@/lib/pricing'
 
 type ClientStatus = 'active' | 'paused' | 'archived'
 
@@ -24,8 +26,17 @@ type Client = {
 
 type WO = {
   id: string; title: string; stage: string; client_id: string;
+  service_id?: string | null;
   est_cost?: number; add_cost?: number; due_date?: string; priority?: string;
   services?: any; team_members?: any;
+}
+
+type Service = {
+  id: string
+  name: string
+  base_price: number
+  occurrence: string
+  active: boolean
 }
 
 type Draft = {
@@ -66,10 +77,14 @@ export default function ClientsClient({
   clients: initialClients,
   workOrders,
   currentMember,
+  services,
+  clientRates: initialRates,
 }: {
   clients: Client[]
   workOrders: WO[]
   currentMember?: { id: string; role: string } | null
+  services: Service[]
+  clientRates: ClientRate[]
 }) {
   const isAdmin = currentMember?.role === 'admin'
   const supabase = createClient()
@@ -81,6 +96,7 @@ export default function ClientsClient({
   const [statusFilter, setStatusFilter] = useState<'all' | ClientStatus>('all')
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
+  const [clientRates, setClientRates] = useState<ClientRate[]>(initialRates)
 
   // Escape key closes the modal
   useEffect(() => {
@@ -140,6 +156,38 @@ export default function ClientsClient({
   }, [selectedWOs])
 
   const selectedStats = selected ? stats[selected.id] || { count: 0, active: 0, pipeline: 0, revenue: 0 } : null
+
+  // Rate card data: which services has this client used + how many times
+  const rateCardRows = useMemo(() => {
+    if (!selected) return []
+    const usage: Record<string, number> = {}
+    selectedWOs.forEach(wo => {
+      if (wo.service_id) usage[wo.service_id] = (usage[wo.service_id] || 0) + 1
+    })
+    // Build rows for every service the client has used, plus any service that already has
+    // an override for this client (in case there's an override for a service the client
+    // hasn't used yet through an existing WO).
+    const overrideServiceIds = clientRates
+      .filter(r => r.client_id === selected.id)
+      .map(r => r.service_id)
+    const serviceIds = Array.from(new Set([...Object.keys(usage), ...overrideServiceIds]))
+    return serviceIds
+      .map(sid => {
+        const svc = services.find(s => s.id === sid)
+        if (!svc) return null
+        const resolved = priceFor(selected.id, sid, services as any, clientRates)
+        return {
+          service: svc,
+          usage: usage[sid] || 0,
+          effective: resolved?.price ?? svc.base_price,
+          isOverride: resolved?.isOverride ?? false,
+          basePrice: svc.base_price,
+          overrideRow: clientRates.find(r => r.client_id === selected.id && r.service_id === sid) || null,
+        }
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => b.usage - a.usage || a.service.name.localeCompare(b.service.name))
+  }, [selected, selectedWOs, clientRates, services])
 
   function openNewClient() {
     if (!isAdmin) return
@@ -249,6 +297,81 @@ export default function ClientsClient({
     if (error) { alert('Failed to archive: ' + error.message); return }
     setClients(prev => prev.map(c => c.id === selected.id ? { ...c, status: 'archived' } as Client : c))
     closeModal()
+  }
+
+  // ── Rate-card mutations ─────────────────────────────────────────────────
+  // If newPrice equals base price → remove any existing override.
+  // Otherwise upsert (insert when no override exists, update when one does).
+  async function setEffectivePrice(serviceId: string, newPrice: number) {
+    if (!isAdmin || !selected) return
+    if (isNaN(newPrice) || newPrice < 0) { alert('Valid price required'); return }
+    const svc = services.find(s => s.id === serviceId)
+    if (!svc) return
+    const existing = clientRates.find(r => r.client_id === selected.id && r.service_id === serviceId)
+
+    // Case A: new price matches base → remove override if one exists
+    if (newPrice === svc.base_price) {
+      if (!existing) return // already at base
+      const prev = clientRates
+      setClientRates(curr => curr.filter(r => r.id !== existing.id))
+      const { error } = await supabase.from('client_rates').delete().eq('id', existing.id)
+      if (error) {
+        setClientRates(prev)
+        alert('Failed to reset to base: ' + error.message)
+      }
+      return
+    }
+
+    // Case B: existing override → update price
+    if (existing) {
+      if (existing.price === newPrice) return // no-op
+      const prev = clientRates
+      setClientRates(curr => curr.map(r => r.id === existing.id ? { ...r, price: newPrice } : r))
+      const { error } = await supabase.from('client_rates').update({ price: newPrice }).eq('id', existing.id)
+      if (error) {
+        setClientRates(prev)
+        alert('Failed to update override: ' + error.message)
+      }
+      return
+    }
+
+    // Case C: no existing → insert new override
+    const tempId = `tmp-${Date.now()}`
+    const optimistic: ClientRate = {
+      id: tempId,
+      client_id: selected.id,
+      service_id: serviceId,
+      price: newPrice,
+      notes: '',
+      created_at: new Date().toISOString(),
+    } as ClientRate
+    setClientRates(curr => [...curr, optimistic])
+    const { data, error } = await supabase
+      .from('client_rates')
+      .insert({ client_id: selected.id, service_id: serviceId, price: newPrice, notes: '' })
+      .select('id, client_id, service_id, price, notes, effective_from, created_at')
+      .single()
+    if (error || !data) {
+      setClientRates(curr => curr.filter(r => r.id !== tempId))
+      alert('Failed to create override: ' + (error?.message ?? 'unknown error'))
+      return
+    }
+    setClientRates(curr => curr.map(r => r.id === tempId ? (data as ClientRate) : r))
+  }
+
+  async function resetToBase(serviceId: string) {
+    if (!isAdmin || !selected) return
+    const existing = clientRates.find(r => r.client_id === selected.id && r.service_id === serviceId)
+    if (!existing) return
+    const svc = services.find(s => s.id === serviceId)
+    if (!confirm(`Reset ${svc?.name || serviceId} to base price for ${selected.name}? Past work orders keep their original price.`)) return
+    const prev = clientRates
+    setClientRates(curr => curr.filter(r => r.id !== existing.id))
+    const { error } = await supabase.from('client_rates').delete().eq('id', existing.id)
+    if (error) {
+      setClientRates(prev)
+      alert('Failed to reset: ' + error.message)
+    }
   }
 
   const statusPillStyle = (status?: string): React.CSSProperties => {
@@ -636,6 +759,113 @@ export default function ClientsClient({
                         <div className="text-xl font-bold mt-0.5 font-mono text-green-600">${selectedStats.revenue.toLocaleString()}</div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* ─── Rate card (per-service effective price for this client) ─── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-1">
+                      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                        Rate card for {selected.name}
+                      </div>
+                      {rateCardRows.some(r => r.isOverride) && (
+                        <div className="text-[11px] text-gray-500 font-mono">
+                          {rateCardRows.filter(r => r.isOverride).length} custom
+                        </div>
+                      )}
+                    </div>
+                    {rateCardRows.length === 0 ? (
+                      <div className="text-xs text-gray-400 italic py-2">
+                        No services used yet. The rate card will populate when this client has work orders.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-[10px] text-gray-400 uppercase tracking-wider">
+                              <th className="py-1.5">Service</th>
+                              <th className="py-1.5 hidden sm:table-cell">Occurrence</th>
+                              <th className="py-1.5 text-right">Used in</th>
+                              <th className="py-1.5 text-right">Effective price</th>
+                              <th className="py-1.5"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rateCardRows.map(row => {
+                              const diff = row.isOverride ? priceDiff(row.effective, row.basePrice) : null
+                              return (
+                                <tr key={row.service.id} className="border-t border-gray-50">
+                                  <td className="py-2 pr-2">
+                                    <div className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
+                                      {row.service.name}
+                                      {row.isOverride && (
+                                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded font-mono"
+                                          style={{ background: 'var(--brand-accent-soft, #fdf6e8)', color: 'var(--brand-accent-2, #b8851e)' }}>
+                                          Custom
+                                        </span>
+                                      )}
+                                    </div>
+                                    {row.isOverride && (
+                                      <div className="text-[11px] text-gray-400 mt-0.5">
+                                        Base: ${row.basePrice.toLocaleString()}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-2 pr-2 text-xs text-gray-500 hidden sm:table-cell">
+                                    {row.service.occurrence}
+                                  </td>
+                                  <td className="py-2 pr-2 text-right font-mono text-gray-600 text-sm">
+                                    {row.usage}
+                                  </td>
+                                  <td className="py-2 pr-2 text-right">
+                                    {isAdmin ? (
+                                      <div className="inline-flex flex-col items-end">
+                                        <input type="number"
+                                          defaultValue={row.effective}
+                                          step="0.01" min="0"
+                                          onBlur={e => {
+                                            const v = Number(e.target.value)
+                                            if (!isNaN(v) && v >= 0 && v !== row.effective) {
+                                              setEffectivePrice(row.service.id, v)
+                                            }
+                                          }}
+                                          className="w-24 text-right text-sm font-mono font-semibold border border-gray-200 rounded px-2 py-1 focus:border-blue-500 focus:outline-none"
+                                          style={{ color: row.isOverride ? 'var(--brand-accent-2, #b8851e)' : undefined }} />
+                                        {diff && diff.direction !== 'same' && (
+                                          <span className="text-[10px] font-semibold mt-0.5"
+                                            style={{ color: diff.direction === 'up' ? 'var(--green, #15803d)' : 'var(--amber, #b45309)' }}>
+                                            {diff.direction === 'up' ? '+' : '-'}${Math.abs(diff.delta).toLocaleString()} ({diff.direction === 'up' ? '+' : ''}{diff.deltaPct}%)
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="font-mono font-semibold text-sm"
+                                        style={{ color: row.isOverride ? 'var(--brand-accent-2, #b8851e)' : undefined }}>
+                                        ${row.effective.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 pl-1 text-right">
+                                    {isAdmin && row.isOverride && (
+                                      <button
+                                        onClick={() => resetToBase(row.service.id)}
+                                        title="Reset to base price"
+                                        className="text-[11px] text-gray-500 hover:text-gray-900 underline">
+                                        Reset
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                        {isAdmin && (
+                          <p className="text-[11px] text-gray-400 italic mt-2">
+                            Edit a price to set a custom rate. Set it back to base to remove the override. Past work orders keep their original price.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
