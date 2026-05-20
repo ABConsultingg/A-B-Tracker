@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { STAGES, type WorkOrder, type WoStage, type ClientRate } from '@/lib/types'
+import { STAGES, type WorkOrder, type WoStage, type ClientRate, type PrintProduct, type PrintProductTier } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
@@ -62,13 +62,15 @@ function ClientDate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-export default function BoardClient({ initialWorkOrders, clients, services, team, taskAggregates, assignmentsByWo, lineItemTotalsByWo, currentMember, clientRates }: {
+export default function BoardClient({ initialWorkOrders, clients, services, team, taskAggregates, assignmentsByWo, lineItemTotalsByWo, currentMember, clientRates, printProducts, printProductTiers }: {
   initialWorkOrders: WorkOrder[]; clients: any[]; services: any[]; team: any[];
   taskAggregates?: Record<string, { total: number; done: number; overdue: number }>;
   assignmentsByWo?: Record<string, string[]>;
   lineItemTotalsByWo?: Record<string, number>;
   currentMember?: { id: string; role: string } | null;
   clientRates?: ClientRate[];
+  printProducts?: PrintProduct[];
+  printProductTiers?: PrintProductTier[];
 }) {
   // Resolved price for the new-WO form. Used to auto-fill est_cost when both
   // client and service are selected, and to show a Custom / Base rate badge.
@@ -630,17 +632,27 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     return map
   }, [team])
 
-  const servicesByCategory = useMemo(() => {
+  // Services grouped by billing cadence (Recurring, One-time, etc.) for use
+  // in the New/Edit WO modal service dropdown. Recurring comes first.
+  const servicesByOccurrence = useMemo(() => {
+    const order = ['Recurring', 'One-time', 'Quarterly', 'Weekly', 'Other']
     const groups: Record<string, any[]> = {}
     services.forEach((s: any) => {
-      const key = s.category || 'Other'
+      const key = s.occurrence || 'Other'
       if (!groups[key]) groups[key] = []
       groups[key].push(s)
     })
     Object.values(groups).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)))
-    return Object.fromEntries(
-      Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
-    )
+    // Sort by predefined order, falling back to alphabetical for unknown keys
+    const sortedEntries = Object.entries(groups).sort((a, b) => {
+      const ai = order.indexOf(a[0])
+      const bi = order.indexOf(b[0])
+      if (ai !== -1 && bi !== -1) return ai - bi
+      if (ai !== -1) return -1
+      if (bi !== -1) return 1
+      return a[0].localeCompare(b[0])
+    })
+    return Object.fromEntries(sortedEntries)
   }, [services])
 
   const [authUserMap, setAuthUserMap] = useState<Record<string, string>>({})
@@ -1183,8 +1195,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                         }}
                         className="w-full text-sm px-2 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none">
                         <option value="">— Select —</option>
-                        {Object.entries(servicesByCategory).map(([category, list]) => (
-                          <optgroup key={category} label={category}>
+                        {Object.entries(servicesByOccurrence).map(([occ, list]) => (
+                          <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
                                 {s.name}{s.lead_time_days != null ? ` · ${s.lead_time_days}d` : ''}
@@ -1197,8 +1209,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                       <select value={wo?.service_id || ''}
                         onChange={e => updateWo({ service_id: e.target.value })}
                         className="w-full text-sm px-2 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none">
-                        {Object.entries(servicesByCategory).map(([category, list]) => (
-                          <optgroup key={category} label={category}>
+                        {Object.entries(servicesByOccurrence).map(([occ, list]) => (
+                          <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
                                 {s.name}
@@ -1488,6 +1500,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                     <WoLineItemsSection
                       workOrderId={wo.id}
                       onTotalChange={setOpenWoLineItemTotal}
+                      printProducts={printProducts || []}
+                      printProductTiers={printProductTiers || []}
                     />
                   </div>
                 )}
