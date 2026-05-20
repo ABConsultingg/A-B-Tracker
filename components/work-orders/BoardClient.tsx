@@ -1199,7 +1199,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                           <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
-                                {s.name}{s.lead_time_days != null ? ` · ${s.lead_time_days}d` : ''}
+                                {s.name}{s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
                               </option>
                             ))}
                           </optgroup>
@@ -1213,7 +1213,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                           <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
-                                {s.name}
+                                {s.name}{s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
                               </option>
                             ))}
                           </optgroup>
@@ -1429,72 +1429,115 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
               {showCosts && (
               <div className="space-y-3">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">Costs</div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Est. Cost</label>
-                    <div className="relative">
+                {/* Costs card — amber/cream background, stacked rows, total inside */}
+                <div
+                  className="rounded-lg border p-4 space-y-3"
+                  style={{
+                    background: 'var(--brand-accent-soft, #fdf6e8)',
+                    borderColor: 'var(--brand-accent, #d99e2b)',
+                  }}
+                >
+                  {/* Estimated Cost (auto) */}
+                  <div className="grid grid-cols-12 gap-3 items-center">
+                    <label className="col-span-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Estimated Cost <span className="text-gray-400 normal-case">(auto)</span>
+                    </label>
+                    <div className="col-span-5 relative">
                       <span className="absolute left-2 top-2 text-sm text-gray-400">$</span>
                       {isNew ? (
                         <input type="number" placeholder="0" value={newWo.est_cost || ''}
                           onChange={e => setNewWo({ ...newWo, est_cost: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
                       ) : (
                         <input type="number" placeholder="0" defaultValue={wo?.est_cost || ''}
                           onBlur={e => updateWo({ est_cost: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
-                      )}
-                    </div>
-                    {isNew && (() => {
-                      const resolved = resolveNewWoPrice(newWo.client_id, newWo.service_id)
-                      if (!resolved) return null
-                      if (resolved.isOverride) {
-                        return (
-                          <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
-                            style={{ background: 'var(--brand-accent-soft, #fdf6e8)', color: 'var(--brand-accent-2, #b8851e)' }}>
-                            ★ Custom rate
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded text-gray-500 bg-gray-100">
-                          Base rate
-                        </div>
-                      )
-                    })()}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Ad Spend</label>
-                    <div className="relative">
-                      <span className="absolute left-2 top-2 text-sm text-gray-400">$</span>
-                      {isNew ? (
-                        <input type="number" placeholder="0" value={(newWo as any).ad_spend || ''}
-                          onChange={e => setNewWo({ ...newWo, ad_spend: parseFloat(e.target.value) || 0 } as any)}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
-                      ) : (
-                        <input type="number" placeholder="0" defaultValue={(wo as any)?.ad_spend || ''}
-                          onBlur={e => updateWo({ ad_spend: parseFloat(e.target.value) || 0 } as any)}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
                       )}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Add. Cost</label>
-                    <div className="relative">
+
+                  {/* Additional Cost */}
+                  <div className="grid grid-cols-12 gap-3 items-center">
+                    <label className="col-span-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Additional Cost
+                    </label>
+                    <div className="col-span-5 relative">
                       <span className="absolute left-2 top-2 text-sm text-gray-400">$</span>
                       {isNew ? (
                         <input type="number" placeholder="0" value={newWo.add_cost || ''}
                           onChange={e => setNewWo({ ...newWo, add_cost: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
                       ) : (
                         <input type="number" placeholder="0" defaultValue={wo?.add_cost || ''}
                           onBlur={e => updateWo({ add_cost: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-200 rounded font-mono focus:border-blue-500 focus:outline-none" />
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
                       )}
                     </div>
                   </div>
+
+                  {/* Ad Spend */}
+                  <div className="grid grid-cols-12 gap-3 items-center">
+                    <label className="col-span-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Ad Spend
+                    </label>
+                    <div className="col-span-5 relative">
+                      <span className="absolute left-2 top-2 text-sm text-gray-400">$</span>
+                      {isNew ? (
+                        <input type="number" placeholder="0" value={(newWo as any).ad_spend || ''}
+                          onChange={e => setNewWo({ ...newWo, ad_spend: parseFloat(e.target.value) || 0 } as any)}
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
+                      ) : (
+                        <input type="number" placeholder="0" defaultValue={(wo as any)?.ad_spend || ''}
+                          onBlur={e => updateWo({ ad_spend: parseFloat(e.target.value) || 0 } as any)}
+                          className="w-full text-sm pl-5 pr-2 py-2 border border-gray-300 rounded font-mono text-right bg-white focus:border-blue-500 focus:outline-none" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Divider + Total */}
+                  <div className="pt-2" style={{ borderTop: '1px dashed rgba(217, 158, 43, 0.4)' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-900 uppercase tracking-wide">Total Cost</span>
+                      <span className="text-xl font-bold font-mono" style={{ color: 'var(--brand-accent-2, #b8851e)' }}>
+                        ${(
+                          ((isNew ? newWo.est_cost : wo?.est_cost) || 0)
+                          + ((isNew ? (newWo as any).ad_spend : (wo as any)?.ad_spend) || 0)
+                          + ((isNew ? newWo.add_cost : wo?.add_cost) || 0)
+                          + (isNew ? 0 : openWoLineItemSubtotal)
+                        ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Service-info subtitle */}
+                  {(() => {
+                    const clientId = isNew ? newWo.client_id : wo?.client_id
+                    const serviceId = isNew ? newWo.service_id : wo?.service_id
+                    if (!clientId || !serviceId) return null
+                    const resolved = resolveNewWoPrice(clientId, serviceId)
+                    if (!resolved) return null
+                    const picked = services.find((s: any) => s.id === serviceId)
+                    if (!picked) return null
+                    const currentEst = isNew ? (newWo.est_cost || 0) : (wo?.est_cost || 0)
+                    const isManual = Math.abs(currentEst - resolved.price) > 0.01
+                    const cadenceWord = picked.occurrence === 'Recurring'
+                      ? 'recurring service (auto MRR)'
+                      : `${(picked.occurrence || 'one-time').toLowerCase()} service`
+                    const rateLabel = isManual
+                      ? `manually edited (auto was $${resolved.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                      : resolved.isOverride
+                        ? '★ custom rate — auto-filled'
+                        : 'A&B standard rate — auto-filled'
+                    return (
+                      <div className="pt-2 text-[11px] text-gray-600" style={{ borderTop: '1px dashed rgba(217, 158, 43, 0.4)' }}>
+                        <span className="font-semibold">{picked.name}</span>
+                        <span className="text-gray-500"> · {rateLabel} · {cadenceWord}</span>
+                      </div>
+                    )
+                  })()}
                 </div>
 
-                {/* Line items — existing WOs only */}
+                {/* Line items — existing WOs only. Lives BELOW the costs card. */}
                 {!isNew && wo?.id && (
                   <div className="pt-2">
                     <WoLineItemsSection
@@ -1505,18 +1548,6 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                     />
                   </div>
                 )}
-
-                <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-500 uppercase">Total</span>
-                  <span className="text-xl font-bold font-mono text-gray-900">
-                    ${(
-                      ((isNew ? newWo.est_cost : wo?.est_cost) || 0)
-                      + ((isNew ? (newWo as any).ad_spend : (wo as any)?.ad_spend) || 0)
-                      + ((isNew ? newWo.add_cost : wo?.add_cost) || 0)
-                      + (isNew ? 0 : openWoLineItemSubtotal)
-                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
               </div>
               )}
 
