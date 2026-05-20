@@ -31,7 +31,7 @@ export default async function ServicesPage() {
   // Per-client price overrides + minimal client list for the override picker
   const { data: clientRates } = await supabase
     .from('client_rates')
-    .select('id, client_id, service_id, price, notes, effective_from')
+    .select('id, client_id, service_id, price, notes, effective_from, created_at')
 
   const { data: clients } = await supabase
     .from('clients')

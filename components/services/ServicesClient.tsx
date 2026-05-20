@@ -243,14 +243,14 @@ export default function ServicesClient({
       service_id: serviceId,
       price,
       notes: '',
-      effective_from: null,
+      created_at: new Date().toISOString(),
     } as ClientRate
     setClientRates(prev => [...prev, optimistic])
 
     const { data, error } = await supabase
       .from('client_rates')
       .insert({ client_id: clientId, service_id: serviceId, price, notes: '' })
-      .select('id, client_id, service_id, price, notes, effective_from')
+      .select('id, client_id, service_id, price, notes, effective_from, created_at')
       .single()
 
     if (error || !data) {
