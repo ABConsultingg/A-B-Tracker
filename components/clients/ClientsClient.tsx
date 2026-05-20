@@ -189,6 +189,40 @@ export default function ClientsClient({
       .sort((a, b) => b.usage - a.usage || a.service.name.localeCompare(b.service.name))
   }, [selected, selectedWOs, clientRates, services])
 
+  // Projected monthly revenue: sum of effective rate for each unique RECURRING
+  // service that's on this client's rate card. "On the rate card" means EITHER
+  // (a) the client has at least one WO for it, OR (b) the client has a custom
+  // rate override for it. This matches the rate card definition exactly, so
+  // the tile total equals the sum of the recurring rows you see below.
+  const projectedMonthly = useMemo(() => {
+    if (!selected) return 0
+    const recurringServiceIds = new Set<string>()
+    // (a) Services this client has WOs for
+    selectedWOs.forEach(wo => {
+      if (!wo.service_id) return
+      const svc = services.find(s => s.id === wo.service_id)
+      if (!svc) return
+      if (svc.occurrence !== 'Recurring') return
+      recurringServiceIds.add(wo.service_id)
+    })
+    // (b) Services with an override for this client (even if no WO yet)
+    clientRates
+      .filter(r => r.client_id === selected.id)
+      .forEach(r => {
+        const svc = services.find(s => s.id === r.service_id)
+        if (!svc) return
+        if (svc.occurrence !== 'Recurring') return
+        recurringServiceIds.add(r.service_id)
+      })
+    let total = 0
+    recurringServiceIds.forEach(sid => {
+      const resolved = priceFor(selected.id, sid, services as any, clientRates)
+      const svc = services.find(s => s.id === sid)
+      total += resolved?.price ?? svc?.base_price ?? 0
+    })
+    return total
+  }, [selected, selectedWOs, services, clientRates])
+
   function openNewClient() {
     if (!isAdmin) return
     setIsNew(true)
@@ -749,10 +783,21 @@ export default function ClientsClient({
                     <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1">
                       Snapshot
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="bg-gray-50 rounded-lg p-3 border-l-4 border-l-blue-500">
                         <div className="text-xs text-gray-500 uppercase tracking-wide">Pipeline</div>
                         <div className="text-xl font-bold mt-0.5 font-mono">${selectedStats.pipeline.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3 border-l-4"
+                        style={{ borderLeftColor: 'var(--brand-accent, #d99e2b)' }}>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Projected / mo</div>
+                        <div className="text-xl font-bold mt-0.5 font-mono"
+                          style={{ color: 'var(--brand-accent-2, #b8851e)' }}>
+                          ${projectedMonthly.toLocaleString()}
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          All recurring services at current rates
+                        </div>
                       </div>
                       <div className="bg-gray-50 rounded-lg p-3 border-l-4 border-l-green-500">
                         <div className="text-xs text-gray-500 uppercase tracking-wide">Revenue</div>
