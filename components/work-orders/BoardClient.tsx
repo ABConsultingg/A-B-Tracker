@@ -6,7 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
 import { priceFor } from '@/lib/pricing'
+import { isCampaignService, type CampaignPick } from '@/lib/campaign-items'
 import WoLineItemsSection from './WoLineItemsSection'
+import CampaignBuilderSection from './CampaignBuilderSection'
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: 'bg-red-50 text-red-700 border-red-200',
@@ -530,6 +532,10 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   }
 
   const [newWo, setNewWo] = useState<Partial<WorkOrder>>({})
+  // Campaign builder state — only used when service is Storm Response or Marketing Campaign
+  const [campaignPicks, setCampaignPicks] = useState<CampaignPick[]>([])
+  const [campaignTitle, setCampaignTitle] = useState('')
+  const [campaignDuration, setCampaignDuration] = useState<{ value: string; unit: 'days' | 'weeks' | 'months' }>({ value: '', unit: 'weeks' })
   function openNewWo() {
     setNewWo({ title: '', stage: 'not-started', priority: 'medium',
       occurrence: 'One-time',
@@ -1152,8 +1158,9 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                         onChange={e => {
                           const newClientId = e.target.value
                           const patch: any = { client_id: newClientId }
-                          // Re-resolve est_cost when client changes (only if a service is already picked)
-                          if (newClientId && newWo.service_id) {
+                          // Re-resolve est_cost when client changes (only if a service is already picked).
+                          // Skip campaign services — est_cost is driven by item picker, must stay 0.
+                          if (newClientId && newWo.service_id && !isCampaignService(newWo.service_id)) {
                             const resolved = resolveNewWoPrice(newClientId, newWo.service_id)
                             if (resolved) patch.est_cost = resolved.price
                           }
@@ -1184,8 +1191,15 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                             target.setDate(target.getDate() + picked.lead_time_days)
                             patch.due_date = target.toISOString().substring(0, 10)
                           }
+                          // Campaign services: force est_cost to 0; item picker drives Total
+                          if (isCampaignService(newServiceId)) {
+                            patch.est_cost = 0
+                            setCampaignPicks([])
+                            setCampaignTitle('')
+                            setCampaignDuration({ value: '', unit: 'weeks' })
+                          }
                           // Auto-fill est_cost from priceFor (override if exists, else base)
-                          if (newServiceId && newWo.client_id) {
+                          else if (newServiceId && newWo.client_id) {
                             const resolved = resolveNewWoPrice(newWo.client_id, newServiceId)
                             if (resolved) patch.est_cost = resolved.price
                           } else if (picked?.base_price != null) {
@@ -1536,6 +1550,21 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                     )
                   })()}
                 </div>
+
+                {/* Campaign builder — only on New WO with a campaign service picked (v1) */}
+                {isNew && newWo.service_id && isCampaignService(newWo.service_id) && (
+                  <div className="pt-2">
+                    <CampaignBuilderSection
+                      serviceId={newWo.service_id}
+                      picks={campaignPicks}
+                      onChange={setCampaignPicks}
+                      title={campaignTitle}
+                      onTitleChange={setCampaignTitle}
+                      duration={campaignDuration}
+                      onDurationChange={setCampaignDuration}
+                    />
+                  </div>
+                )}
 
                 {/* Line items — existing WOs only. Lives BELOW the costs card. */}
                 {!isNew && wo?.id && (
