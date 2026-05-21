@@ -31,7 +31,7 @@ interface Props {
 export default function CampaignBuilderSection(props: Props) {
   const { serviceId, picks, onChange, title, onTitleChange, duration, onDurationChange } = props
 
-  const isMarketing = serviceId === 'marketing-campaign'
+  const isMarketing = serviceId === 'ab-marketing-campaign'
   const heading = isMarketing ? '📣 Marketing Campaign Package' : '⛈ Storm Response Package'
   const sub = 'Select channels. Prices default from the rate card and are editable per-line.'
 

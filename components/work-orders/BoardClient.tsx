@@ -1552,7 +1552,6 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                 </div>
 
                 {/* Campaign builder — only on New WO with a campaign service picked (v1) */}
-                {(() => { console.log('[DEBUG campaign render]', { isNew, service_id: newWo.service_id, isCampaign: isCampaignService(newWo.service_id || '') }); return null })()}
                 {isNew && newWo.service_id && isCampaignService(newWo.service_id) && (
                   <div className="pt-2">
                     <CampaignBuilderSection

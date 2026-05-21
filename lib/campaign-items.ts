@@ -9,7 +9,7 @@
  */
 
 /** Services that trigger the campaign builder UI. */
-export const CAMPAIGN_SERVICE_IDS = ['storm-response', 'marketing-campaign'] as const
+export const CAMPAIGN_SERVICE_IDS = ['ab-storm-response', 'ab-marketing-campaign'] as const
 export type CampaignServiceId = typeof CAMPAIGN_SERVICE_IDS[number]
 
 /**
