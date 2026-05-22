@@ -1,9 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { STAGES } from '@/lib/types'
+import {
+  CAMPAIGN_ITEMS,
+  isCampaignService,
+  campaignItemCost,
+  type CampaignPick,
+} from '@/lib/campaign-items'
+import CampaignBuilderSection from '@/components/work-orders/CampaignBuilderSection'
 
 type Tab =
   | 'overview'
@@ -64,7 +72,7 @@ const daysAgo = (d: string | null | undefined) => {
 
 export default function WoDetail({
   wo,
-  lineItems,
+  lineItems: initialLineItems,
   assignees,
   initialTab,
 }: {
@@ -80,6 +88,7 @@ export default function WoDetail({
     TABS.find(x => x.id === t) ? (t as Tab) : 'overview'
 
   const [tab, setTab] = useState<Tab>(validTab(initialTab))
+  const [lineItems, setLineItems] = useState<any[]>(initialLineItems)
 
   useEffect(() => {
     const urlTab = validTab(searchParams.get('tab') || undefined)
@@ -103,6 +112,12 @@ export default function WoDetail({
   const serviceName = wo.services?.name || 'Unknown service'
   const ownerName = wo.team_members?.name || 'Unassigned'
   const color = stageColor(wo.stage)
+  const isCampaign = isCampaignService(wo.service_id)
+
+  // Called by CampaignItemsTab after a successful save so Overview Costs reflect change
+  const handleLineItemsUpdated = useCallback((updated: any[]) => {
+    setLineItems(updated)
+  }, [])
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -190,10 +205,12 @@ export default function WoDetail({
           <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} />
         )}
         {tab === 'campaign' && (
-          <Placeholder
-            title="Campaign Items"
-            note="The campaign builder will move here with a full 5-column grid. Coming in Step 3."
-          />
+          isCampaign
+            ? <CampaignItemsTab wo={wo} lineItems={lineItems} onUpdated={handleLineItemsUpdated} />
+            : <Placeholder
+                title="Campaign Items"
+                note="This tab applies to Storm Response and Marketing Campaign work orders only."
+              />
         )}
         {tab === 'tasks' && (
           <Placeholder
@@ -231,7 +248,7 @@ export default function WoDetail({
 }
 
 // ============================================================
-// Overview tab content
+// Overview tab content (unchanged from Step 2)
 // ============================================================
 function OverviewTab({
   wo,
@@ -254,9 +271,7 @@ function OverviewTab({
 
   return (
     <div className="grid gap-4">
-      {/* Top row — 3 summary cards */}
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-        {/* Costs */}
         <Card title="💰 Costs">
           <Row label="Est. cost"    value={money(estCost)} />
           <Row label="Add-on cost"  value={money(addCost)} />
@@ -267,7 +282,6 @@ function OverviewTab({
           </div>
         </Card>
 
-        {/* Dates */}
         <Card title="📅 Dates">
           <Row label="Submitted"      value={fmtDate(wo.submitted_at || wo.created_at)} sub={daysAgo(wo.submitted_at || wo.created_at) || undefined} />
           <Row label="Due"            value={fmtDate(wo.due_date)} />
@@ -275,7 +289,6 @@ function OverviewTab({
           <Row label="Last updated"   value={fmtDate(wo.updated_at)} sub={daysAgo(wo.updated_at) || undefined} />
         </Card>
 
-        {/* Status */}
         <Card title="🏷️ Status">
           <Row label="Stage" value={
             <span style={{
@@ -308,7 +321,6 @@ function OverviewTab({
         </Card>
       </div>
 
-      {/* People */}
       <Card title="👥 People">
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div>
@@ -351,28 +363,13 @@ function OverviewTab({
         </div>
       </Card>
 
-      {/* Notes / Description */}
       <Card title="📝 Notes">
         {wo.notes ? (
-          <div
-            style={{
-              color: 'var(--text)',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.5,
-              fontSize: 14,
-            }}
-          >
+          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>
             {wo.notes}
           </div>
         ) : wo.description ? (
-          <div
-            style={{
-              color: 'var(--text)',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.5,
-              fontSize: 14,
-            }}
-          >
+          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>
             {wo.description}
           </div>
         ) : (
@@ -382,47 +379,225 @@ function OverviewTab({
         )}
       </Card>
 
-      {/* Links */}
       {(wo.deliverables_link || wo.notes_link) && (
         <Card title="🔗 Links">
           {wo.deliverables_link && (
-            <Row
-              label="Deliverables"
-              value={
-                <a
-                  href={wo.deliverables_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--accent, #6366f1)' }}
-                >
-                  Open ↗
-                </a>
-              }
-            />
+            <Row label="Deliverables" value={
+              <a href={wo.deliverables_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>
+                Open ↗
+              </a>
+            } />
           )}
           {wo.notes_link && (
-            <Row
-              label="Notes link"
-              value={
-                <a
-                  href={wo.notes_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: 'var(--accent, #6366f1)' }}
-                >
-                  Open ↗
-                </a>
-              }
-            />
+            <Row label="Notes link" value={
+              <a href={wo.notes_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>
+                Open ↗
+              </a>
+            } />
           )}
         </Card>
       )}
 
-      <div
-        className="text-xs text-center mt-2"
-        style={{ color: 'var(--text-muted)' }}
-      >
+      <div className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
         Editing still happens in the board drawer. Full-page editing is coming in a later step.
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Campaign Items tab — full round-trip
+// ============================================================
+function CampaignItemsTab({
+  wo,
+  lineItems,
+  onUpdated,
+}: {
+  wo: any
+  lineItems: any[]
+  onUpdated: (updated: any[]) => void
+}) {
+  // Pre-populate picks from existing campaign-sourced line items
+  const initialPicks: CampaignPick[] = (lineItems || [])
+    .filter(li => li.source === 'campaign' && li.campaign_item_id)
+    .map(li => {
+      const item = CAMPAIGN_ITEMS.find(i => i.id === li.campaign_item_id)
+      const isOverride = item && Math.abs(Number(li.unit_price) - item.price) > 0.001
+      return {
+        id: li.campaign_item_id,
+        qty: Number(li.qty) || 1,
+        ...(isOverride ? { unitPrice: Number(li.unit_price) } : {}),
+      }
+    })
+
+  const [picks, setPicks] = useState<CampaignPick[]>(initialPicks)
+  const [title, setTitle] = useState<string>('')
+  const [duration, setDuration] = useState<{ value: string; unit: 'days' | 'weeks' | 'months' }>(
+    { value: '', unit: 'weeks' }
+  )
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  // Mark dirty when picks change after initial mount
+  useEffect(() => {
+    setDirty(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picks])
+
+  // Don't mark dirty on first render
+  const [hasMounted, setHasMounted] = useState(false)
+  useEffect(() => {
+    setHasMounted(true)
+    setDirty(false)
+  }, [])
+
+  async function handleSave() {
+    if (!hasMounted) return
+    setSaving(true)
+    setError(null)
+    const supabase = createClient()
+
+    // 1. Delete all existing campaign-sourced line items for this WO
+    const { error: delErr } = await supabase
+      .from('wo_line_items')
+      .delete()
+      .eq('work_order_id', wo.id)
+      .eq('source', 'campaign')
+
+    if (delErr) {
+      setError('Delete failed: ' + delErr.message)
+      setSaving(false)
+      return
+    }
+
+    // 2. Insert fresh rows for current picks
+    if (picks.length > 0) {
+      const rows = picks
+        .map(pick => {
+          const item = CAMPAIGN_ITEMS.find(i => i.id === pick.id)
+          if (!item) return null
+          const unitPrice = typeof pick.unitPrice === 'number' ? pick.unitPrice : item.price
+          const qty = (item.pricing === 'per_unit' || item.pricing === 'monthly') ? pick.qty : 1
+          const sortOrder = CAMPAIGN_ITEMS.findIndex(i => i.id === pick.id)
+          return {
+            work_order_id: wo.id,
+            description: item.name,
+            qty,
+            unit_price: unitPrice,
+            sort_order: sortOrder,
+            source: 'campaign',
+            campaign_item_id: item.id,
+          }
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+
+      if (rows.length > 0) {
+        const { error: insErr } = await supabase
+          .from('wo_line_items')
+          .insert(rows)
+        if (insErr) {
+          setError('Insert failed: ' + insErr.message)
+          setSaving(false)
+          return
+        }
+      }
+    }
+
+    // 3. Reload line items so Overview Costs reflect the new state
+    const { data: refreshed } = await supabase
+      .from('wo_line_items')
+      .select('id, description, qty, unit_price, total, sort_order, source, campaign_item_id')
+      .eq('work_order_id', wo.id)
+      .order('sort_order', { ascending: true })
+
+    onUpdated(refreshed || [])
+    setLastSavedAt(new Date())
+    setDirty(false)
+    setSaving(false)
+  }
+
+  const campaignTotal = picks.reduce((sum, p) => {
+    const item = CAMPAIGN_ITEMS.find(i => i.id === p.id)
+    if (!item) return sum
+    return sum + campaignItemCost(item, p.qty, p.unitPrice)
+  }, 0)
+
+  return (
+    <div className="grid gap-4">
+      <div
+        className="rounded-lg border p-4 flex items-center justify-between"
+        style={{
+          background: 'var(--bg-elevated)',
+          borderColor: 'var(--border)',
+        }}
+      >
+        <div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+            Campaign items for this work order
+          </div>
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Picks are saved as line items with <code>source = 'campaign'</code>.
+            Adding/removing items here updates the regular Line Items list too.
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {dirty && (
+            <span className="text-xs" style={{ color: '#f59e0b' }}>
+              Unsaved changes
+            </span>
+          )}
+          {lastSavedAt && !dirty && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Saved {lastSavedAt.toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="px-4 py-2 rounded-md text-sm font-medium"
+            style={{
+              background: dirty ? '#f59e0b' : 'var(--bg-sunken, #e2e8f0)',
+              color: dirty ? '#fff' : 'var(--text-muted)',
+              opacity: saving ? 0.6 : 1,
+              cursor: saving || !dirty ? 'not-allowed' : 'pointer',
+              border: 'none',
+            }}
+          >
+            {saving ? 'Saving…' : 'Save campaign items'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div
+          className="rounded-md border p-3 text-sm"
+          style={{
+            background: '#fef2f2',
+            borderColor: '#fecaca',
+            color: '#991b1b',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <CampaignBuilderSection
+        serviceId={wo.service_id}
+        picks={picks}
+        onChange={setPicks}
+        title={title}
+        onTitleChange={setTitle}
+        duration={duration}
+        onDurationChange={setDuration}
+      />
+
+      <div className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+        Total: <strong style={{ color: 'var(--text)' }}>{money(campaignTotal)}</strong>
+        {' · '}
+        {picks.length} item{picks.length === 1 ? '' : 's'} selected
       </div>
     </div>
   )
@@ -466,12 +641,7 @@ function Row({
     <div className="flex items-start justify-between gap-3 text-sm">
       <div style={{ color: 'var(--text-muted)' }}>{label}</div>
       <div className="text-right">
-        <div
-          style={{
-            color: 'var(--text)',
-            fontWeight: bold ? 700 : 400,
-          }}
-        >
+        <div style={{ color: 'var(--text)', fontWeight: bold ? 700 : 400 }}>
           {value}
         </div>
         {sub && (

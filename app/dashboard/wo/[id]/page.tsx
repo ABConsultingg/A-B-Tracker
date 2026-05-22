@@ -22,10 +22,10 @@ export default async function WoDetailPage({
 
   if (!wo) notFound()
 
-  // Line items for Costs card
+  // All line items (used by Overview Costs total)
   const { data: lineItems } = await supabase
     .from('wo_line_items')
-    .select('id, description, qty, unit_price, total, sort_order')
+    .select('id, description, qty, unit_price, total, sort_order, source, campaign_item_id')
     .eq('work_order_id', params.id)
     .order('sort_order', { ascending: true })
 
