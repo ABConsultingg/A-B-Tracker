@@ -75,11 +75,21 @@ export default function WoDetail({
   lineItems: initialLineItems,
   assignees,
   initialTab,
+  tasks: initialTasks,
+  comments: initialComments,
+  team,
+  authUserMap,
+  currentUserId,
 }: {
   wo: any
   lineItems: any[]
   assignees: { id: string; name: string }[]
   initialTab?: string
+  tasks: any[]
+  comments: any[]
+  team: { id: string; name: string; auth_user_id: string | null }[]
+  authUserMap: Record<string, string>
+  currentUserId: string | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
