@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { STAGES } from '@/lib/types'
 
 type Tab =
   | 'overview'
@@ -23,26 +24,53 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'vendor-invoices', label: 'Vendor Invoices', icon: '🧾' },
 ]
 
-const STAGE_COLORS: Record<string, string> = {
-  submitted:        '#94a3b8',
-  scoping:          '#0ea5e9',
-  in_progress:      '#6366f1',
-  client_review:    '#f59e0b',
-  revisions:        '#ec4899',
-  approved:         '#10b981',
-  in_production:    '#8b5cf6',
-  delivered:        '#14b8a6',
-  invoiced:         '#22c55e',
-  paid:             '#65a30d',
-  on_hold:          '#737373',
-  archived:         '#a3a3a3',
+const stageColor = (stage: string) =>
+  STAGES.find(s => s.id === stage)?.color || '#94a3b8'
+const stageLabel = (stage: string) =>
+  STAGES.find(s => s.id === stage)?.label || stage
+
+const PRIORITY_COLORS: Record<string, string> = {
+  low:    '#94a3b8',
+  medium: '#0891b2',
+  high:   '#f59e0b',
+  urgent: '#ef4444',
+}
+
+const money = (n: number | null | undefined) =>
+  typeof n === 'number' && !Number.isNaN(n)
+    ? n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+    : '—'
+
+const fmtDate = (d: string | null | undefined) => {
+  if (!d) return '—'
+  try {
+    return new Date(d).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    })
+  } catch {
+    return d
+  }
+}
+
+const daysAgo = (d: string | null | undefined) => {
+  if (!d) return null
+  const ms = Date.now() - new Date(d).getTime()
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24))
+  if (days < 0) return null
+  if (days === 0) return 'today'
+  if (days === 1) return '1 day ago'
+  return `${days} days ago`
 }
 
 export default function WoDetail({
   wo,
+  lineItems,
+  assignees,
   initialTab,
 }: {
   wo: any
+  lineItems: any[]
+  assignees: { id: string; name: string }[]
   initialTab?: string
 }) {
   const router = useRouter()
@@ -53,7 +81,6 @@ export default function WoDetail({
 
   const [tab, setTab] = useState<Tab>(validTab(initialTab))
 
-  // Keep tab state in sync with URL (?tab=campaign etc.)
   useEffect(() => {
     const urlTab = validTab(searchParams.get('tab') || undefined)
     if (urlTab !== tab) setTab(urlTab)
@@ -75,7 +102,7 @@ export default function WoDetail({
   const clientName = wo.clients?.name || 'Unknown client'
   const serviceName = wo.services?.name || 'Unknown service'
   const ownerName = wo.team_members?.name || 'Unassigned'
-  const stageColor = STAGE_COLORS[wo.stage] || '#94a3b8'
+  const color = stageColor(wo.stage)
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -85,14 +112,12 @@ export default function WoDetail({
         style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
       >
         <div className="max-w-[1400px] mx-auto">
-          {/* Breadcrumb */}
           <div className="text-sm mb-2" style={{ color: 'var(--text-muted)' }}>
             <Link href="/dashboard" className="hover:underline">
               ← Back to Board
             </Link>
           </div>
 
-          {/* Title + meta */}
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0 flex-1">
               <h1
@@ -119,16 +144,15 @@ export default function WoDetail({
               </div>
             </div>
 
-            {/* Stage badge (read-only for now; editing comes in Step 2) */}
             <div
               className="px-3 py-1.5 rounded-full text-sm font-medium"
               style={{
-                background: stageColor + '22',
-                color: stageColor,
-                border: `1px solid ${stageColor}44`,
+                background: color + '22',
+                color,
+                border: `1px solid ${color}44`,
               }}
             >
-              {wo.stage?.replace(/_/g, ' ').toUpperCase()}
+              {stageLabel(wo.stage).toUpperCase()}
             </div>
           </div>
         </div>
@@ -148,7 +172,7 @@ export default function WoDetail({
               style={{
                 color: tab === t.id ? 'var(--text)' : 'var(--text-muted)',
                 borderBottom: tab === t.id
-                  ? '2px solid var(--accent, #6366f1)'
+                  ? '2px solid ' + color
                   : '2px solid transparent',
                 marginBottom: '-1px',
               }}
@@ -163,10 +187,7 @@ export default function WoDetail({
       {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-6 py-6">
         {tab === 'overview' && (
-          <Placeholder
-            title="Overview"
-            note="Title, client, service, costs, people, recent activity will live here. Coming in Step 2."
-          />
+          <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} />
         )}
         {tab === 'campaign' && (
           <Placeholder
@@ -203,6 +224,258 @@ export default function WoDetail({
             title="Vendor Invoices"
             note="Accurate Printing PDFs (internal-only, no cost math). Apps Script → Supabase wiring in Session 11."
           />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Overview tab content
+// ============================================================
+function OverviewTab({
+  wo,
+  lineItems,
+  assignees,
+}: {
+  wo: any
+  lineItems: any[]
+  assignees: { id: string; name: string }[]
+}) {
+  const lineItemsTotal = (lineItems || []).reduce(
+    (sum, li) => sum + (Number(li.total) || 0), 0
+  )
+  const estCost = Number(wo.est_cost) || 0
+  const addCost = Number(wo.add_cost) || 0
+  const adSpend = Number(wo.ad_spend) || 0
+  const grandTotal = estCost + addCost + adSpend + lineItemsTotal
+
+  const priorityColor = PRIORITY_COLORS[wo.priority] || '#94a3b8'
+
+  return (
+    <div className="grid gap-4">
+      {/* Top row — 3 summary cards */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+        {/* Costs */}
+        <Card title="💰 Costs">
+          <Row label="Est. cost"    value={money(estCost)} />
+          <Row label="Add-on cost"  value={money(addCost)} />
+          <Row label="Ad spend"     value={money(adSpend)} />
+          <Row label="Line items"   value={money(lineItemsTotal)} sub={`${lineItems?.length || 0} item${lineItems?.length === 1 ? '' : 's'}`} />
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
+            <Row label="Total" value={money(grandTotal)} bold />
+          </div>
+        </Card>
+
+        {/* Dates */}
+        <Card title="📅 Dates">
+          <Row label="Submitted"      value={fmtDate(wo.submitted_at || wo.created_at)} sub={daysAgo(wo.submitted_at || wo.created_at) || undefined} />
+          <Row label="Due"            value={fmtDate(wo.due_date)} />
+          <Row label="Stage entered"  value={fmtDate(wo.stage_entered_at)} sub={daysAgo(wo.stage_entered_at) || undefined} />
+          <Row label="Last updated"   value={fmtDate(wo.updated_at)} sub={daysAgo(wo.updated_at) || undefined} />
+        </Card>
+
+        {/* Status */}
+        <Card title="🏷️ Status">
+          <Row label="Stage" value={
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: stageColor(wo.stage) + '22',
+              color: stageColor(wo.stage),
+              fontSize: 12,
+              fontWeight: 500,
+            }}>
+              {stageLabel(wo.stage)}
+            </span>
+          } />
+          <Row label="Priority" value={
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: priorityColor + '22',
+              color: priorityColor,
+              fontSize: 12,
+              fontWeight: 500,
+              textTransform: 'capitalize',
+            }}>
+              {wo.priority || 'medium'}
+            </span>
+          } />
+          <Row label="Occurrence" value={wo.occurrence || '—'} />
+          <Row label="Flagged" value={wo.flagged ? '🚩 Yes' : '—'} />
+          {wo.issue && <Row label="Issue" value={wo.issue} />}
+        </Card>
+      </div>
+
+      {/* People */}
+      <Card title="👥 People">
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div>
+            <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Owner</div>
+            <div style={{ color: 'var(--text)', fontWeight: 500 }}>
+              {wo.team_members?.name || 'Unassigned'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Assignees</div>
+            {assignees.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>None</div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {assignees.map(a => (
+                  <span
+                    key={a.id}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: 'var(--bg-sunken, #f1f5f9)',
+                      color: 'var(--text)',
+                      fontSize: 12,
+                    }}
+                  >
+                    {a.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Branch / Location</div>
+            <div style={{ color: 'var(--text)' }}>{wo.branch || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Vendor</div>
+            <div style={{ color: 'var(--text)' }}>{wo.vendor || '—'}</div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Notes / Description */}
+      <Card title="📝 Notes">
+        {wo.notes ? (
+          <div
+            style={{
+              color: 'var(--text)',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.5,
+              fontSize: 14,
+            }}
+          >
+            {wo.notes}
+          </div>
+        ) : wo.description ? (
+          <div
+            style={{
+              color: 'var(--text)',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.5,
+              fontSize: 14,
+            }}
+          >
+            {wo.description}
+          </div>
+        ) : (
+          <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            No notes yet. Edit this work order from the board drawer to add notes.
+          </div>
+        )}
+      </Card>
+
+      {/* Links */}
+      {(wo.deliverables_link || wo.notes_link) && (
+        <Card title="🔗 Links">
+          {wo.deliverables_link && (
+            <Row
+              label="Deliverables"
+              value={
+                <a
+                  href={wo.deliverables_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent, #6366f1)' }}
+                >
+                  Open ↗
+                </a>
+              }
+            />
+          )}
+          {wo.notes_link && (
+            <Row
+              label="Notes link"
+              value={
+                <a
+                  href={wo.notes_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent, #6366f1)' }}
+                >
+                  Open ↗
+                </a>
+              }
+            />
+          )}
+        </Card>
+      )}
+
+      <div
+        className="text-xs text-center mt-2"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        Editing still happens in the board drawer. Full-page editing is coming in a later step.
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// Tiny reusable bits
+// ============================================================
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-lg border p-4"
+      style={{
+        background: 'var(--bg-elevated)',
+        borderColor: 'var(--border)',
+      }}
+    >
+      <div
+        className="text-sm font-semibold mb-3"
+        style={{ color: 'var(--text)' }}
+      >
+        {title}
+      </div>
+      <div className="grid gap-2">{children}</div>
+    </div>
+  )
+}
+
+function Row({
+  label,
+  value,
+  sub,
+  bold,
+}: {
+  label: string
+  value: React.ReactNode
+  sub?: string
+  bold?: boolean
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <div style={{ color: 'var(--text-muted)' }}>{label}</div>
+      <div className="text-right">
+        <div
+          style={{
+            color: 'var(--text)',
+            fontWeight: bold ? 700 : 400,
+          }}
+        >
+          {value}
+        </div>
+        {sub && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{sub}</div>
         )}
       </div>
     </div>
