@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
 import { priceFor } from '@/lib/pricing'
-import { isCampaignService, type CampaignPick } from '@/lib/campaign-items'
+import { isCampaignService, CAMPAIGN_ITEMS, campaignItemCost, type CampaignPick } from '@/lib/campaign-items'
 import WoLineItemsSection from './WoLineItemsSection'
 import CampaignBuilderSection from './CampaignBuilderSection'
 
@@ -548,6 +548,21 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     if (!newWo.client_id) { alert('Please select a client.'); return }
     if (!newWo.service_id) { alert('Please select a service.'); return }
     setSaving(true)
+
+    // Build notes — prefix with campaign meta if this is a campaign WO and the user filled them in
+    let notesValue = newWo.notes || null
+    if (isCampaignService(newWo.service_id)) {
+      const metaParts: string[] = []
+      if (campaignTitle.trim()) metaParts.push(campaignTitle.trim())
+      if (campaignDuration.value && Number(campaignDuration.value) > 0) {
+        metaParts.push(`${campaignDuration.value} ${campaignDuration.unit}`)
+      }
+      if (metaParts.length > 0) {
+        const prefix = `Campaign: ${metaParts.join(' · ')}`
+        notesValue = newWo.notes?.trim() ? `${prefix}\n\n${newWo.notes}` : prefix
+      }
+    }
+
     const payload: any = {
       title: newWo.title, description: newWo.description || null,
       client_id: newWo.client_id, service_id: newWo.service_id,
@@ -558,16 +573,52 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
       due_date: newWo.due_date || null,
       branch: newWo.branch || null, vendor: newWo.vendor || null,
       deliverables_link: newWo.deliverables_link || null,
-      notes_link: newWo.notes_link || null, notes: newWo.notes || null,
+      notes_link: newWo.notes_link || null, notes: notesValue,
       submitted_at: new Date().toISOString(),
     }
     const { data, error } = await supabase.from('work_orders').insert(payload)
       .select(`*, clients!work_orders_client_id_fkey(name), services!work_orders_service_id_fkey(name, category), team_members!work_orders_owner_id_fkey(name)`)
       .single()
+    if (error) { setSaving(false); alert('Error creating: ' + error.message); return }
+
+    // If this was a campaign WO with picks, flatten them to wo_line_items
+    const woRow = data as WorkOrder
+    if (isCampaignService(woRow.service_id) && campaignPicks.length > 0) {
+      const lineItemRows = campaignPicks
+        .map(pick => {
+          const item = CAMPAIGN_ITEMS.find(i => i.id === pick.id)
+          if (!item) return null
+          const unitPrice = typeof pick.unitPrice === 'number' ? pick.unitPrice : item.price
+          // For flat / no_charge, qty stays 1 so total = unit_price
+          const qty = (item.pricing === 'per_unit' || item.pricing === 'monthly') ? pick.qty : 1
+          const sortOrder = CAMPAIGN_ITEMS.findIndex(i => i.id === pick.id)
+          return {
+            work_order_id: woRow.id,
+            description: item.name,
+            qty,
+            unit_price: unitPrice,
+            sort_order: sortOrder,
+          }
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+
+      if (lineItemRows.length > 0) {
+        const { error: liError } = await supabase.from('wo_line_items').insert(lineItemRows)
+        if (liError) {
+          // WO is saved; just warn that line items partially failed
+          alert(`WO created, but campaign items failed to save: ${liError.message}`)
+        }
+      }
+    }
+
     setSaving(false)
-    if (error) { alert('Error creating: ' + error.message); return }
-    setWorkOrders(prev => [data as WorkOrder, ...prev])
-    setSelectedWo(null); setNewWo({})
+    setWorkOrders(prev => [woRow, ...prev])
+    setSelectedWo(null)
+    setNewWo({})
+    // Reset campaign builder state so the next New WO opens fresh
+    setCampaignPicks([])
+    setCampaignTitle('')
+    setCampaignDuration({ value: '', unit: 'weeks' })
   }
 
   const dueAlerts = useMemo(() => {
