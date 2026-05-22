@@ -598,6 +598,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
             qty,
             unit_price: unitPrice,
             sort_order: sortOrder,
+            source: 'campaign',
+            campaign_item_id: item.id,
           }
         })
         .filter((r): r is NonNullable<typeof r> => r !== null)
