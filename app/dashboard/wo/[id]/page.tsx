@@ -39,12 +39,47 @@ export default async function WoDetailPage({
     .map((r: any) => r.team_members)
     .filter(Boolean)
 
+  // Tasks (Step 5 Commit B will consume)
+  const { data: tasks } = await supabase
+    .from('wo_tasks')
+    .select('*')
+    .eq('work_order_id', params.id)
+    .order('sort_order', { ascending: true })
+
+  // Comments (Step 5 Commit C will consume)
+  const { data: comments } = await supabase
+    .from('wo_comments')
+    .select('*')
+    .eq('work_order_id', params.id)
+    .order('created_at', { ascending: true })
+
+  // Full team list for assignee dropdowns + @mention candidates
+  const { data: team } = await supabase
+    .from('team_members')
+    .select('id, name, auth_user_id')
+    .order('name', { ascending: true })
+
+  // Build authUserMap: auth_user_id -> team member name
+  const authUserMap: Record<string, string> = {}
+  ;(team || []).forEach((t: any) => {
+    if (t.auth_user_id) authUserMap[t.auth_user_id] = t.name
+  })
+
+  // Current logged-in user (for ownership checks on comments)
+  const { data: userData } = await supabase.auth.getUser()
+  const currentUserId = userData.user?.id || null
+
   return (
     <WoDetail
       wo={wo as any}
       lineItems={lineItems || []}
       assignees={assignees}
       initialTab={searchParams.tab}
+      tasks={tasks || []}
+      comments={comments || []}
+      team={team || []}
+      authUserMap={authUserMap}
+      currentUserId={currentUserId}
     />
   )
 }

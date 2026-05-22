@@ -12,6 +12,8 @@ import {
   type CampaignPick,
 } from '@/lib/campaign-items'
 import CampaignBuilderSection from '@/components/work-orders/CampaignBuilderSection'
+import WoTasksTab from './WoTasksTab'
+import WoMessagesTab from './WoMessagesTab'
 
 type Tab =
   | 'overview'
@@ -75,11 +77,21 @@ export default function WoDetail({
   lineItems: initialLineItems,
   assignees,
   initialTab,
+  tasks: initialTasks,
+  comments: initialComments,
+  team,
+  authUserMap,
+  currentUserId,
 }: {
   wo: any
   lineItems: any[]
   assignees: { id: string; name: string }[]
   initialTab?: string
+  tasks: any[]
+  comments: any[]
+  team: { id: string; name: string; auth_user_id: string | null }[]
+  authUserMap: Record<string, string>
+  currentUserId: string | null
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -213,15 +225,19 @@ export default function WoDetail({
               />
         )}
         {tab === 'tasks' && (
-          <Placeholder
-            title="Tasks"
-            note="Lifting the tasks UI out of the drawer into this tab. Coming in Step 5."
+          <WoTasksTab
+            wo={wo}
+            initialTasks={initialTasks}
+            team={team}
           />
         )}
         {tab === 'messages' && (
-          <Placeholder
-            title="Messages"
-            note="Comments + @mentions get a proper home here. Coming in Step 5."
+          <WoMessagesTab
+            wo={wo}
+            initialComments={initialComments}
+            team={team}
+            authUserMap={authUserMap}
+            currentUserId={currentUserId}
           />
         )}
         {tab === 'files' && (
