@@ -1164,8 +1164,19 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                   </>
                 )}
               </div>
-              <button onClick={() => { setSelectedWo(null); setNewWo({}) }}
-                className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100">×</button>
+              <div className="flex items-center gap-2">
+                {!isNew && wo?.id && (
+                  <button
+                    onClick={() => router.push(`/dashboard/wo/${wo.id}`)}
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                    title="Open full-page view with all tabs"
+                  >
+                    ↗ Open full view
+                  </button>
+                )}
+                <button onClick={() => { setSelectedWo(null); setNewWo({}) }}
+                  className="text-gray-400 hover:text-gray-700 text-2xl leading-none w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100">×</button>
+              </div>
             </div>
 
             <div className="px-4 md:px-6 py-5 space-y-6">
@@ -1734,8 +1745,28 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                 </div>
               </div>
 
-              {/* ─── Tasks (existing WO only) ─── */}
-              {!isNew && (
+              {/* ─── Tasks summary card (Step 4) ─── */}
+              {!isNew && wo?.id && (
+                <button
+                  onClick={() => router.push(`/dashboard/wo/${wo.id}?tab=tasks`)}
+                  className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-700">
+                      ✓ Tasks
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {tasks.length === 0
+                        ? 'No tasks yet'
+                        : `${tasks.filter(t => t.status === 'done').length}/${tasks.length} done`}
+                    </span>
+                  </div>
+                  <span className="text-gray-400 text-sm">›</span>
+                </button>
+              )}
+
+              {/* ─── Tasks (existing WO only) — gated, lifted to full page in Step 5 ─── */}
+              {false && !isNew && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-1">
                     <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
@@ -1883,8 +1914,41 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                 </div>
               )}
 
-              {/* Comments (existing WO only) */}
-              {!isNew && (
+              {/* Messages summary card (Step 4) */}
+              {!isNew && wo?.id && (() => {
+                const lastComment = comments.length > 0 ? comments[comments.length - 1] : null
+                const lastAuthor = lastComment?.author_id ? authUserMap[lastComment.author_id] : null
+                let lastAgo = ''
+                if (lastComment?.created_at) {
+                  const diffMs = Date.now() - new Date(lastComment.created_at).getTime()
+                  const mins = Math.floor(diffMs / 60000)
+                  if (mins < 1) lastAgo = 'just now'
+                  else if (mins < 60) lastAgo = `${mins}m ago`
+                  else if (mins < 1440) lastAgo = `${Math.floor(mins / 60)}h ago`
+                  else lastAgo = `${Math.floor(mins / 1440)}d ago`
+                }
+                return (
+                  <button
+                    onClick={() => router.push(`/dashboard/wo/${wo.id}?tab=messages`)}
+                    className="w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-semibold text-gray-700 flex-shrink-0">
+                        💬 Messages
+                      </span>
+                      <span className="text-xs text-gray-500 truncate">
+                        {comments.length === 0
+                          ? 'No messages yet'
+                          : `${comments.length} comment${comments.length === 1 ? '' : 's'}${lastAuthor ? ` · last from ${lastAuthor.split(' ')[0]} ${lastAgo}` : ''}`}
+                      </span>
+                    </div>
+                    <span className="text-gray-400 text-sm flex-shrink-0">›</span>
+                  </button>
+                )
+              })()}
+
+              {/* Comments (existing WO only) — gated, lifted to full page in Step 5 */}
+              {false && !isNew && (
                 <div className="border-t border-gray-100 pt-4">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                     Comments ({comments.length})
