@@ -14,6 +14,7 @@ import {
 import CampaignBuilderSection from '@/components/work-orders/CampaignBuilderSection'
 import WoTasksTab from './WoTasksTab'
 import WoMessagesTab from './WoMessagesTab'
+import WoScheduleTab from './WoScheduleTab'
 
 type Tab =
   | 'overview'
@@ -82,6 +83,7 @@ export default function WoDetail({
   team,
   authUserMap,
   currentUserId,
+  schedule: initialSchedule,
 }: {
   wo: any
   lineItems: any[]
@@ -92,6 +94,7 @@ export default function WoDetail({
   team: { id: string; name: string; auth_user_id: string | null }[]
   authUserMap: Record<string, string>
   currentUserId: string | null
+  schedule: any[]
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -247,9 +250,10 @@ export default function WoDetail({
           />
         )}
         {tab === 'schedule' && (
-          <Placeholder
-            title="Schedule"
-            note="Execution dates + Google Calendar sync. Session 11."
+          <WoScheduleTab
+            wo={wo}
+            initialSchedule={initialSchedule}
+            team={team}
           />
         )}
         {tab === 'vendor-invoices' && (

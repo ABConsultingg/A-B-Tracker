@@ -53,6 +53,14 @@ export default async function WoDetailPage({
     .eq('work_order_id', params.id)
     .order('created_at', { ascending: true })
 
+  // Schedule rows (Session 12 Pass 1)
+  const { data: schedule } = await supabase
+    .from('wo_schedule')
+    .select('*')
+    .eq('work_order_id', params.id)
+    .order('sort_order', { ascending: true })
+    .order('scheduled_date', { ascending: true })
+
   // Full team list for assignee dropdowns + @mention candidates
   const { data: team } = await supabase
     .from('team_members')
@@ -80,6 +88,7 @@ export default async function WoDetailPage({
       team={team || []}
       authUserMap={authUserMap}
       currentUserId={currentUserId}
+      schedule={schedule || []}
     />
   )
 }
