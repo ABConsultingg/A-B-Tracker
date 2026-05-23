@@ -61,6 +61,16 @@ export default async function WoDetailPage({
     .order('sort_order', { ascending: true })
     .order('scheduled_date', { ascending: true })
 
+  // Vendor invoices for this WO (Session 12 vendor invoices PR)
+  // Match by direct FK OR by wo_number_text (Apps Script writes the parsed
+  // text first, FK gets set when match is confirmed)
+  const woShortId = params.id.slice(0, 8)
+  const { data: vendorInvoices } = await supabase
+    .from('wo_vendor_invoices')
+    .select('*')
+    .or(`work_order_id.eq.${params.id},wo_number_text.ilike.%${woShortId}%`)
+    .order('invoice_date', { ascending: false })
+
   // Full team list for assignee dropdowns + @mention candidates
   const { data: team } = await supabase
     .from('team_members')
@@ -89,6 +99,7 @@ export default async function WoDetailPage({
       authUserMap={authUserMap}
       currentUserId={currentUserId}
       schedule={schedule || []}
+      vendorInvoices={vendorInvoices || []}
     />
   )
 }
