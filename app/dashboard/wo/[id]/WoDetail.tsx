@@ -15,6 +15,7 @@ import CampaignBuilderSection from '@/components/work-orders/CampaignBuilderSect
 import WoTasksTab from './WoTasksTab'
 import WoMessagesTab from './WoMessagesTab'
 import WoScheduleTab from './WoScheduleTab'
+import WoVendorInvoicesTab from './WoVendorInvoicesTab'
 
 type Tab =
   | 'overview'
@@ -84,6 +85,7 @@ export default function WoDetail({
   authUserMap,
   currentUserId,
   schedule: initialSchedule,
+  vendorInvoices,
 }: {
   wo: any
   lineItems: any[]
@@ -95,6 +97,7 @@ export default function WoDetail({
   authUserMap: Record<string, string>
   currentUserId: string | null
   schedule: any[]
+  vendorInvoices: any[]
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -257,9 +260,9 @@ export default function WoDetail({
           />
         )}
         {tab === 'vendor-invoices' && (
-          <Placeholder
-            title="Vendor Invoices"
-            note="Accurate Printing PDFs (internal-only, no cost math). Apps Script → Supabase wiring in Session 11."
+          <WoVendorInvoicesTab
+            invoices={vendorInvoices}
+            woId={wo.id}
           />
         )}
       </div>
