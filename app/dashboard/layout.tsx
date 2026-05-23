@@ -38,6 +38,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
     counts.myTasks = myTasksCount ?? 0
   }
 
+  // Schedule badge: rows scheduled (not yet sent or cancelled) within this week (Mon-Sun)
+  {
+    const now = new Date()
+    const day = now.getDay()
+    const mondayOffset = day === 0 ? -6 : 1 - day
+    const start = new Date(now)
+    start.setDate(now.getDate() + mondayOffset)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+    const { count: scheduleCount } = await supabase
+      .from('wo_schedule')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'scheduled')
+      .gte('scheduled_date', toISO(start))
+      .lte('scheduled_date', toISO(end))
+    counts.schedule = scheduleCount ?? 0
+  }
+
   // ----- Quick filter counts (board-applicable filters) -----
 
   // Assigned to me: join through wo_assignees and exclude done WOs

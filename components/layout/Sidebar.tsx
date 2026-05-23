@@ -16,6 +16,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: '/dashboard',           label: 'Board',           icon: '⬜', section: 'views' },
   { href: '/dashboard/pipeline',  label: 'Pipeline Health', icon: '📊', section: 'views' },
+  { href: '/dashboard/schedule', label: 'Execution Schedule', icon: '📅', countKey: 'schedule', section: 'views' },
   { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', adminOnly: true, section: 'views' },
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
@@ -52,6 +53,7 @@ export type SidebarCounts = {
   flagged?: number
   stale?: number
   overdue?: number
+  schedule?: number
 }
 
 export type ClientBadge = {
