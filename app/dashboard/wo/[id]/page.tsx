@@ -11,6 +11,18 @@ export default async function WoDetailPage({
 }) {
   const supabase = createClient()
 
+  // Current user's role — drives admin-only UI (cost amounts on Overview, etc.)
+  const { data: { user } } = await supabase.auth.getUser()
+  let isAdmin = false
+  if (user) {
+    const { data: currentMember } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('auth_user_id', user.id)
+      .single()
+    isAdmin = currentMember?.role === 'admin'
+  }
+
   const { data: wo } = await supabase
     .from('work_orders')
     .select(`*,
@@ -100,6 +112,7 @@ export default async function WoDetailPage({
       currentUserId={currentUserId}
       schedule={schedule || []}
       vendorInvoices={vendorInvoices || []}
+      isAdmin={isAdmin}
     />
   )
 }
