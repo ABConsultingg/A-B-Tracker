@@ -16,6 +16,7 @@ import WoTasksTab from './WoTasksTab'
 import WoMessagesTab from './WoMessagesTab'
 import WoScheduleTab from './WoScheduleTab'
 import WoVendorInvoicesTab from './WoVendorInvoicesTab'
+import { useViewMode } from '@/lib/useViewMode'
 
 type Tab =
   | 'overview'
@@ -86,10 +87,12 @@ export default function WoDetail({
   currentUserId,
   schedule: initialSchedule,
   vendorInvoices,
+  isAdmin,
 }: {
   wo: any
   lineItems: any[]
   assignees: { id: string; name: string }[]
+  isAdmin: boolean
   initialTab?: string
   tasks: any[]
   comments: any[]
@@ -220,7 +223,7 @@ export default function WoDetail({
       {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-6 py-6">
         {tab === 'overview' && (
-          <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} />
+          <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} isAdmin={isAdmin} />
         )}
         {tab === 'campaign' && (
           isCampaign
@@ -276,17 +279,22 @@ export default function WoDetail({
 function OverviewTab({
   wo,
   lineItems,
+  isAdmin,
   assignees,
 }: {
   wo: any
   lineItems: any[]
   assignees: { id: string; name: string }[]
+  isAdmin: boolean
 }) {
   const lineItemsTotal = (lineItems || []).reduce(
     (sum, li) => sum + (Number(li.total) || 0), 0
   )
   const estCost = Number(wo.est_cost) || 0
   const addCost = Number(wo.add_cost) || 0
+  const [viewMode] = useViewMode(isAdmin)
+  const showCosts = viewMode === 'admin'
+  const hiddenMoney = '—'
   const adSpend = Number(wo.ad_spend) || 0
   const grandTotal = estCost + addCost + adSpend + lineItemsTotal
 
@@ -296,12 +304,12 @@ function OverviewTab({
     <div className="grid gap-4">
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         <Card title="💰 Costs">
-          <Row label="Est. cost"    value={money(estCost)} />
-          <Row label="Add-on cost"  value={money(addCost)} />
-          <Row label="Ad spend"     value={money(adSpend)} />
-          <Row label="Line items"   value={money(lineItemsTotal)} sub={`${lineItems?.length || 0} item${lineItems?.length === 1 ? '' : 's'}`} />
+          <Row label="Est. cost"    value={showCosts ? money(estCost)   : hiddenMoney} />
+          <Row label="Add-on cost"  value={showCosts ? money(addCost)   : hiddenMoney} />
+          <Row label="Ad spend"     value={showCosts ? money(adSpend)   : hiddenMoney} />
+          <Row label="Line items"   value={showCosts ? money(lineItemsTotal) : hiddenMoney} sub={`${lineItems?.length || 0} item${lineItems?.length === 1 ? '' : 's'}`} />
           <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
-            <Row label="Total" value={money(grandTotal)} bold />
+            <Row label="Total" value={showCosts ? money(grandTotal) : hiddenMoney} bold />
           </div>
         </Card>
 
