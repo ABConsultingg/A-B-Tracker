@@ -34,6 +34,14 @@ export default async function MessagesPage() {
   const authMap: Record<string, string> = {}
   ;(team || []).forEach((t: any) => { if (t.auth_user_id) authMap[t.auth_user_id] = t.name })
 
+  // This user's read markers: { workOrderId: lastSeenISO }.
+  const { data: reads } = await supabase
+    .from('wo_message_reads')
+    .select('work_order_id, last_seen_at')
+    .eq('user_id', user.id)
+  const readMap: Record<string, string> = {}
+  ;(reads || []).forEach((r: any) => { readMap[r.work_order_id] = r.last_seen_at })
+
   const rows: InboxComment[] = (comments || []).map((c: any) => ({
     id: c.id,
     workOrderId: c.work_order_id,
@@ -55,6 +63,7 @@ export default async function MessagesPage() {
       authMap={authMap}
       team={(team || []) as TeamMember[]}
       currentUserId={user.id}
+      reads={readMap}
     />
   )
 }

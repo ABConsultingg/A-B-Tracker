@@ -75,6 +75,19 @@ export default function WoMessagesTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wo.id])
 
+  // Mark this WO's messages read on open (clears the inbox unread).
+  useEffect(() => {
+    if (!currentUserId) return
+    supabase
+      .from('wo_message_reads')
+      .upsert(
+        { user_id: currentUserId, work_order_id: wo.id, last_seen_at: new Date().toISOString() },
+        { onConflict: 'user_id,work_order_id' }
+      )
+      .then(({ error }) => { if (error) console.error('Failed to mark WO read:', error.message) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo.id, currentUserId])
+
   function handleCommentInput(value: string, cursorPos: number) {
     setNewComment(value)
     const before = value.substring(0, cursorPos)
