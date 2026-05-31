@@ -27,6 +27,11 @@ export default async function ClientsPage() {
     .from('client_rates')
     .select('id, client_id, service_id, price, notes, effective_from, created_at')
 
+  // Portal logins (team-readable via RLS) — powers the Portal Access section.
+  const { data: portalUsers } = await supabase
+    .from('portal_users')
+    .select('id, client_id, name, email, role, auth_user_id, active, last_login_at')
+
   return (
     <ClientsClient
       clients={clients || []}
@@ -34,6 +39,7 @@ export default async function ClientsPage() {
       currentMember={currentMember}
       services={services || []}
       clientRates={clientRates || []}
+      portalUsers={portalUsers || []}
     />
   )
 }

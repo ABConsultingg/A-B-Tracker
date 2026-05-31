@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { STAGES } from '@/lib/types'
 import type { ClientRate } from '@/lib/types'
 import { priceFor, priceDiff } from '@/lib/pricing'
+import PortalAccess, { type PortalUser } from './PortalAccess'
 
 type ClientStatus = 'active' | 'paused' | 'archived'
 
@@ -79,14 +80,21 @@ export default function ClientsClient({
   currentMember,
   services,
   clientRates: initialRates,
+  portalUsers,
 }: {
   clients: Client[]
   workOrders: WO[]
   currentMember?: { id: string; role: string } | null
   services: Service[]
   clientRates: ClientRate[]
+  portalUsers: PortalUser[]
 }) {
   const isAdmin = currentMember?.role === 'admin'
+  const portalByClient = useMemo(() => {
+    const m: Record<string, PortalUser> = {}
+    portalUsers.forEach(p => { m[p.client_id] = p })
+    return m
+  }, [portalUsers])
   const supabase = createClient()
   const [clients, setClients] = useState<Client[]>(initialClients)
   const [selected, setSelected] = useState<Client | null>(null)
@@ -775,6 +783,17 @@ export default function ClientsClient({
                   )}
                 </div>
               </div>
+
+              {/* ─── Portal access (existing clients only, admin only) ─── */}
+              {!isNew && selected && isAdmin && (
+                <PortalAccess
+                  clientId={selected.id}
+                  clientName={selected.name}
+                  defaultEmail={selected.contact_email}
+                  defaultName={selected.contact_name}
+                  initial={portalByClient[selected.id] || null}
+                />
+              )}
 
               {/* ─── Snapshot + WO list (existing clients only) ─── */}
               {!isNew && selected && selectedStats && (
