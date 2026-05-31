@@ -26,7 +26,7 @@ export default async function PortalLayout({ children }: { children: React.React
     .maybeSingle()
 
   const displayName = client?.name || pu.client_id
-  const initials = displayName.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const initials = displayName.split(/\s+/).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf7' }}>

@@ -33,11 +33,17 @@ export default async function PortalPage() {
   const { data: services } = await supabase
     .from('services').select('id, name, active').eq('active', true).order('name')
 
+  // Supabase types FK joins as arrays; flatten `services` to a single object.
+  const normalizedWOs = (workOrders || []).map((w: any) => ({
+    ...w,
+    services: Array.isArray(w.services) ? (w.services[0] ?? null) : w.services,
+  }))
+
   return (
     <PortalClient
       greetingName={pu?.name || ''}
       client={client || null}
-      workOrders={workOrders || []}
+      workOrders={normalizedWOs}
       schedule={schedule || []}
       services={services || []}
       currentUserId={user?.id || ''}

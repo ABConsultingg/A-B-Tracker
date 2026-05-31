@@ -19,6 +19,13 @@ export default async function PortalWoPage({ params }: { params: { id: string } 
 
   if (!wo) notFound()
 
+  const woNorm: any = {
+    ...wo,
+    services: Array.isArray((wo as any).services)
+      ? ((wo as any).services[0] ?? null)
+      : (wo as any).services,
+  }
+
   // Client-visible comments only (RLS enforces internal_only=false + own client).
   const { data: comments } = await supabase
     .from('wo_comments')
@@ -27,6 +34,6 @@ export default async function PortalWoPage({ params }: { params: { id: string } 
     .order('created_at', { ascending: true })
 
   return (
-    <PortalWoDetail wo={wo as any} initialComments={comments || []} currentUserId={user.id} />
+    <PortalWoDetail wo={woNorm} initialComments={comments || []} currentUserId={user.id} />
   )
 }
