@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Comment = {
@@ -47,6 +47,33 @@ export default function WoMessagesTab({
   const [editingCommentBody, setEditingCommentBody] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [visibleToClient, setVisibleToClient] = useState(false)
+
+  // Realtime: live INSERT/UPDATE/DELETE on this WO's comments.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`wo-comments-${wo.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wo_comments', filter: `work_order_id=eq.${wo.id}` },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as Comment
+            setComments(prev => (prev.some(c => c.id === row.id) ? prev : [...prev, row]))
+          } else if (payload.eventType === 'UPDATE') {
+            const row = payload.new as Comment
+            setComments(prev => prev.map(c => (c.id === row.id ? row : c)))
+          } else if (payload.eventType === 'DELETE') {
+            const goneId = (payload.old as { id: string }).id
+            setComments(prev => prev.filter(c => c.id !== goneId))
+          }
+        }
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo.id])
 
   function handleCommentInput(value: string, cursorPos: number) {
     setNewComment(value)
