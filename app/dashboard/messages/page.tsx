@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import MessagesInboxClient, { type InboxComment } from './MessagesInboxClient'
+import MessagesInboxClient, { type InboxComment, type WoMeta } from './MessagesInboxClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +18,7 @@ export default async function MessagesPage() {
 
   // WO titles + client names for the comments we fetched.
   const woIds = Array.from(new Set((comments || []).map((c: any) => c.work_order_id)))
-  const woMap: Record<string, { title: string; clientName?: string }> = {}
+  const woMap: Record<string, WoMeta> = {}
   if (woIds.length > 0) {
     const { data: wos } = await supabase
       .from('work_orders')
@@ -46,5 +46,5 @@ export default async function MessagesPage() {
     editedAt: c.edited_at,
   }))
 
-  return <MessagesInboxClient rows={rows} />
+  return <MessagesInboxClient rows={rows} woMeta={woMap} authMap={authMap} />
 }
