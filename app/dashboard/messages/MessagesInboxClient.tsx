@@ -53,15 +53,18 @@ export default function MessagesInboxClient({
   authMap = {},
   team = [],
   currentUserId = null,
+  reads: initialReads = {},
 }: {
   rows: InboxComment[]
   woMeta?: Record<string, WoMeta>
   authMap?: Record<string, string>
   team?: TeamMember[]
   currentUserId?: string | null
+  reads?: Record<string, string>
 }) {
   const supabase = createClient()
   const [rows, setRows] = useState<InboxComment[]>(initialRows)
+  const [reads, setReads] = useState<Record<string, string>>(initialReads)
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<SortMode>("activity")
   const [involve, setInvolve] = useState<Involve>("all")
@@ -109,6 +112,43 @@ export default function MessagesInboxClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Is a single comment unread for me? (newer than my last-seen for its WO,
+  // and not authored by me.)
+  function isUnread(c: InboxComment): boolean {
+    if (c.authorId && c.authorId === currentUserId) return false
+    const seen = reads[c.workOrderId]
+    if (!seen) return true
+    return new Date(c.createdAt).getTime() > new Date(seen).getTime()
+  }
+
+  async function markRead(woId: string) {
+    if (!currentUserId) return
+    const nowIso = new Date().toISOString()
+    setReads(prev => ({ ...prev, [woId]: nowIso }))
+    const { error } = await supabase
+      .from("wo_message_reads")
+      .upsert(
+        { user_id: currentUserId, work_order_id: woId, last_seen_at: nowIso },
+        { onConflict: "user_id,work_order_id" }
+      )
+    if (error) console.error("Failed to mark read:", error.message)
+  }
+
+  async function markAllRead(woIds: string[]) {
+    if (!currentUserId || woIds.length === 0) return
+    const nowIso = new Date().toISOString()
+    setReads(prev => {
+      const next = { ...prev }
+      woIds.forEach(id => { next[id] = nowIso })
+      return next
+    })
+    const payload = woIds.map(id => ({ user_id: currentUserId, work_order_id: id, last_seen_at: nowIso }))
+    const { error } = await supabase
+      .from("wo_message_reads")
+      .upsert(payload, { onConflict: "user_id,work_order_id" })
+    if (error) console.error("Failed to mark all read:", error.message)
+  }
+
   const clientOptions = useMemo(() => {
     const set = new Set<string>()
     rows.forEach(r => { if (r.clientName) set.add(r.clientName) })
@@ -144,6 +184,7 @@ export default function MessagesInboxClient({
     clientName?: string
     items: InboxComment[]
     latest: number
+    unreadCount: number
   }
 
   const groups = useMemo<Group[]>(() => {
@@ -151,9 +192,11 @@ export default function MessagesInboxClient({
     for (const r of filtered) {
       const g = map.get(r.workOrderId)
       const t = new Date(r.createdAt).getTime()
+      const unread = isUnread(r) ? 1 : 0
       if (g) {
         g.items.push(r)
         if (t > g.latest) g.latest = t
+        g.unreadCount += unread
       } else {
         map.set(r.workOrderId, {
           woId: r.workOrderId,
@@ -161,6 +204,7 @@ export default function MessagesInboxClient({
           clientName: r.clientName,
           items: [r],
           latest: t,
+          unreadCount: unread,
         })
       }
     }
@@ -173,7 +217,8 @@ export default function MessagesInboxClient({
       arr.sort((a, b) => (a.clientName || "zzz").localeCompare(b.clientName || "zzz") || b.latest - a.latest)
     }
     return arr
-  }, [filtered, sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sort, reads, currentUserId])
 
   const sections = useMemo(() => {
     if (sort !== "activity") return [{ label: null as string | null, groups }]
@@ -185,11 +230,23 @@ export default function MessagesInboxClient({
     }))
   }, [groups, sort])
 
+  const totalUnreadWos = groups.filter(g => g.unreadCount > 0).map(g => g.woId)
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-gray-900">Messages</h1>
-        <p className="text-sm text-gray-500 mt-1">All comments across work orders</p>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Messages</h1>
+          <p className="text-sm text-gray-500 mt-1">All comments across work orders</p>
+        </div>
+        {totalUnreadWos.length > 0 && (
+          <button
+            onClick={() => markAllRead(totalUnreadWos)}
+            className="text-xs text-gray-500 hover:text-gray-900 underline whitespace-nowrap mt-1"
+          >
+            Mark all read
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -280,6 +337,9 @@ export default function MessagesInboxClient({
                     title={g.title}
                     clientName={g.clientName}
                     items={g.items}
+                    unreadCount={g.unreadCount}
+                    isUnread={isUnread}
+                    onMarkRead={() => markRead(g.woId)}
                     team={team}
                     currentUserId={currentUserId}
                     currentUserName={currentUserName}
@@ -299,6 +359,9 @@ function WoGroup({
   title,
   clientName,
   items,
+  unreadCount,
+  isUnread,
+  onMarkRead,
   team,
   currentUserId,
   currentUserName,
@@ -307,6 +370,9 @@ function WoGroup({
   title: string
   clientName?: string
   items: InboxComment[]
+  unreadCount: number
+  isUnread: (c: InboxComment) => boolean
+  onMarkRead: () => void
   team: TeamMember[]
   currentUserId: string | null
   currentUserName: string
@@ -376,56 +442,72 @@ function WoGroup({
     setBody("")
     setVisibleToClient(false)
     setReplyOpen(false)
-    // The new comment arrives via the inbox realtime subscription.
+    onMarkRead()
   }
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <a
         href={`/dashboard/wo/${woId}?tab=messages`}
+        onClick={() => onMarkRead()}
         className="flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-blue-50 transition-colors border-b border-gray-100"
       >
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-gray-900 truncate">{title}</div>
-          {clientName && <div className="text-xs text-gray-500 truncate">{clientName}</div>}
+        <div className="min-w-0 flex items-center gap-2">
+          {unreadCount > 0 && (
+            <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-900 truncate">{title}</div>
+            {clientName && <div className="text-xs text-gray-500 truncate">{clientName}</div>}
+          </div>
         </div>
-        <span className="text-xs text-gray-400 flex-shrink-0 ml-3">
-          {items.length} message{items.length === 1 ? "" : "s"} ›
+        <span className="text-xs flex-shrink-0 ml-3 flex items-center gap-2">
+          {unreadCount > 0 && (
+            <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">
+              {unreadCount} new
+            </span>
+          )}
+          <span className="text-gray-400">
+            {items.length} message{items.length === 1 ? "" : "s"} ›
+          </span>
         </span>
       </a>
       <div className="divide-y divide-gray-50">
-        {items.map(c => (
-          <div key={c.id} className="px-4 py-3">
-            <div className="flex items-start gap-2.5">
-              <div
-                className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
-                style={{ background: "#2d4a7c" }}
-              >
-                {(c.authorName || "?")[0].toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-sm font-semibold text-gray-900">{c.authorName}</span>
-                  <span className="text-xs text-gray-400">{relativeTime(c.createdAt)}</span>
-                  {c.editedAt && <span className="text-xs text-gray-400 italic">edited</span>}
-                  {c.internalOnly ? (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">🔒 Internal</span>
-                  ) : (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">👁 Client-visible</span>
-                  )}
+        {items.map(c => {
+          const unread = isUnread(c)
+          return (
+            <div key={c.id} className={`px-4 py-3 ${unread ? "bg-blue-50/40" : ""}`}>
+              <div className="flex items-start gap-2.5">
+                <div
+                  className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                  style={{ background: "#2d4a7c" }}
+                >
+                  {(c.authorName || "?")[0].toUpperCase()}
                 </div>
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
-                  {c.body}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-gray-900">{c.authorName}</span>
+                    <span className="text-xs text-gray-400">{relativeTime(c.createdAt)}</span>
+                    {c.editedAt && <span className="text-xs text-gray-400 italic">edited</span>}
+                    {c.internalOnly ? (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">🔒 Internal</span>
+                    ) : (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">👁 Client-visible</span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                    {c.body}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50">
+      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
         {replyOpen ? (
-          <div className="space-y-2">
+          <div className="space-y-2 w-full">
             <textarea
               value={body}
               onChange={e => setBody(e.target.value)}
@@ -469,12 +551,22 @@ function WoGroup({
             </div>
           </div>
         ) : (
-          <button
-            onClick={() => setReplyOpen(true)}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            + Reply
-          </button>
+          <>
+            <button
+              onClick={() => setReplyOpen(true)}
+              className="text-xs text-gray-500 hover:text-gray-900"
+            >
+              + Reply
+            </button>
+            {unreadCount > 0 && (
+              <button
+                onClick={onMarkRead}
+                className="text-xs text-gray-400 hover:text-gray-700 underline"
+              >
+                Mark read
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
