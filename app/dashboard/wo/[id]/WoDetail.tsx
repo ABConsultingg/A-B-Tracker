@@ -223,7 +223,7 @@ export default function WoDetail({
       {/* Tab content */}
       <div className="max-w-[1400px] mx-auto px-6 py-6">
         {tab === 'overview' && (
-          <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} isAdmin={isAdmin} />
+          <OverviewTab wo={wo} lineItems={lineItems} assignees={assignees} isAdmin={isAdmin} team={team} />
         )}
         {tab === 'campaign' && (
           isCampaign
@@ -281,12 +281,60 @@ function OverviewTab({
   lineItems,
   isAdmin,
   assignees,
+  team,
 }: {
   wo: any
   lineItems: any[]
   assignees: { id: string; name: string }[]
   isAdmin: boolean
+  team: { id: string; name: string; auth_user_id: string | null }[]
 }) {
+  const supabaseEdit = createClient()
+  const [woState, setWoState] = useState<any>(wo)
+  const [savingField, setSavingField] = useState<string | null>(null)
+  const [savedField, setSavedField] = useState<string | null>(null)
+
+  const saveField = useCallback(async (field: string, value: any, extra?: Record<string, any>) => {
+    if (!isAdmin) return
+    const prev = (woState as any)[field]
+    const norm = typeof value === 'boolean' ? value : (value === '' ? null : value)
+    if ((prev ?? '') === (norm ?? '') && !extra) return
+    setSavingField(field)
+    const patch: Record<string, any> = { [field]: norm, updated_at: new Date().toISOString(), ...(extra || {}) }
+    setWoState((s: any) => ({ ...s, ...patch }))
+    const { error } = await supabaseEdit.from('work_orders').update(patch).eq('id', wo.id)
+    setSavingField(null)
+    if (error) {
+      setWoState((s: any) => ({ ...s, [field]: prev }))
+      alert('Save failed: ' + error.message)
+      return
+    }
+    setSavedField(field)
+    setTimeout(() => setSavedField(f => (f === field ? null : f)), 1200)
+  }, [isAdmin, woState, wo.id])
+
+  const editedNum = (field: string, current: number) => (
+    <span className="inline-flex items-center gap-1">
+      <span style={{ color: 'var(--text-muted)' }}>$</span>
+      <input type="number" step="0.01" min="0" defaultValue={current}
+        onBlur={e => saveField(field, e.target.value === '' ? 0 : Number(e.target.value))}
+        className="w-24 text-right rounded border px-2 py-0.5 text-sm"
+        style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+      {savingField === field && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>…</span>}
+      {savedField === field && <span style={{ fontSize: 10, color: '#15803d' }}>✓</span>}
+    </span>
+  )
+  const editedText = (field: string, current: string, placeholder = '') => (
+    <span className="inline-flex items-center gap-1">
+      <input type="text" defaultValue={current || ''} placeholder={placeholder}
+        onBlur={e => saveField(field, e.target.value.trim())}
+        className="w-40 text-right rounded border px-2 py-0.5 text-sm"
+        style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+      {savingField === field && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>…</span>}
+      {savedField === field && <span style={{ fontSize: 10, color: '#15803d' }}>✓</span>}
+    </span>
+  )
+
   const lineItemsTotal = (lineItems || []).reduce(
     (sum, li) => sum + (Number(li.total) || 0), 0
   )
@@ -304,9 +352,9 @@ function OverviewTab({
     <div className="grid gap-4">
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         <Card title="💰 Costs">
-          <Row label="Est. cost"    value={showCosts ? money(estCost)   : hiddenMoney} />
-          <Row label="Add-on cost"  value={showCosts ? money(addCost)   : hiddenMoney} />
-          <Row label="Ad spend"     value={showCosts ? money(adSpend)   : hiddenMoney} />
+          <Row label="Est. cost"    value={showCosts ? (isAdmin ? editedNum('est_cost', Number(woState.est_cost) || 0) : money(estCost)) : hiddenMoney} />
+          <Row label="Add-on cost"  value={showCosts ? (isAdmin ? editedNum('add_cost', Number(woState.add_cost) || 0) : money(addCost)) : hiddenMoney} />
+          <Row label="Ad spend"     value={showCosts ? (isAdmin ? editedNum('ad_spend', Number(woState.ad_spend) || 0) : money(adSpend)) : hiddenMoney} />
           <Row label="Line items"   value={showCosts ? money(lineItemsTotal) : hiddenMoney} sub={`${lineItems?.length || 0} item${lineItems?.length === 1 ? '' : 's'}`} />
           <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
             <Row label="Total" value={showCosts ? money(grandTotal) : hiddenMoney} bold />
@@ -315,40 +363,61 @@ function OverviewTab({
 
         <Card title="📅 Dates">
           <Row label="Submitted"      value={fmtDate(wo.submitted_at || wo.created_at)} sub={daysAgo(wo.submitted_at || wo.created_at) || undefined} />
-          <Row label="Due"            value={fmtDate(wo.due_date)} />
+          <Row label="Due"            value={isAdmin ? (
+            <span className="inline-flex items-center gap-1">
+              <input type="date" defaultValue={woState.due_date || ''}
+                onChange={e => saveField('due_date', e.target.value)}
+                className="rounded border px-2 py-0.5 text-sm"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+              {savingField === 'due_date' && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>…</span>}
+              {savedField === 'due_date' && <span style={{ fontSize: 10, color: '#15803d' }}>✓</span>}
+            </span>
+          ) : fmtDate(wo.due_date)} />
           <Row label="Stage entered"  value={fmtDate(wo.stage_entered_at)} sub={daysAgo(wo.stage_entered_at) || undefined} />
           <Row label="Last updated"   value={fmtDate(wo.updated_at)} sub={daysAgo(wo.updated_at) || undefined} />
         </Card>
 
         <Card title="🏷️ Status">
-          <Row label="Stage" value={
-            <span style={{
-              padding: '2px 8px',
-              borderRadius: 999,
-              background: stageColor(wo.stage) + '22',
-              color: stageColor(wo.stage),
-              fontSize: 12,
-              fontWeight: 500,
-            }}>
+          <Row label="Stage" value={isAdmin ? (
+            <select defaultValue={woState.stage}
+              onChange={e => saveField('stage', e.target.value, { stage_entered_at: new Date().toISOString() })}
+              className="rounded border px-2 py-0.5 text-sm"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+              {STAGES.map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          ) : (
+            <span style={{ padding: '2px 8px', borderRadius: 999, background: stageColor(wo.stage) + '22', color: stageColor(wo.stage), fontSize: 12, fontWeight: 500 }}>
               {stageLabel(wo.stage)}
             </span>
-          } />
-          <Row label="Priority" value={
-            <span style={{
-              padding: '2px 8px',
-              borderRadius: 999,
-              background: priorityColor + '22',
-              color: priorityColor,
-              fontSize: 12,
-              fontWeight: 500,
-              textTransform: 'capitalize',
-            }}>
+          )} />
+          <Row label="Priority" value={isAdmin ? (
+            <select defaultValue={woState.priority || 'medium'}
+              onChange={e => saveField('priority', e.target.value)}
+              className="rounded border px-2 py-0.5 text-sm capitalize"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+              {['low','medium','high','urgent'].map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          ) : (
+            <span style={{ padding: '2px 8px', borderRadius: 999, background: priorityColor + '22', color: priorityColor, fontSize: 12, fontWeight: 500, textTransform: 'capitalize' }}>
               {wo.priority || 'medium'}
             </span>
-          } />
-          <Row label="Occurrence" value={wo.occurrence || '—'} />
-          <Row label="Flagged" value={wo.flagged ? '🚩 Yes' : '—'} />
-          {wo.issue && <Row label="Issue" value={wo.issue} />}
+          )} />
+          <Row label="Occurrence" value={isAdmin ? (
+            <select defaultValue={woState.occurrence || 'One-time'}
+              onChange={e => saveField('occurrence', e.target.value)}
+              className="rounded border px-2 py-0.5 text-sm"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+              {['One-time','Recurring','Quarterly','Weekly'].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (woState.occurrence || '—')} />
+          <Row label="Flagged" value={isAdmin ? (
+            <label className="inline-flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
+              <input type="checkbox" checked={!!woState.flagged}
+                onChange={e => saveField('flagged', e.target.checked)} />
+              {woState.flagged ? '🚩 Yes' : 'No'}
+            </label>
+          ) : (wo.flagged ? '🚩 Yes' : '—')} />
+          <Row label="Issue" value={isAdmin ? editedText('issue', woState.issue, 'none') : (wo.issue || '—')} />
         </Card>
       </div>
 
@@ -356,9 +425,17 @@ function OverviewTab({
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Owner</div>
-            <div style={{ color: 'var(--text)', fontWeight: 500 }}>
-              {wo.team_members?.name || 'Unassigned'}
-            </div>
+            {isAdmin ? (
+              <select defaultValue={woState.owner_id || ''}
+                onChange={e => saveField('owner_id', e.target.value || null)}
+                className="rounded border px-2 py-1 text-sm"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
+                <option value="">Unassigned</option>
+                {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            ) : (
+              <div style={{ color: 'var(--text)', fontWeight: 500 }}>{wo.team_members?.name || 'Unassigned'}</div>
+            )}
           </div>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Assignees</div>
@@ -385,53 +462,78 @@ function OverviewTab({
           </div>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Branch / Location</div>
-            <div style={{ color: 'var(--text)' }}>{wo.branch || '—'}</div>
+            {isAdmin ? (
+              <input type="text" defaultValue={woState.branch || ''} placeholder="—"
+                onBlur={e => saveField('branch', e.target.value.trim())}
+                className="w-full rounded border px-2 py-1 text-sm"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+            ) : (<div style={{ color: 'var(--text)' }}>{wo.branch || '—'}</div>)}
           </div>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Vendor</div>
-            <div style={{ color: 'var(--text)' }}>{wo.vendor || '—'}</div>
+            {isAdmin ? (
+              <input type="text" defaultValue={woState.vendor || ''} placeholder="—"
+                onBlur={e => saveField('vendor', e.target.value.trim())}
+                className="w-full rounded border px-2 py-1 text-sm"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+            ) : (<div style={{ color: 'var(--text)' }}>{wo.vendor || '—'}</div>)}
+          </div>
+          <div>
+            <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Manufacturer</div>
+            {isAdmin ? (
+              <input type="text" defaultValue={woState.manufacturer || ''} placeholder="—"
+                onBlur={e => saveField('manufacturer', e.target.value.trim())}
+                className="w-full rounded border px-2 py-1 text-sm"
+                style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+            ) : (<div style={{ color: 'var(--text)' }}>{wo.manufacturer || '—'}</div>)}
           </div>
         </div>
       </Card>
 
       <Card title="📝 Notes">
-        {wo.notes ? (
-          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>
-            {wo.notes}
-          </div>
+        {isAdmin ? (
+          <textarea defaultValue={woState.notes || ''} rows={4}
+            placeholder="Add notes about this work order…"
+            onBlur={e => saveField('notes', e.target.value)}
+            className="w-full rounded border px-3 py-2 text-sm"
+            style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)', lineHeight: 1.5, resize: 'vertical' }} />
+        ) : wo.notes ? (
+          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>{wo.notes}</div>
         ) : wo.description ? (
-          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>
-            {wo.description}
-          </div>
+          <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontSize: 14 }}>{wo.description}</div>
         ) : (
-          <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            No notes yet. Edit this work order from the board drawer to add notes.
-          </div>
+          <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No notes yet.</div>
         )}
       </Card>
 
-      {(wo.deliverables_link || wo.notes_link) && (
-        <Card title="🔗 Links">
-          {wo.deliverables_link && (
-            <Row label="Deliverables" value={
-              <a href={wo.deliverables_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>
-                Open ↗
-              </a>
-            } />
-          )}
-          {wo.notes_link && (
-            <Row label="Notes link" value={
-              <a href={wo.notes_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>
-                Open ↗
-              </a>
-            } />
-          )}
-        </Card>
-      )}
-
-      <div className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
-        Editing still happens in the board drawer. Full-page editing is coming in a later step.
-      </div>
+      <Card title="🔗 Links">
+        <Row label="Deliverables" value={isAdmin ? (
+          <span className="inline-flex items-center gap-2">
+            <input type="url" defaultValue={woState.deliverables_link || ''} placeholder="https://…"
+              onBlur={e => saveField('deliverables_link', e.target.value.trim())}
+              className="w-56 rounded border px-2 py-0.5 text-sm"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+            {woState.deliverables_link && (
+              <a href={woState.deliverables_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>↗</a>
+            )}
+          </span>
+        ) : (woState.deliverables_link ? (
+          <a href={woState.deliverables_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Open ↗</a>
+        ) : '—')} />
+        <Row label="Notes link" value={isAdmin ? (
+          <span className="inline-flex items-center gap-2">
+            <input type="url" defaultValue={woState.notes_link || ''} placeholder="https://…"
+              onBlur={e => saveField('notes_link', e.target.value.trim())}
+              className="w-56 rounded border px-2 py-0.5 text-sm"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+            {woState.notes_link && (
+              <a href={woState.notes_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>↗</a>
+            )}
+          </span>
+        ) : (woState.notes_link ? (
+          <a href={woState.notes_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Open ↗</a>
+        ) : '—')} />
+      </Card>
     </div>
   )
 }
