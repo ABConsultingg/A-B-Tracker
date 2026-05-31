@@ -490,6 +490,10 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     const out: Record<string, WorkOrder[]> = {}
     BOARD_STAGES.forEach(s => out[s] = [])
     filtered.forEach(wo => { if (out[wo.stage]) out[wo.stage].push(wo) })
+    // Newest first within each column.
+    BOARD_STAGES.forEach(s => {
+      out[s].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    })
     return out
   }, [filtered])
 

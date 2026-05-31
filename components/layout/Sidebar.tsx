@@ -156,7 +156,7 @@ export default function Sidebar({
 
       {/* Sidebar — fixed slide-in on mobile, static column on desktop */}
       <aside
-        className={`sidebar-navy fixed md:static top-0 left-0 bottom-0 z-50 w-64 md:w-56 flex-shrink-0 flex flex-col transition-transform md:transition-none ${
+        className={`sidebar-navy fixed md:sticky md:top-0 md:h-screen top-0 left-0 bottom-0 z-50 w-64 md:w-56 flex-shrink-0 flex flex-col transition-transform md:transition-none ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
         style={{
