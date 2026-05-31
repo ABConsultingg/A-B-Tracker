@@ -169,7 +169,7 @@ export default function MessagesInboxClient({
         <input
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="Search messages, work orders, people\u2026"
+          placeholder="Search messages, work orders, people…"
           className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
         />
         <select
@@ -210,7 +210,7 @@ export default function MessagesInboxClient({
                         )}
                       </div>
                       <span className="text-xs text-gray-400 flex-shrink-0 ml-3">
-                        {g.items.length} message{g.items.length === 1 ? '' : 's'} \u203a
+                        {g.items.length} message{g.items.length === 1 ? '' : 's'} ›
                       </span>
                     </a>
                     <div className="divide-y divide-gray-50">
@@ -234,11 +234,11 @@ export default function MessagesInboxClient({
                                 {c.editedAt && <span className="text-xs text-gray-400 italic">edited</span>}
                                 {c.internalOnly ? (
                                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                                    \U0001F512 Internal
+                                    🔒 Internal
                                   </span>
                                 ) : (
                                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                                    \U0001F441 Client-visible
+                                    👁 Client-visible
                                   </span>
                                 )}
                               </div>
