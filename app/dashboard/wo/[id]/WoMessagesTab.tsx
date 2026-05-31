@@ -9,6 +9,7 @@ type Comment = {
   body: string
   author_id: string | null
   mentions: string[] | null
+  internal_only: boolean
   created_at: string
   edited_at?: string | null
 }
@@ -45,6 +46,7 @@ export default function WoMessagesTab({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentBody, setEditingCommentBody] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [visibleToClient, setVisibleToClient] = useState(false)
 
   function handleCommentInput(value: string, cursorPos: number) {
     setNewComment(value)
@@ -104,7 +106,7 @@ export default function WoMessagesTab({
     const mentionIds = extractMentionedIds(body)
     const { data, error } = await supabase
       .from('wo_comments')
-      .insert({ work_order_id: wo.id, body, author_id: currentUserId, mentions: mentionIds })
+      .insert({ work_order_id: wo.id, body, author_id: currentUserId, mentions: mentionIds, internal_only: !visibleToClient })
       .select()
       .single()
     setPostingComment(false)
@@ -114,6 +116,7 @@ export default function WoMessagesTab({
     }
     setComments(prev => [...prev, data as Comment])
     setNewComment('')
+    setVisibleToClient(false)
     setMentionDropdown({ open: false, query: '', position: 0 })
   }
 
@@ -204,6 +207,15 @@ export default function WoMessagesTab({
                     </ClientDate>
                   </span>
                   {editedAt && <span className="text-xs text-gray-400 italic">edited</span>}
+                  {comment.internal_only ? (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                      🔒 Internal
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                      👁 Client-visible
+                    </span>
+                  )}
                   {isOwn && !isEditing && (
                     <div className="ml-auto flex items-center gap-2">
                       <button
@@ -337,7 +349,16 @@ export default function WoMessagesTab({
             )}
           </div>
         </div>
-        <div className="flex justify-end mt-2">
+        <div className="flex items-center justify-between mt-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={visibleToClient}
+              onChange={e => setVisibleToClient(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Visible to client
+          </label>
           <button
             onClick={postComment}
             disabled={postingComment || !newComment.trim()}
