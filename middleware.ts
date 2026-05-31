@@ -1,52 +1,50 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request })
+// Lightweight middleware: routes portal (client) users to /portal and team users
+// to /dashboard. It does NOT touch the Supabase session — the app manages auth via
+// a hand-rolled `sb-<ref>-auth-token` cookie set by /api/login, and any attempt to
+// refresh/validate it here (via @supabase/ssr) rewrites it into an incompatible
+// format and breaks the session. So we read cookies directly and never mutate them.
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return request.cookies.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options))
-        }
-      }
-    }
-  )
+function projectRef() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  return url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || 'default'
+}
 
-  // Refresh session and get the user.
-  const { data: { user } } = await supabase.auth.getUser()
-
+export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
   const onDashboard = path === '/dashboard' || path.startsWith('/dashboard/')
   const onPortal = path === '/portal' || path.startsWith('/portal/')
 
-  if (user && (onDashboard || onPortal)) {
-    // Cookie flag set at login keeps this a zero-DB check on the hot path.
-    let flag = request.cookies.get('ab-portal')?.value
-    if (flag !== '1' && flag !== '0') {
-      // Unknown — resolve once and cache on the response.
-      const { data: pu } = await supabase
-        .from('portal_users').select('active').eq('auth_user_id', user.id).maybeSingle()
-      flag = pu && pu.active !== false ? '1' : '0'
-      response.cookies.set('ab-portal', flag, { path: '/', sameSite: 'lax' })
-    }
-    const isPortalUser = flag === '1'
-    if (isPortalUser && onDashboard) {
-      return NextResponse.redirect(new URL('/portal', request.url))
-    }
-    if (!isPortalUser && onPortal) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
+  // Only the two app surfaces need routing; everything else passes through.
+  if (!onDashboard && !onPortal) return NextResponse.next()
+
+  // Logged in? The hand-rolled session cookie (possibly chunked .0/.1) must exist.
+  const ref = projectRef()
+  const base = `sb-${ref}-auth-token`
+  const hasSession = !!(
+    request.cookies.get(base)?.value ||
+    request.cookies.get(`${base}.0`)?.value
+  )
+  if (!hasSession) {
+    // Not logged in — let the page's own guard send them to /login.
+    return NextResponse.next()
   }
 
-  return response
+  // Role flag is written at login. If absent (older session), don't guess —
+  // let the page render; the layout guards do the authoritative check.
+  const flag = request.cookies.get('ab-portal')?.value
+  const isPortalUser = flag === '1'
+  const isTeamUser = flag === '0'
+
+  if (isPortalUser && onDashboard) {
+    return NextResponse.redirect(new URL('/portal', request.url))
+  }
+  if (isTeamUser && onPortal) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {
