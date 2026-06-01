@@ -10,6 +10,7 @@ type Comment = {
   author_id: string | null
   mentions: string[] | null
   internal_only: boolean
+  author_type?: string | null
   created_at: string
   edited_at?: string | null
 }
@@ -25,12 +26,14 @@ export default function WoMessagesTab({
   initialComments,
   team,
   authUserMap,
+  clientName,
   currentUserId,
 }: {
   wo: { id: string; owner_id?: string | null }
   initialComments: Comment[]
   team: TeamMember[]
   authUserMap: Record<string, string>
+  clientName?: string
   currentUserId: string | null
 }) {
   const supabase = createClient()
@@ -242,7 +245,11 @@ export default function WoMessagesTab({
           </div>
         )}
         {comments.map(comment => {
-          const authorName = comment.author_id ? authUserMap[comment.author_id] : 'Someone'
+          const teamName = comment.author_id ? authUserMap[comment.author_id] : undefined
+          const authorName =
+            teamName
+            || (comment.author_type === 'client' ? (clientName || 'Client') : undefined)
+            || (comment.author_id && !teamName ? (clientName || 'Client') : 'Someone')
           const isOwn = comment.author_id === currentUserId
           const initials = (authorName || '?')[0].toUpperCase()
           const isEditing = editingCommentId === comment.id
@@ -257,7 +264,7 @@ export default function WoMessagesTab({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 mb-0.5">
-                  <span className="text-sm font-semibold text-gray-900">{authorName || 'Someone'}</span>
+                  <span className="text-sm font-semibold text-gray-900">{authorName || clientName || 'Someone'}</span>
                   <span className="text-xs text-gray-400">
                     <ClientDate>
                       {new Date(comment.created_at).toLocaleString(undefined, {

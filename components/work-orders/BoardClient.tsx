@@ -1119,7 +1119,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                           <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
-                                {s.name}{s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
+                                {s.name}{showCosts && s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
                               </option>
                             ))}
                           </optgroup>
@@ -1133,7 +1133,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                           <optgroup key={occ} label={occ}>
                             {(list as any[]).map((s: any) => (
                               <option key={s.id} value={s.id} title={s.description || ''}>
-                                {s.name}{s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
+                                {s.name}{showCosts && s.base_price != null ? ` — $${s.base_price.toLocaleString()}${s.occurrence === 'Recurring' ? '/mo' : ''}` : ''}
                               </option>
                             ))}
                           </optgroup>

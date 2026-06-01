@@ -246,6 +246,7 @@ export default function WoDetail({
         )}
         {tab === 'messages' && (
           <WoMessagesTab
+            clientName={(wo as any).clients?.name || 'Client'}
             wo={wo}
             initialComments={initialComments}
             team={team}
