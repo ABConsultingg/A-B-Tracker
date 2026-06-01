@@ -3,17 +3,19 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { stageView } from '@/lib/portal/stages'
+import { DeliverablePreview } from '@/lib/deliverablePreview'
 
 type WO = { id: string; title: string; stage: string; due_date: string | null;
   est_cost: number; add_cost: number; deliverables_link: string | null;
   description: string | null; branch: string | null; services?: { name?: string } | null }
 type Comment = { id: string; body: string; author_id: string | null; author_type: string; created_at: string }
+type WoLink = { id: string; label: string | null; url: string; sort_order: number }
 
 const money = (n: number) => '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
 
 export default function PortalWoDetail({
-  wo, initialComments, currentUserId,
-}: { wo: WO; initialComments: Comment[]; currentUserId: string }) {
+  wo, initialComments, woLinks, currentUserId,
+}: { wo: WO; initialComments: Comment[]; woLinks: WoLink[]; currentUserId: string }) {
   const router = useRouter()
   const supabase = createClient()
   const [comments, setComments] = useState<Comment[]>(initialComments)
@@ -57,11 +59,16 @@ export default function PortalWoDetail({
         </div>
         {wo.description && <p style={{ marginTop: 14, fontSize: 14, color: '#1c1b18', whiteSpace: 'pre-wrap' }}>{wo.description}</p>}
         {wo.deliverables_link && (
-          <a href={wo.deliverables_link} target="_blank" rel="noopener"
-             style={{ display: 'inline-block', marginTop: 14, color: '#b8851e', fontWeight: 600, textDecoration: 'none' }}>
-            📎 Open the deliverable →
-          </a>
+          <div style={{ marginTop: 14 }}>
+            <DeliverablePreview link={wo.deliverables_link} label="Primary deliverable" />
+          </div>
         )}
+        {woLinks.map(l => (
+          <div key={l.id} style={{ marginTop: 14 }}>
+            {l.label && <div style={{ fontSize: 12, color: '#6b6a63', fontWeight: 600, marginBottom: 6 }}>{l.label}</div>}
+            <DeliverablePreview link={l.url} label={l.label || 'Deliverable'} />
+          </div>
+        ))}
       </div>
 
       {/* Messages */}

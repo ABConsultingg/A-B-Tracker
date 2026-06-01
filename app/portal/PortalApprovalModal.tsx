@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
 
@@ -12,6 +12,18 @@ export default function PortalApprovalModal({
   const supabase = createClient()
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [links, setLinks] = useState<{ id: string; label: string | null; url: string }[]>([])
+
+  useEffect(() => {
+    let active = true
+    supabase.from('wo_links')
+      .select('id, label, url')
+      .eq('work_order_id', wo.id)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => { if (active && data) setLinks(data as any) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo.id])
 
   async function transition(toStage: 'approved' | 'revisions-received') {
     if (toStage === 'revisions-received' && feedback.trim().length < 3) {
@@ -54,9 +66,18 @@ export default function PortalApprovalModal({
           <div style={{ fontSize: 13, color: '#6b6a63', marginTop: 4 }}>{wo.services?.name || 'Project'}</div>
         </div>
         <div style={{ padding: '22px 26px' }}>
-          {wo.deliverables_link ? (
-            <DeliverablePreview link={wo.deliverables_link} />
-          ) : (
+          {wo.deliverables_link && (
+            <div style={{ marginBottom: 18 }}>
+              <DeliverablePreview link={wo.deliverables_link} label="Primary deliverable" />
+            </div>
+          )}
+          {links.map(l => (
+            <div key={l.id} style={{ marginBottom: 18 }}>
+              {l.label && <div style={{ fontSize: 12, color: '#6b6a63', fontWeight: 600, marginBottom: 6 }}>{l.label}</div>}
+              <DeliverablePreview link={l.url} label={l.label || 'Deliverable'} />
+            </div>
+          ))}
+          {!wo.deliverables_link && links.length === 0 && (
             <div style={{ background: '#f5f5f0', border: '2px dashed #d5d2c5', borderRadius: 10,
                           padding: '24px', textAlign: 'center', marginBottom: 20 }}>
               <span style={{ color: '#a3a097', fontSize: 13 }}>

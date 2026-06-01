@@ -33,7 +33,14 @@ export default async function PortalWoPage({ params }: { params: { id: string } 
     .eq('work_order_id', params.id)
     .order('created_at', { ascending: true })
 
+  // Deliverable links (RLS scopes to the client's own WOs).
+  const { data: woLinks } = await supabase
+    .from('wo_links')
+    .select('id, label, url, sort_order')
+    .eq('work_order_id', params.id)
+    .order('sort_order', { ascending: true })
+
   return (
-    <PortalWoDetail wo={woNorm} initialComments={comments || []} currentUserId={user.id} />
+    <PortalWoDetail wo={woNorm} initialComments={comments || []} woLinks={woLinks || []} currentUserId={user.id} />
   )
 }
