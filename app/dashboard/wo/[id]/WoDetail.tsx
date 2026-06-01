@@ -17,6 +17,7 @@ import WoMessagesTab from './WoMessagesTab'
 import WoScheduleTab from './WoScheduleTab'
 import WoVendorInvoicesTab from './WoVendorInvoicesTab'
 import { useViewMode } from '@/lib/useViewMode'
+import { DeliverablePreview } from '@/lib/deliverablePreview'
 
 type Tab =
   | 'overview'
@@ -534,6 +535,12 @@ function OverviewTab({
           <a href={woState.notes_link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent, #6366f1)' }}>Open ↗</a>
         ) : '—')} />
       </Card>
+
+      {woState.deliverables_link && (
+        <Card title="🖼 Deliverable preview">
+          <DeliverablePreview link={woState.deliverables_link} label={woState.title || 'Deliverable'} />
+        </Card>
+      )}
     </div>
   )
 }
