@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { DeliverablePreview } from '@/lib/deliverablePreview'
 
 type WO = { id: string; title: string; stage: string; deliverables_link: string | null;
   services?: { name?: string } | null }
@@ -53,19 +54,16 @@ export default function PortalApprovalModal({
           <div style={{ fontSize: 13, color: '#6b6a63', marginTop: 4 }}>{wo.services?.name || 'Project'}</div>
         </div>
         <div style={{ padding: '22px 26px' }}>
-          <div style={{ background: '#f5f5f0', border: '2px dashed #d5d2c5', borderRadius: 10,
-                        padding: '24px', textAlign: 'center', marginBottom: 20 }}>
-            {wo.deliverables_link ? (
-              <a href={wo.deliverables_link} target="_blank" rel="noopener"
-                 style={{ color: '#b8851e', fontWeight: 600, textDecoration: 'none' }}>
-                📎 Open the deliverable →
-              </a>
-            ) : (
+          {wo.deliverables_link ? (
+            <DeliverablePreview link={wo.deliverables_link} />
+          ) : (
+            <div style={{ background: '#f5f5f0', border: '2px dashed #d5d2c5', borderRadius: 10,
+                          padding: '24px', textAlign: 'center', marginBottom: 20 }}>
               <span style={{ color: '#a3a097', fontSize: 13 }}>
                 No file link yet — your team will add it shortly.
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <label style={{ fontSize: 12, color: '#6b6a63', display: 'block', marginBottom: 6 }}>
             Feedback (required if requesting revisions)
           </label>
