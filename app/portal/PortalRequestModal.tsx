@@ -10,8 +10,8 @@ function newWoId() {
 }
 
 export default function PortalRequestModal({
-  clientId, services, onClose, onDone,
-}: { clientId: string; services: Svc[]; onClose: () => void; onDone: () => void }) {
+  clientId, services, onClose, onDone, isRBS,
+}: { clientId: string; services: Svc[]; onClose: () => void; onDone: () => void; isRBS?: boolean }) {
   const supabase = createClient()
   const [busy, setBusy] = useState(false)
   const [serviceId, setServiceId] = useState('')
@@ -21,6 +21,10 @@ export default function PortalRequestModal({
   const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
   const [reference, setReference] = useState('')
+  // RBS-specific fields (folded into WO columns / notes on submit)
+  const [rbsType, setRbsType] = useState('')
+  const [vendorBrand, setVendorBrand] = useState('')
+  const [recipient, setRecipient] = useState('')
 
   const ready = serviceId && title.trim().length > 2
 
@@ -41,6 +45,15 @@ export default function PortalRequestModal({
       description: description.trim() || null,
       notes: notes.trim() || null,
       notes_link: reference.trim() || null,
+    }
+    if (isRBS) {
+      if (vendorBrand.trim()) payload.vendor = vendorBrand.trim()
+      const extra: string[] = []
+      if (rbsType.trim()) extra.push('Type: ' + rbsType.trim())
+      if (recipient.trim()) extra.push('Recipient: ' + recipient.trim())
+      if (extra.length) {
+        payload.notes = [payload.notes, extra.join('\n')].filter(Boolean).join('\n')
+      }
     }
     const { error } = await supabase.from('work_orders').insert(payload)
     setBusy(false)
@@ -73,6 +86,30 @@ export default function PortalRequestModal({
             <input value={title} onChange={e => setTitle(e.target.value)} style={inp}
               placeholder="e.g. Spring open house flyer" />
           </Field>
+          {isRBS && (
+            <>
+              <Field label="Order / flyer type">
+                <select value={rbsType} onChange={e => setRbsType(e.target.value)} style={inp}>
+                  <option value="">Select type…</option>
+                  <option value="Performance Plus Order">Performance Plus Order</option>
+                  <option value="Flyer Only">Flyer Only</option>
+                  <option value="Event Flyer">Event Flyer</option>
+                  <option value="Now Stocking">Now Stocking</option>
+                  <option value="Promotion">Promotion</option>
+                </select>
+              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Field label="Vendor / brand">
+                  <input value={vendorBrand} onChange={e => setVendorBrand(e.target.value)} style={inp}
+                    placeholder="e.g. GAF" />
+                </Field>
+                <Field label="Recipient name">
+                  <input value={recipient} onChange={e => setRecipient(e.target.value)} style={inp}
+                    placeholder="Who's it for" />
+                </Field>
+              </div>
+            </>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <Field label="Branch (optional)">
               <input value={branch} onChange={e => setBranch(e.target.value)} style={inp} placeholder="HQ or branch" />

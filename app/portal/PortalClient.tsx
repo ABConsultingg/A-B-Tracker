@@ -229,6 +229,7 @@ export default function PortalClient({
       {requestOpen && (
         <PortalRequestModal
           clientId={client?.id || ''}
+          isRBS={client?.id === 'rbs'}
           services={services}
           onClose={() => setRequestOpen(false)}
           onDone={() => { setRequestOpen(false); router.refresh() }}
