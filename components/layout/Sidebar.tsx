@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/pipeline',  label: 'Pipeline Health', icon: '📊', section: 'views' },
   { href: '/dashboard/schedule', label: 'Execution Schedule', icon: '📅', countKey: 'schedule', section: 'views' },
   { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', adminOnly: true, section: 'views' },
+  { href: '/dashboard/recurring', label: 'Recurring',       icon: '🔁', adminOnly: true, section: 'views' },
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
   { href: '/dashboard/print-pricing', label: 'Print Pricing', icon: '🖨', adminOnly: true, section: 'views' },

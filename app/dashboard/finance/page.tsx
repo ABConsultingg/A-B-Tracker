@@ -10,6 +10,25 @@ export default async function FinancePage() {
 
   const all = wos || []
 
+  // Recurring Services registry (committed MRR — manual, billing done in Square)
+  const { data: recurringRows } = await supabase
+    .from('recurring_services')
+    .select(`id, client_id, label, amount, is_bundle, coverage_notes, active,
+             clients!recurring_services_client_id_fkey(name)`)
+    .eq('active', true)
+  const recurring = (recurringRows || []) as any[]
+
+  // group by client
+  const recurringByClient: Record<string, { name: string; entries: any[]; subtotal: number }> = {}
+  for (const r of recurring) {
+    const name = r.clients?.name || r.client_id || 'Unknown'
+    if (!recurringByClient[name]) recurringByClient[name] = { name, entries: [], subtotal: 0 }
+    recurringByClient[name].entries.push(r)
+    recurringByClient[name].subtotal += Number(r.amount) || 0
+  }
+  const recurringGroups = Object.values(recurringByClient).sort((a, b) => b.subtotal - a.subtotal)
+  const committedMrr = recurring.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+
   // MRR: Recurring WOs in active stages
   const mrrActiveStages = ['submitted','not-started','in-progress','deliverables-completed','sent-for-approval','revisions-received','approved','deliverables-executed','invoiced']
   const mrrRows = all.filter((w: any) => w.occurrence === 'Recurring' && mrrActiveStages.includes(w.stage))
@@ -116,6 +135,62 @@ export default async function FinancePage() {
           </div>
           <div className="text-2xl font-bold mt-1 font-mono text-gray-900">{fmt(archivedYTD)}</div>
           <div className="text-xs text-gray-400 mt-1">{archRows.length} completed · {now.getFullYear()}</div>
+        </div>
+      </div>
+
+      {/* RECURRING SERVICES (committed MRR — manual registry) */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Recurring Services</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Committed monthly retainers · billed in Square · <a href="/dashboard/recurring" className="text-blue-600 hover:underline">manage →</a></p>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-gray-500 uppercase tracking-wide font-semibold">Committed MRR</div>
+            <div className="text-xl font-bold font-mono text-gray-900">{fmt(committedMrr)}</div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3">Client</th>
+                <th className="px-6 py-3">Service</th>
+                <th className="px-6 py-3">Type</th>
+                <th className="px-6 py-3 text-right">Monthly</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {recurringGroups.map((g) => (
+                g.entries.map((e: any, idx: number) => (
+                  <tr key={e.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-3 font-medium text-gray-900">
+                      {idx === 0 ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-900"></span>{g.name}
+                        </span>
+                      ) : ''}
+                    </td>
+                    <td className="px-6 py-3 text-gray-700">
+                      {e.label}
+                      {e.coverage_notes && <div className="text-xs text-gray-400">{e.coverage_notes}</div>}
+                    </td>
+                    <td className="px-6 py-3">
+                      {e.is_bundle ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">Bundle</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">Itemized</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3 text-right font-mono font-semibold text-gray-900">{fmt(Number(e.amount) || 0)}</td>
+                  </tr>
+                ))
+              ))}
+              {recurring.length === 0 && (
+                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400 text-sm">No recurring services yet · <a href="/dashboard/recurring" className="text-blue-600 hover:underline">add one</a></td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
