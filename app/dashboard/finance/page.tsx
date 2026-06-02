@@ -54,27 +54,6 @@ export default async function FinancePage() {
   const archRows = all.filter((w: any) => w.stage === 'archived' && w.updated_at && new Date(w.updated_at) >= yearStart)
   const archivedYTD = archRows.reduce((s: number, w: any) => s + (w.est_cost || 0) + (w.add_cost || 0), 0)
 
-  // Active Subscriptions (all Recurring, including on-hold)
-  const subscriptions = all
-    .filter((w: any) => w.occurrence === 'Recurring' && !['paid','archived'].includes(w.stage))
-    .map((w: any) => {
-      const started = w.created_at ? new Date(w.created_at) : null
-      const monthsActive = started
-        ? Math.max(1, Math.round((now.getTime() - started.getTime()) / (1000 * 60 * 60 * 24 * 30)))
-        : 0
-      return {
-        id: w.id,
-        client: w.clients?.name || 'Unknown',
-        service: w.services?.name || '—',
-        started: started ? started.toLocaleString('en-US', { month: 'short', year: 'numeric' }) : '—',
-        monthsActive,
-        stage: w.stage,
-        onHold: w.stage === 'on-hold',
-        rate: w.est_cost || 0,
-      }
-    })
-    .sort((a: any, b: any) => b.rate - a.rate)
-
   // Revenue by Client (kept from original)
   const clientStats: Record<string, { wos: number; revenue: number; pipeline: number }> = {}
   all.forEach((w: any) => {
@@ -188,59 +167,6 @@ export default async function FinancePage() {
               ))}
               {recurring.length === 0 && (
                 <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400 text-sm">No recurring services yet · <a href="/dashboard/recurring" className="text-blue-600 hover:underline">add one</a></td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ACTIVE SUBSCRIPTIONS */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-gray-900">Active Subscriptions</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Recurring services that contribute to MRR</p>
-          </div>
-          <span className="text-xs text-gray-400">{subscriptions.length} subscriptions</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr className="text-left text-[11px] text-gray-500 uppercase tracking-wider">
-                <th className="px-6 py-3">Client</th>
-                <th className="px-6 py-3">Service</th>
-                <th className="px-6 py-3">Started</th>
-                <th className="px-6 py-3 text-right">Months Active</th>
-                <th className="px-6 py-3">Latest WO</th>
-                <th className="px-6 py-3">Stage</th>
-                <th className="px-6 py-3 text-right">Monthly Rate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {subscriptions.map((s: any) => (
-                <tr key={s.id} className={`hover:bg-gray-50 ${s.onHold ? 'opacity-60' : ''}`}>
-                  <td className="px-6 py-3 font-medium text-gray-900">
-                    <span className="inline-flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.onHold ? 'bg-gray-400' : 'bg-gray-900'}`}></span>
-                      {s.client}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-gray-700">{s.service}</td>
-                  <td className="px-6 py-3 text-gray-500">{s.started}</td>
-                  <td className="px-6 py-3 text-right text-gray-600 font-mono">{s.monthsActive}</td>
-                  <td className="px-6 py-3 text-gray-400 font-mono text-xs">{s.id.substring(0,11)}</td>
-                  <td className="px-6 py-3">
-                    {s.onHold ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">On Hold</span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">{s.stage}</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3 text-right font-mono font-semibold text-gray-900">{fmt(s.rate)}</td>
-                </tr>
-              ))}
-              {subscriptions.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400 text-sm">No active subscriptions</td></tr>
               )}
             </tbody>
           </table>
