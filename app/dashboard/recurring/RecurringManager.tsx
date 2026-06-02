@@ -25,6 +25,39 @@ export default function RecurringManager({
   const [rows, setRows] = useState<Row[]>(initialRows)
   const [busy, setBusy] = useState(false)
 
+  // edit-in-place state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [editBundle, setEditBundle] = useState(false)
+  const [editCoverage, setEditCoverage] = useState('')
+
+  function startEdit(e: Row) {
+    setEditingId(e.id)
+    setEditLabel(e.label)
+    setEditAmount(String(e.amount))
+    setEditBundle(e.is_bundle)
+    setEditCoverage(e.coverage_notes || '')
+  }
+  function cancelEdit() { setEditingId(null) }
+
+  async function updateEntry(id: string) {
+    if (!editLabel.trim() || !editAmount) { alert('Label and amount are required.'); return }
+    setBusy(true)
+    const patch = {
+      label: editLabel.trim(),
+      amount: Number(editAmount),
+      is_bundle: editBundle,
+      coverage_notes: editCoverage.trim() || null,
+    }
+    const { error } = await supabase.from('recurring_services').update(patch).eq('id', id)
+    setBusy(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setRows(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
+    setEditingId(null)
+    router.refresh()
+  }
+
   // add-form state
   const [clientId, setClientId] = useState(clients[0]?.id || '')
   const [label, setLabel] = useState('')
@@ -161,6 +194,39 @@ export default function RecurringManager({
                   className={`bg-white rounded-lg border p-4 flex flex-col gap-2 transition-opacity ${e.active ? 'border-gray-200' : 'border-gray-200 opacity-55'}`}
                   style={e.active ? { borderLeft: '3px solid var(--brand-accent)' } : { borderLeft: '3px solid #d1d5db' }}
                 >
+                  {editingId === e.id ? (
+                    <div className="flex flex-col gap-2">
+                      <input value={editLabel} onChange={ev => setEditLabel(ev.target.value)}
+                        placeholder="Label"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400 text-sm">$</span>
+                        <input type="number" value={editAmount} onChange={ev => setEditAmount(ev.target.value)}
+                          placeholder="amount"
+                          className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono" />
+                        <span className="text-gray-400 text-xs">/mo</span>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-gray-600">
+                        <input type="checkbox" checked={editBundle} onChange={ev => setEditBundle(ev.target.checked)} />
+                        Bundle (flat all-in)
+                      </label>
+                      <input value={editCoverage} onChange={ev => setEditCoverage(ev.target.value)}
+                        placeholder="coverage notes (optional)"
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs" />
+                      <div className="flex items-center gap-2 mt-1">
+                        <button onClick={() => updateEntry(e.id)} disabled={busy}
+                          className="flex-1 px-2 py-1 rounded text-xs font-medium text-white disabled:opacity-50"
+                          style={{ background: 'var(--brand-navy)' }}>
+                          {busy ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={cancelEdit} disabled={busy}
+                          className="flex-1 px-2 py-1 rounded text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                  <>
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-gray-900 text-sm leading-snug">{e.label}</div>
                     {e.is_bundle
@@ -183,9 +249,15 @@ export default function RecurringManager({
                       <span className={`w-1.5 h-1.5 rounded-full ${e.active ? 'bg-green-500' : 'bg-amber-500'}`}></span>
                       {e.active ? 'Active' : 'Paused'}
                     </button>
-                    <button onClick={() => remove(e)} disabled={busy}
-                      className="text-[11px] text-gray-400 hover:text-red-600 transition-colors">Delete</button>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => startEdit(e)} disabled={busy}
+                        className="text-[11px] text-gray-400 hover:text-gray-800 transition-colors">Edit</button>
+                      <button onClick={() => remove(e)} disabled={busy}
+                        className="text-[11px] text-gray-400 hover:text-red-600 transition-colors">Delete</button>
+                    </div>
                   </div>
+                  </>
+                  )}
                 </div>
               ))}
             </div>
