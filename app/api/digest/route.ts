@@ -17,7 +17,11 @@ export const dynamic = 'force-dynamic'
  * Grouped by client. No dollar amounts.
  */
 
-const CLOSED_STAGES = ['paid', 'archived']
+// Only these stages need attention; everything else (invoiced/approved/
+// deliverables-executed/paid/archived/on-hold) is effectively done.
+const ACTION_STAGES = ['not-started', 'in-progress', 'revisions-received', 'deliverables-completed', 'sent-for-approval']
+// Internal/test client to exclude from the operations digest.
+const EXCLUDE_CLIENT_ID = 'a-b-consulting-group'
 
 // Central time "today" boundaries (America/Chicago), returned as YYYY-MM-DD.
 function centralToday(): string {
@@ -58,7 +62,8 @@ export async function GET(req: NextRequest) {
              clients!work_orders_client_id_fkey(name),
              team_members!work_orders_owner_id_fkey(name)`)
     .not('due_date', 'is', null)
-    .not('stage', 'in', `(${CLOSED_STAGES.join(',')})`)
+    .in('stage', ACTION_STAGES)
+    .neq('client_id', EXCLUDE_CLIENT_ID)
     .lte('due_date', weekEnd)
     .order('due_date', { ascending: true })
 
@@ -117,6 +122,7 @@ export async function GET(req: NextRequest) {
   const out = [
     `A&B WORK ORDER DIGEST`,
     `Central date: ${today}  ·  Overdue ${overdue.length} · Due today ${dueToday.length} · This week ${thisWeek.length}`,
+    `(Action-needed stages only · excludes internal A&B WOs)`,
     ``,
     section('⚠️  OVERDUE', overdue),
     ``,
