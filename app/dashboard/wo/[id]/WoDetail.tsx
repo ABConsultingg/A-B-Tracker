@@ -19,6 +19,7 @@ import WoVendorInvoicesTab from './WoVendorInvoicesTab'
 import { useViewMode } from '@/lib/useViewMode'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
 import WoFilesTab, { type WoLink } from './WoFilesTab'
+import { stageView } from '@/lib/portal/stages'
 
 type Tab =
   | 'overview'
@@ -298,6 +299,20 @@ function OverviewTab({
 }) {
   const supabaseEdit = createClient()
   const [woState, setWoState] = useState<any>(wo)
+  const [stageHistory, setStageHistory] = useState<any[]>([])
+
+  useEffect(() => {
+    supabaseEdit.from('wo_stage_history')
+      .select('*')
+      .eq('work_order_id', wo.id)
+      .order('changed_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => setStageHistory(data || []))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wo.id])
+
+  const nameFor = (authId: string | null) =>
+    authId ? (team.find(t => t.auth_user_id === authId)?.name || null) : null
   const [savingField, setSavingField] = useState<string | null>(null)
   const [savedField, setSavedField] = useState<string | null>(null)
 
@@ -547,6 +562,42 @@ function OverviewTab({
           <DeliverablePreview link={woState.deliverables_link} label={woState.title || 'Deliverable'} />
         </Card>
       )}
+
+      <Card title={`🕘 Stage History${stageHistory.length ? ` (${stageHistory.length})` : ''}`}>
+        {stageHistory.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            No stage changes recorded yet. Change the stage to start tracking.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {stageHistory.map(entry => {
+              const to = stageView(entry.to_stage)
+              const byName = nameFor(entry.changed_by)
+              const d = new Date(entry.changed_at)
+              return (
+                <div key={entry.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 6,
+                                 flexShrink: 0, background: to.dot }} />
+                  <div style={{ color: 'var(--text)', lineHeight: 1.5 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Moved to </span>
+                    <span style={{ fontWeight: 600, color: to.color }}>{to.label}</span>
+                    <span style={{ color: 'var(--text-muted)' }}> on </span>
+                    {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}
+                    <span style={{ color: 'var(--text-muted)' }}> at </span>
+                    {d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                    {byName && (
+                      <>
+                        <span style={{ color: 'var(--text-muted)' }}> by </span>
+                        <span style={{ fontWeight: 500 }}>{byName}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   )
 }
