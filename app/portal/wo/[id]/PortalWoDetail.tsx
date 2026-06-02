@@ -13,6 +13,56 @@ type WoLink = { id: string; label: string | null; url: string; sort_order: numbe
 
 const money = (n: number) => '$' + (n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })
 
+// Relative-ish timestamp: "today at 6:48 PM", "yesterday at 10:45 AM", else date + time.
+function relTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  const yest = new Date(now); yest.setDate(now.getDate() - 1)
+  const isYest = d.toDateString() === yest.toDateString()
+  const t = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (sameDay) return `today at ${t}`
+  if (isYest) return `yesterday at ${t}`
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ` at ${t}`
+}
+
+// Render a message body as React nodes: linkify URLs + style @mentions as pills.
+function renderBody(text: string, onClient: boolean): React.ReactNode[] {
+  // Split on URLs first, then within non-URL chunks split on @mentions.
+  const urlRe = /(https?:\/\/[^\s]+)/g
+  const out: React.ReactNode[] = []
+  let key = 0
+  text.split(urlRe).forEach(chunk => {
+    if (!chunk) return
+    if (/^https?:\/\//.test(chunk)) {
+      out.push(
+        <a key={key++} href={chunk} target="_blank" rel="noopener noreferrer"
+           style={{ color: onClient ? '#cdb87f' : '#b8851e', textDecoration: 'underline', wordBreak: 'break-all' }}>
+          {chunk}
+        </a>
+      )
+      return
+    }
+    // mentions within this text chunk
+    const mentionRe = /(@\w+)/g
+    chunk.split(mentionRe).forEach(part => {
+      if (!part) return
+      if (/^@\w+$/.test(part)) {
+        out.push(
+          <span key={key++} style={{
+            background: onClient ? 'rgba(255,255,255,0.18)' : '#f3ead2',
+            color: onClient ? '#fff' : '#7a5b12',
+            borderRadius: 5, padding: '1px 6px', fontWeight: 600, fontSize: 13,
+          }}>{part}</span>
+        )
+      } else {
+        out.push(<span key={key++}>{part}</span>)
+      }
+    })
+  })
+  return out
+}
+
 export default function PortalWoDetail({
   wo, initialComments, woLinks, currentUserId,
 }: { wo: WO; initialComments: Comment[]; woLinks: WoLink[]; currentUserId: string }) {
@@ -79,14 +129,42 @@ export default function PortalWoDetail({
           {comments.length === 0 && (
             <div style={{ padding: '16px 0', color: '#a3a097', fontSize: 13 }}>No messages yet.</div>
           )}
-          {comments.map(c => (
-            <div key={c.id} style={{ padding: '12px 0', borderTop: '1px solid #f0eee6' }}>
-              <div style={{ fontSize: 11, color: '#a3a097', marginBottom: 3 }}>
-                {c.author_type === 'client' ? 'You' : 'A&B team'} · {new Date(c.created_at).toLocaleString()}
-              </div>
-              <div style={{ fontSize: 14, color: '#1c1b18', whiteSpace: 'pre-wrap' }}>{c.body}</div>
-            </div>
-          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 0' }}>
+            {comments.map(c => {
+              const onClient = c.author_type === 'client'
+              const initials = onClient ? 'You' : 'A&B'
+              return (
+                <div key={c.id} style={{ display: 'flex', flexDirection: onClient ? 'row-reverse' : 'row',
+                                          alignItems: 'flex-end', gap: 8 }}>
+                  {/* avatar */}
+                  <div style={{ flexShrink: 0, width: 30, height: 30, borderRadius: '50%',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: onClient ? 9 : 9, fontWeight: 700,
+                                background: onClient ? '#0f1b34' : '#b8851e', color: 'white' }}>
+                    {initials}
+                  </div>
+                  {/* bubble */}
+                  <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column',
+                                alignItems: onClient ? 'flex-end' : 'flex-start' }}>
+                    <div style={{ fontSize: 10.5, color: '#a3a097', margin: '0 4px 3px' }}>
+                      {onClient ? 'You' : 'A&B team'} · {relTime(c.created_at)}
+                    </div>
+                    <div style={{
+                      fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                      padding: '9px 13px', borderRadius: 14,
+                      borderBottomRightRadius: onClient ? 4 : 14,
+                      borderBottomLeftRadius: onClient ? 14 : 4,
+                      background: onClient ? '#0f1b34' : '#faf8f1',
+                      color: onClient ? '#f5f3ec' : '#1c1b18',
+                      border: onClient ? 'none' : '1px solid #e8e6dd',
+                    }}>
+                      {renderBody(c.body, onClient)}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
         <div style={{ padding: '12px 20px', borderTop: '1px solid #e8e6dd' }}>
           <textarea value={body} onChange={e => setBody(e.target.value)}
