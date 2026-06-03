@@ -29,7 +29,7 @@ export default function WoMessagesTab({
   clientName,
   currentUserId,
 }: {
-  wo: { id: string; owner_id?: string | null }
+  wo: { id: string; owner_id?: string | null; title: string }
   initialComments: Comment[]
   team: TeamMember[]
   authUserMap: Record<string, string>
@@ -182,6 +182,21 @@ export default function WoMessagesTab({
       }))
       const { error: notifErr } = await supabase.from('wo_notifications').insert(rows)
       if (notifErr) console.error('Failed to create mention notifications:', notifErr.message)
+      // Send email notifications via Resend
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notifications: recipients.map(uid => ({
+            user_id: uid,
+            type: 'mention',
+            author_name: currentUserName,
+            body_preview: body.length > 140 ? body.slice(0, 140) + '…' : body,
+          })),
+          wo_title: wo.title,
+          wo_id: wo.id,
+        }),
+      }).catch(e => console.error('Notify fetch error:', e))
     }
   }
 
