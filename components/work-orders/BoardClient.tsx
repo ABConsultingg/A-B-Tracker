@@ -1009,7 +1009,13 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
               <div className="flex items-center gap-2">
                 {!isNew && wo?.id && (
                   <button
-                    onClick={() => router.push(`/dashboard/wo/${wo.id}`)}
+                    onClick={() => {
+                      // Encode current board URL (filters + open WO) so Back to Board restores state
+                      const params = new URLSearchParams(searchParams.toString())
+                      params.set('wo', wo.id)
+                      const from = encodeURIComponent(pathname + '?' + params.toString())
+                      router.push(`/dashboard/wo/${wo.id}?from=${from}`)
+                    }}
                     className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
                     title="Open full-page view with all tabs"
                   >

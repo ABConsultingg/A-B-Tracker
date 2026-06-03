@@ -78,6 +78,17 @@ const daysAgo = (d: string | null | undefined) => {
   return `${days} days ago`
 }
 
+function BackToBoardLink() {
+  const searchParams = useSearchParams()
+  const from = searchParams.get('from')
+  const href = from ? decodeURIComponent(from) : '/dashboard'
+  return (
+    <a href={href} className="hover:underline" style={{ color: 'inherit', textDecoration: 'none' }}>
+      ← Back to Board
+    </a>
+  )
+}
+
 export default function WoDetail({
   wo,
   lineItems: initialLineItems,
@@ -154,9 +165,7 @@ export default function WoDetail({
       >
         <div className="max-w-[1400px] mx-auto">
           <div className="text-sm mb-2" style={{ color: 'var(--text-muted)' }}>
-            <Link href="/dashboard" className="hover:underline">
-              ← Back to Board
-            </Link>
+            <BackToBoardLink />
           </div>
 
           <div className="flex items-start justify-between gap-4 flex-wrap">
