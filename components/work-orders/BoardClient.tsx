@@ -70,7 +70,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   taskAggregates?: Record<string, { total: number; done: number; overdue: number }>;
   assignmentsByWo?: Record<string, string[]>;
   lineItemTotalsByWo?: Record<string, number>;
-  currentMember?: { id: string; role: string } | null;
+  currentMember?: { id: string; role: string; auth_user_id?: string | null } | null;
   clientRates?: ClientRate[];
   printProducts?: PrintProduct[];
   printProductTiers?: PrintProductTier[];
@@ -247,6 +247,20 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
       if (error) {
         alert('Failed to assign: ' + error.message)
         setAssignees(prev => prev.filter(id => id !== teamMemberId))
+      } else {
+        // Notify the newly assigned team member (skip self-assignment)
+        const member = team.find(t => t.id === teamMemberId)
+        if (member?.auth_user_id && member.auth_user_id !== currentMember?.auth_user_id) {
+          fetch('/api/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              notifications: [{ user_id: member.auth_user_id, type: 'assignment' }],
+              wo_title: wo.title,
+              wo_id: wo.id,
+            }),
+          }).catch(e => console.error('Notify fetch error:', e))
+        }
       }
     }
     setTogglingAssignee(null)
