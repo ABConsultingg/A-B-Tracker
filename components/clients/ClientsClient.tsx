@@ -255,6 +255,22 @@ export default function ClientsClient({
     })
   }
 
+  async function deleteClient() {
+    if (!selected) return
+    const woCount = workOrders.filter((w: any) => w.client_id === selected.id).length
+    if (woCount > 0) {
+      alert(`Cannot delete: this client has ${woCount} work order${woCount === 1 ? '' : 's'}. Archive instead.`)
+      return
+    }
+    if (!confirm(`Permanently delete "${selected.name}"? This cannot be undone.`)) return
+    setSaving(true)
+    const { error } = await supabase.from('clients').delete().eq('id', selected.id)
+    setSaving(false)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    setClients(prev => prev.filter(c => c.id !== selected.id))
+    closeModal()
+  }
+
   function closeModal() {
     setSelected(null)
     setIsNew(false)
@@ -1010,6 +1026,15 @@ export default function ClientsClient({
                   <button onClick={archiveClient} disabled={saving}
                     className="w-full py-2.5 rounded-lg font-semibold text-sm text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50">
                     📁 Archive client
+                  </button>
+                </div>
+              )}
+
+              {!isNew && isAdmin && selected && workOrders.filter((w: any) => w.client_id === selected.id).length === 0 && (
+                <div className="pt-2">
+                  <button onClick={deleteClient} disabled={saving}
+                    className="w-full py-2.5 rounded-lg font-semibold text-sm text-red-900 bg-red-100 hover:bg-red-200 disabled:opacity-50">
+                    🗑 Delete client (no work orders)
                   </button>
                 </div>
               )}
