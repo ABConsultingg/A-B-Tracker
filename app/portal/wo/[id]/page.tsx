@@ -12,7 +12,7 @@ export default async function PortalWoPage({ params }: { params: { id: string } 
   // RLS ensures this only returns the WO if it belongs to the user's client.
   const { data: wo } = await supabase
     .from('work_orders')
-    .select(`id, title, stage, due_date, est_cost, add_cost, deliverables_link, description, notes, branch,
+    .select(`id, title, stage, due_date, est_cost, add_cost, deliverables_link, description, notes, branch, created_at, priority, occurrence,
              services!work_orders_service_id_fkey(name)`)
     .eq('id', params.id)
     .maybeSingle()
