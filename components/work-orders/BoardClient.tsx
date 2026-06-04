@@ -777,7 +777,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         </div>
       )}
 
-      <div className="px-4 md:px-6 py-4 md:py-5 bg-white border-b" style={{ borderColor: 'var(--border)' }}>
+      <div className="sticky top-0 z-20 px-4 md:px-6 py-4 md:py-5 bg-white border-b" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between mb-3 md:mb-4">
           <div>
             <h1 className="font-serif text-2xl md:text-[28px] font-semibold tracking-tight" style={{ color: 'var(--brand-navy)' }}>Board</h1>
@@ -969,7 +969,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
                 onDragOver={(e) => handleDragOver(e, stageId)}
                 onDrop={(e) => handleDrop(e, stageId)}
                 onDragLeave={() => setDragOverStage(null)}>
-                <div className="bg-white rounded-t-lg border border-b-0 px-3 py-2.5"
+                <div className="sticky top-0 z-10 bg-white rounded-t-lg border border-b-0 px-3 py-2.5"
                      style={{ borderColor: 'var(--border)', borderTopColor: stage.color, borderTopWidth: 3 }}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
