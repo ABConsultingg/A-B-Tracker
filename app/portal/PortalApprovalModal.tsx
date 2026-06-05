@@ -16,6 +16,9 @@ export default function PortalApprovalModal({
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [links, setLinks] = useState<{ id: string; label: string | null; url: string }[]>([])
+  const [ownerAuthId, setOwnerAuthId] = useState<string | null>(null)
+  const [assigneeAuthIds, setAssigneeAuthIds] = useState<string[]>([])
+  const [woClientId, setWoClientId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -24,6 +27,32 @@ export default function PortalApprovalModal({
       .eq('work_order_id', wo.id)
       .order('sort_order', { ascending: true })
       .then(({ data }) => { if (active && data) setLinks(data as any) })
+
+    // Fetch owner auth_user_id + client_id
+    supabase.from('work_orders')
+      .select('owner_id, client_id')
+      .eq('id', wo.id)
+      .maybeSingle()
+      .then(async ({ data: woData }) => {
+        if (!active || !woData) return
+        setWoClientId(woData.client_id)
+        if (woData.owner_id) {
+          const { data: ownerMember } = await supabase
+            .from('team_members').select('auth_user_id').eq('id', woData.owner_id).maybeSingle()
+          if (active && ownerMember?.auth_user_id) setOwnerAuthId(ownerMember.auth_user_id)
+        }
+        // Fetch assignees
+        const { data: assigneeRows } = await supabase
+          .from('wo_assignees').select('team_member_id').eq('work_order_id', wo.id)
+        if (!active || !assigneeRows?.length) return
+        const memberIds = assigneeRows.map((r: any) => r.team_member_id)
+        const { data: members } = await supabase
+          .from('team_members').select('auth_user_id').in('id', memberIds)
+        if (active && members) {
+          setAssigneeAuthIds(members.map((m: any) => m.auth_user_id).filter(Boolean))
+        }
+      })
+
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wo.id])
@@ -45,9 +74,9 @@ export default function PortalApprovalModal({
       stage: toStage,
       woId: wo.id,
       woTitle: wo.title,
-      clientId: null, // client triggered this, no need to notify themselves
-      ownerAuthId: null, // portal doesn't have owner auth_user_id — handled server-side via API
-      assigneeAuthIds: [],
+      clientId: null,
+      ownerAuthId,
+      assigneeAuthIds,
     })
 
     // 2) Post a client-visible comment capturing the decision / feedback.
