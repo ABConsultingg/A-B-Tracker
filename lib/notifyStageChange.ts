@@ -10,6 +10,7 @@ export async function notifyStageChange({
   clientId,
   ownerAuthId,
   assigneeAuthIds = [],
+  senderName,
 }: {
   stage: string
   woId: string
@@ -17,6 +18,7 @@ export async function notifyStageChange({
   clientId: string | null
   ownerAuthId: string | null
   assigneeAuthIds?: string[]
+  senderName?: string
 }) {
   const stageLabel = STAGES.find(s => s.id === stage)?.label || stage
   const notifications: any[] = []
@@ -38,7 +40,7 @@ export async function notifyStageChange({
     await fetch('/api/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notifications, wo_title: woTitle, wo_id: woId }),
+      body: JSON.stringify({ notifications, wo_title: woTitle, wo_id: woId, sender_name: senderName }),
     })
   } catch (e) {
     console.error('notifyStageChange error:', e)

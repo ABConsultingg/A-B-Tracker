@@ -359,6 +359,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         clientId: wo.client_id,
         ownerAuthId: ownerMember?.auth_user_id || null,
         assigneeAuthIds,
+        senderName: ownerMember?.name || undefined,
       })
     }
   }

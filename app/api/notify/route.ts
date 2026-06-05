@@ -88,10 +88,11 @@ function stageEmail(
 
 export async function POST(req: NextRequest) {
   try {
-    const { notifications, wo_title, wo_id } = await req.json() as {
+    const { notifications, wo_title, wo_id, sender_name } = await req.json() as {
       notifications: Notification[]
       wo_title: string
       wo_id: string
+      sender_name?: string
     }
 
     if (!notifications?.length) return NextResponse.json({ ok: true, sent: 0 })
@@ -193,7 +194,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'A&B Tracker <notifications@abconsultingg.com>',
+          from: sender_name ? `${sender_name} at A&B <notifications@abconsultingg.com>` : 'A&B Tracker <notifications@abconsultingg.com>',
           to: recipientEmail,
           subject,
           html,
