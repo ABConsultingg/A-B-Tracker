@@ -20,6 +20,7 @@ import { useViewMode } from '@/lib/useViewMode'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
 import WoFilesTab, { type WoLink } from './WoFilesTab'
 import { stageView } from '@/lib/portal/stages'
+import { notifyStageChange } from '@/lib/notifyStageChange'
 
 type Tab =
   | 'overview'
@@ -427,7 +428,17 @@ function OverviewTab({
         <Card title="🏷️ Status">
           <Row label="Stage" value={isAdmin ? (
             <select defaultValue={woState.stage}
-              onChange={e => saveField('stage', e.target.value, { stage_entered_at: new Date().toISOString() })}
+              onChange={e => {
+                saveField('stage', e.target.value, { stage_entered_at: new Date().toISOString() })
+                notifyStageChange({
+                  stage: e.target.value,
+                  woId: wo.id,
+                  woTitle: wo.title,
+                  clientId: (wo as any).client_id || null,
+                  ownerAuthId: null, // saveField handles auth context
+                  assigneeAuthIds: [],
+                })
+              }}
               className="rounded border px-2 py-0.5 text-sm"
               style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>
               {STAGES.map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}

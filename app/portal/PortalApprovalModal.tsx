@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
+import { notifyStageChange } from '@/lib/notifyStageChange'
 
 type WO = { id: string; title: string; stage: string; deliverables_link: string | null;
   due_date?: string | null; description?: string | null; notes?: string | null; branch?: string | null;
@@ -38,6 +39,16 @@ export default function PortalApprovalModal({
     const { error: upErr } = await supabase
       .from('work_orders').update({ stage: toStage }).eq('id', wo.id)
     if (upErr) { setBusy(false); alert('Could not update: ' + upErr.message); return }
+
+    // Notify owner + assignees of client decision
+    notifyStageChange({
+      stage: toStage,
+      woId: wo.id,
+      woTitle: wo.title,
+      clientId: null, // client triggered this, no need to notify themselves
+      ownerAuthId: null, // portal doesn't have owner auth_user_id — handled server-side via API
+      assigneeAuthIds: [],
+    })
 
     // 2) Post a client-visible comment capturing the decision / feedback.
     const body = toStage === 'approved'

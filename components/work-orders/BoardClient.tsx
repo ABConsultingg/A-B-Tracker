@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { STAGES, type WorkOrder, type WoStage, type ClientRate, type PrintProduct, type PrintProductTier } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
+import { notifyStageChange } from '@/lib/notifyStageChange'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
 import { priceFor } from '@/lib/pricing'
 import { isCampaignService, CAMPAIGN_ITEMS, campaignItemCost, type CampaignPick } from '@/lib/campaign-items'
@@ -345,6 +346,20 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         .select('*').eq('work_order_id', wo.id)
         .order('changed_at', { ascending: false }).limit(20)
       setStageHistory(data || [])
+      // Stage-change notifications
+      const ownerMember = team.find((t: any) => t.id === wo.owner_id)
+      const assigneeMemberIds = assignees
+      const assigneeAuthIds = assigneeMemberIds
+        .map(id => team.find((t: any) => t.id === id)?.auth_user_id)
+        .filter(Boolean) as string[]
+      notifyStageChange({
+        stage: patch.stage as string,
+        woId: wo.id,
+        woTitle: wo.title,
+        clientId: wo.client_id,
+        ownerAuthId: ownerMember?.auth_user_id || null,
+        assigneeAuthIds,
+      })
     }
   }
 
