@@ -33,11 +33,8 @@ export function buildEmbed(raw: string): Embed {
     if (m) return { kind: 'iframe', url: `https://docs.google.com/${seg}/d/${m[1]}/preview` }
   }
   if (host === 'dropbox.com' || host.endsWith('.dropbox.com')) {
-    let raw2 = href.replace(/([?&])dl=\d/, '$1raw=1')
-    if (!/[?&]raw=1/.test(raw2)) raw2 += (raw2.includes('?') ? '&raw=1' : '?raw=1')
-    const rl = raw2.split('?')[0].toLowerCase()
-    if (/\.(jpe?g|png|gif|webp|bmp|svg)$/.test(rl)) return { kind: 'image', url: raw2 }
-    return { kind: 'iframe', url: raw2 }
+    // Dropbox blocks iframes and hijacks navigation — always show as plain link
+    return null
   }
   return null
 }
