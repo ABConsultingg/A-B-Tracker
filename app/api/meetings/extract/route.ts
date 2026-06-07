@@ -64,7 +64,7 @@ Rules:
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: systemPrompt,
         messages: [{ role: 'user', content: 'Extract action items from this transcript:\n\n' + transcript }],
       }),
