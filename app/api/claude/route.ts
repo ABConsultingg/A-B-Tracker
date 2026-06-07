@@ -177,6 +177,20 @@ const TOOLS = [
     },
   },
   {
+    name: 'send_direct_message',
+    description: 'Send a private direct message to a specific team member. Use when asked to message someone privately or send something to a specific person like Tanya, Adrian, Montse, etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to_name:  { type: 'string', description: 'Name of the team member to send to (e.g. Tanya, Adrian, Montse)' },
+        message:  { type: 'string', description: 'The message content' },
+        wo_id:    { type: 'string', description: 'Optional: related work order ID' },
+        wo_title: { type: 'string', description: 'Optional: work order title to link' },
+      },
+      required: ['to_name', 'message'],
+    },
+  },
+  {
     name: 'notify_client',
     description: 'Send an email notification to a client',
     input_schema: {
@@ -350,6 +364,32 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
         if (error) return 'Error posting to HQ: ' + error.message
         return 'Posted message to #' + channel + ' in HQ successfully.'
       }
+    }
+
+    if (name === 'send_direct_message') {
+      // Find recipient
+      const { data: recipient } = await supabaseAdmin.from('team_members').select('id, name').ilike('name', '%' + input.to_name + '%').maybeSingle()
+      if (!recipient) return 'Could not find team member: ' + input.to_name
+
+      // Find sender (current user)
+      const { data: sender } = await supabaseAdmin.from('team_members').select('id, name').eq('auth_user_id', authUserId).maybeSingle()
+
+      // Resolve WO if title given
+      let woId = input.wo_id
+      if (!woId && input.wo_title) {
+        const { data: wo } = await supabaseAdmin.from('work_orders').select('id').ilike('title', '%' + input.wo_title + '%').maybeSingle()
+        woId = wo?.id
+      }
+
+      const { error } = await supabaseAdmin.from('direct_messages').insert({
+        from_member_id: sender?.id || null,
+        to_member_id: recipient.id,
+        body: input.message,
+        wo_id: woId || null,
+        sent_via: 'mav',
+      })
+      if (error) return 'Error sending message: ' + error.message
+      return 'Private message sent to ' + recipient.name + ' successfully.'
     }
 
     if (name === 'notify_client') {
