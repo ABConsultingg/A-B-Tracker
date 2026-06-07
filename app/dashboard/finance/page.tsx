@@ -4,13 +4,12 @@ export default async function FinancePage() {
   const supabase = createClient()
   const { data: wos } = await supabase
     .from('work_orders')
-    .select(`id, stage, est_cost, add_cost, occurrence, paid_at, updated_at, created_at,
+    .select(`id, stage, est_cost, add_cost, ad_spend, occurrence, paid_at, updated_at, created_at, client_id,
              clients!work_orders_client_id_fkey(name),
              services!work_orders_service_id_fkey(name)`)
 
   const all = wos || []
 
-  // Recurring Services registry (committed MRR — manual, billing done in Square)
   const { data: recurringRows } = await supabase
     .from('recurring_services')
     .select(`id, client_id, label, amount, is_bundle, coverage_notes, active,
@@ -18,7 +17,7 @@ export default async function FinancePage() {
     .eq('active', true)
   const recurring = (recurringRows || []) as any[]
 
-  // group by client
+  // group recurring by client
   const recurringByClient: Record<string, { name: string; entries: any[]; subtotal: number }> = {}
   for (const r of recurring) {
     const name = r.clients?.name || r.client_id || 'Unknown'
@@ -29,16 +28,27 @@ export default async function FinancePage() {
   const recurringGroups = Object.values(recurringByClient).sort((a, b) => b.subtotal - a.subtotal)
   const committedMrr = recurring.reduce((s, r) => s + (Number(r.amount) || 0), 0)
 
-  // MRR: Recurring WOs in active stages
-  const mrrActiveStages = ['submitted','not-started','in-progress','deliverables-completed','sent-for-approval','revisions-received','approved','deliverables-executed','invoiced']
-  const mrrRows = all.filter((w: any) => w.occurrence === 'Recurring' && mrrActiveStages.includes(w.stage))
-  const mrr = mrrRows.reduce((s: number, w: any) => s + (w.est_cost || 0), 0)
+  // Active WO pipeline per client (not paid/archived)
+  const activePipelineStages = ['submitted','not-started','in-progress','deliverables-completed','sent-for-approval','revisions-received','approved','deliverables-executed','invoiced']
+  const woByClient: Record<string, number> = {}
+  let totalWoPipeline = 0
+  all.forEach((w: any) => {
+    if (!activePipelineStages.includes(w.stage)) return
+    const name = w.clients?.name || 'Unknown'
+    const v = (w.est_cost || 0) + (w.add_cost || 0) + (w.ad_spend || 0)
+    woByClient[name] = (woByClient[name] || 0) + v
+    totalWoPipeline += v
+  })
 
-  // Ready to Invoice: deliverables-executed
+  // MRR active rows
+  const mrrActiveStages = activePipelineStages
+  const mrrRows = all.filter((w: any) => w.occurrence === 'Recurring' && mrrActiveStages.includes(w.stage))
+
+  // Ready to Invoice
   const rtiRows = all.filter((w: any) => w.stage === 'deliverables-executed')
   const readyToInvoice = rtiRows.reduce((s: number, w: any) => s + (w.est_cost || 0) + (w.add_cost || 0), 0)
 
-  // Outstanding: invoiced
+  // Outstanding
   const outRows = all.filter((w: any) => w.stage === 'invoiced')
   const outstanding = outRows.reduce((s: number, w: any) => s + (w.est_cost || 0) + (w.add_cost || 0), 0)
 
@@ -54,7 +64,7 @@ export default async function FinancePage() {
   const archRows = all.filter((w: any) => w.stage === 'archived' && w.updated_at && new Date(w.updated_at) >= yearStart)
   const archivedYTD = archRows.reduce((s: number, w: any) => s + (w.est_cost || 0) + (w.add_cost || 0), 0)
 
-  // Revenue by Client (kept from original)
+  // Revenue by Client
   const clientStats: Record<string, { wos: number; revenue: number; pipeline: number }> = {}
   all.forEach((w: any) => {
     const name = w.clients?.name || 'Unknown'
@@ -77,7 +87,7 @@ export default async function FinancePage() {
         <p className="text-sm text-gray-500 mt-1">A/R pipeline and recurring revenue</p>
       </div>
 
-      {/* A/R PIPELINE — 5 tiles */}
+      {/* A/R PIPELINE */}
       <div className="mb-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">A/R Pipeline</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
         <div className="bg-white rounded-lg border border-gray-200 p-5 border-l-4 border-l-blue-500">
@@ -117,7 +127,7 @@ export default async function FinancePage() {
         </div>
       </div>
 
-      {/* RECURRING SERVICES (committed MRR — manual registry) */}
+      {/* RECURRING SERVICES */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
@@ -137,43 +147,80 @@ export default async function FinancePage() {
                 <th className="px-6 py-3">Service</th>
                 <th className="px-6 py-3">Type</th>
                 <th className="px-6 py-3 text-right">Monthly</th>
+                <th className="px-6 py-3 text-right">Client Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {recurringGroups.map((g) => (
-                g.entries.map((e: any, idx: number) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-3 font-medium text-gray-900">
-                      {idx === 0 ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-gray-900"></span>{g.name}
-                        </span>
-                      ) : ''}
-                    </td>
-                    <td className="px-6 py-3 text-gray-700">
-                      {e.label}
-                      {e.coverage_notes && <div className="text-xs text-gray-400">{e.coverage_notes}</div>}
-                    </td>
-                    <td className="px-6 py-3">
-                      {e.is_bundle ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">Bundle</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">Itemized</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-3 text-right font-mono font-semibold text-gray-900">{fmt(Number(e.amount) || 0)}</td>
-                  </tr>
-                ))
+                g.entries.map((e: any, idx: number) => {
+                  const woPipeline = woByClient[g.name] || 0
+                  const clientTotal = g.subtotal + woPipeline
+                  return (
+                    <tr key={e.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-3 font-medium text-gray-900">
+                        {idx === 0 ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-900"></span>{g.name}
+                          </span>
+                        ) : ''}
+                      </td>
+                      <td className="px-6 py-3 text-gray-700">
+                        {e.label}
+                        {e.coverage_notes && <div className="text-xs text-gray-400">{e.coverage_notes}</div>}
+                      </td>
+                      <td className="px-6 py-3">
+                        {e.is_bundle ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">Bundle</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">Itemized</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-right font-mono font-semibold text-gray-900">{fmt(Number(e.amount) || 0)}</td>
+                      <td className="px-6 py-3 text-right font-mono font-bold" style={{ color: '#1a2744' }}>
+                        {idx === 0 ? (
+                          <div>
+                            <div>{fmt(clientTotal)}</div>
+                            {woPipeline > 0 && (
+                              <div className="text-[10px] font-normal text-gray-400">
+                                {fmt(g.subtotal)} MRR + {fmt(woPipeline)} WOs
+                              </div>
+                            )}
+                          </div>
+                        ) : ''}
+                      </td>
+                    </tr>
+                  )
+                })
               ))}
               {recurring.length === 0 && (
-                <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400 text-sm">No recurring services yet · <a href="/dashboard/recurring" className="text-blue-600 hover:underline">add one</a></td></tr>
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-sm">No recurring services yet · <a href="/dashboard/recurring" className="text-blue-600 hover:underline">add one</a></td></tr>
               )}
             </tbody>
+            {/* Footer */}
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 bg-gray-50">
+                <td className="px-6 py-4 font-bold text-gray-900 text-[11px] uppercase tracking-wide" colSpan={2}>Totals</td>
+                <td className="px-6 py-4"></td>
+                <td className="px-6 py-4 text-right">
+                  <div className="font-bold font-mono text-gray-900">{fmt(committedMrr)}</div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">MRR</div>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="font-bold font-mono text-lg" style={{ color: '#1a2744' }}>{fmt(committedMrr + totalWoPipeline)}</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">
+                    {fmt(committedMrr)} MRR + {fmt(totalWoPipeline)} WOs
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-1 pt-1 border-t border-gray-200">
+                    YTD collected: <span className="font-semibold text-green-600">{fmt(archivedYTD)}</span>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* REVENUE BY CLIENT (kept from original) */}
+      {/* REVENUE BY CLIENT */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Revenue by Client</h2>
