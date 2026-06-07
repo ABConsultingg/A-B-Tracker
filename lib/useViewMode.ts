@@ -15,7 +15,7 @@ const KEY = 'abViewMode'
  * sidebar toggle immediately reflects in the board.
  */
 export function useViewMode(isAdmin: boolean): [ViewMode, (m: ViewMode) => void] {
-  const [mode, setMode] = useState<ViewMode>('admin')
+  const [mode, setMode] = useState<ViewMode | null>(null)
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -43,5 +43,5 @@ export function useViewMode(isAdmin: boolean): [ViewMode, (m: ViewMode) => void]
     window.dispatchEvent(new CustomEvent('ab-view-mode-change', { detail: next }))
   }, [isAdmin])
 
-  return [mode, change]
+  return [mode ?? (isAdmin ? 'admin' : 'team'), change]
 }
