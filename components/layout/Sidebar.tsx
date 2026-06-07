@@ -20,23 +20,24 @@ const NAV: NavItem[] = [
   { href: '/dashboard/pipeline',  label: 'Pipeline Health', icon: '📊', section: 'views' },
   { href: '/dashboard/schedule', label: 'Execution Schedule', icon: '📅', countKey: 'schedule', section: 'views' },
   { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', ownerOnly: true, section: 'views' },
-  { href: '/dashboard/recurring', label: 'Recurring',       icon: '🔁', ownerOnly: true, section: 'views' },
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
-  { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
-  { href: '/dashboard/print-pricing', label: 'Print Pricing', icon: '🖨', adminOnly: true, section: 'views' },
+  { href: '/dashboard/services',  label: 'Services & Pricing', icon: '⚙️', adminOnly: true, section: 'views' },
   { href: '/dashboard/all',       label: 'All Work Orders', icon: '☰', countKey: 'allWos', section: 'views' },
   { href: '/dashboard/tasks',     label: 'My Tasks',        icon: '✓', countKey: 'myTasks',  section: 'filters' },
   { href: '/dashboard/tasks/all', label: 'All Tasks',       icon: '✓✓', section: 'filters' },
-  { href: '/dashboard/dms', label: 'Mav Direct', icon: '✦', section: 'filters' },
   { href: '/dashboard/messages',  label: 'Messages',        icon: '💬', section: 'filters' },
   { href: '/dashboard/claude', label: 'Mav', icon: '✦', section: 'filters' },
-  { href: '/dashboard/comms', label: 'Comms', icon: '📨', adminOnly: true, section: 'filters' },
-  { href: '/dashboard/meetings', label: 'Meetings', icon: '📋', section: 'filters' },
-  { href: '/dashboard/invoice', label: 'Invoices', icon: '🧾', adminOnly: true, section: 'filters' },
   { href: '/reports', label: 'Reports', icon: '📈', adminOnly: true, section: 'filters' },
-  { href: '/dashboard/standup?channel=general',   label: 'HQ',         icon: '☀️', section: 'filters' },
   { href: '/dashboard/mentions',  label: 'My Mentions',     icon: '@', section: 'filters' },
   { href: '/dashboard/recent',    label: 'Recent Changes',  icon: '🔔', section: 'filters' },
+]
+
+// HQ sub-navigation
+const HQ_ITEMS = [
+  { href: '/dashboard/standup?channel=general', label: 'Wall',       icon: '☀️', adminOnly: false },
+  { href: '/dashboard/dms',                     label: 'Mav Direct', icon: '✦',  adminOnly: false },
+  { href: '/dashboard/comms',                   label: 'Comms',      icon: '📨', adminOnly: true  },
+  { href: '/dashboard/meetings',                label: 'Meetings',   icon: '📋', adminOnly: false },
 ]
 
 // Board-applicable toggle filters that operate via URL params
@@ -95,6 +96,7 @@ export default function Sidebar({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [hqOpen, setHqOpen] = useState(true)
   const [teamTasksOpen, setTeamTasksOpen] = useState(() =>
     pathname.startsWith('/dashboard/tasks/') && pathname !== '/dashboard/tasks/all'
   )
@@ -283,6 +285,31 @@ export default function Sidebar({
               )
             })}
           </div>
+
+          {/* HQ section */}
+          <button onClick={() => setHqOpen(o => !o)}
+            className="w-full text-left text-[10px] font-semibold uppercase px-2.5 pt-3 pb-1.5 flex items-center justify-between hover:text-white/60 transition-colors"
+            style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: '0.12em' }}>
+            <span>HQ</span>
+            <span className="text-[10px]">{hqOpen ? '▾' : '▸'}</span>
+          </button>
+          {hqOpen && (
+            <div className="flex flex-col gap-0.5 mb-2">
+              {HQ_ITEMS.filter(item => !item.adminOnly || (isAdmin && viewMode === 'admin')).map(item => {
+                const active = pathname === item.href || pathname.startsWith(item.href.split('?')[0])
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors"
+                    style={active ? { background: 'rgba(217,158,43,0.15)', color: 'white', boxShadow: 'inset 2px 0 0 var(--brand-accent)' } : { color: 'rgba(255,255,255,0.85)' }}
+                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'white' }}}
+                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.85)' }}}>
+                    <span className="w-4 text-center flex-shrink-0">{item.icon}</span>
+                    <span className="flex-1 truncate">{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
 
           {/* TEAM TASKS section — collapsible list of team members */}
           {teamMemberBadges.length > 0 && (
