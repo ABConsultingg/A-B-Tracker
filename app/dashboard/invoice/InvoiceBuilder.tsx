@@ -6,7 +6,7 @@ type Client = {
   name: string
   contact_name: string | null
   contact_email: string | null
-  phone: string | null
+  contact_phone: string | null
   address: string | null
 }
 
@@ -67,7 +67,7 @@ export default function InvoiceBuilder({
     setSelectedWoIds(new Set())
     setContactName(c?.contact_name || '')
     setContactEmail(c?.contact_email || '')
-    setContactPhone(c?.phone || '')
+    setContactPhone(c?.contact_phone || '')
     setContactAddress(c?.address || '')
   }
 

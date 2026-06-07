@@ -7,7 +7,7 @@ export default async function InvoicePage() {
   const supabase = createClient()
 
   const [{ data: clients }, { data: wos }] = await Promise.all([
-    supabase.from('clients').select('id, name, contact_name, contact_email, phone, address').order('name'),
+    supabase.from('clients').select('id, name, contact_name, contact_email, contact_phone, address').order('name'),
     supabase
       .from('work_orders')
       .select(`id, title, stage, est_cost, add_cost, client_id,
