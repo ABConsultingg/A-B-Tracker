@@ -20,7 +20,7 @@ export default async function WoDetailPage({
       .select('role')
       .eq('auth_user_id', user.id)
       .single()
-    isAdmin = currentMember?.role === 'admin'
+    isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner'
   }
 
   const { data: wo } = await supabase
