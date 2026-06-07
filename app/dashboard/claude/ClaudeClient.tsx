@@ -426,8 +426,6 @@ export default function ClaudeClient({
               style={{ border: '2px dashed var(--border)', borderRadius: 10, padding: '24px',
                        textAlign: 'center', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13 }}>
               📂 Drop Sprout CSVs here to process monthly reports for all clients at once
-              <input ref={fileInputRef} type="file" multiple accept=".csv,.xlsx,.xls" className="hidden"
-                onChange={e => e.target.files && handleFilesSelected(e.target.files)} style={{ display: 'none' }} />
             </div>
           </div>
         )}
