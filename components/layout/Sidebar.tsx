@@ -10,6 +10,7 @@ type NavItem = {
   label: string
   icon: string
   adminOnly?: boolean
+  ownerOnly?: boolean
   countKey?: keyof SidebarCounts
   section: 'views' | 'filters'
 }
@@ -18,8 +19,8 @@ const NAV: NavItem[] = [
   { href: '/dashboard',           label: 'Board',           icon: '⬜', section: 'views' },
   { href: '/dashboard/pipeline',  label: 'Pipeline Health', icon: '📊', section: 'views' },
   { href: '/dashboard/schedule', label: 'Execution Schedule', icon: '📅', countKey: 'schedule', section: 'views' },
-  { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', adminOnly: true, section: 'views' },
-  { href: '/dashboard/recurring', label: 'Recurring',       icon: '🔁', adminOnly: true, section: 'views' },
+  { href: '/dashboard/finance',   label: 'Finance',         icon: '💰', ownerOnly: true, section: 'views' },
+  { href: '/dashboard/recurring', label: 'Recurring',       icon: '🔁', ownerOnly: true, section: 'views' },
   { href: '/dashboard/clients',   label: 'Clients',         icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/services',  label: 'Services',        icon: '⚙️', adminOnly: true, section: 'views' },
   { href: '/dashboard/print-pricing', label: 'Print Pricing', icon: '🖨', adminOnly: true, section: 'views' },
@@ -95,9 +96,11 @@ export default function Sidebar({
     pathname.startsWith('/dashboard/tasks/') && pathname !== '/dashboard/tasks/all'
   )
   const isAdmin = member?.role === 'admin' || member?.role === 'owner'
+  const isOwner = member?.role === 'owner'
   const [viewMode, setViewMode] = useViewMode(isAdmin)
   // In team mode, admin-only items are hidden even for admins.
   const items = NAV.filter(n => {
+    if (n.ownerOnly) return isOwner
     if (!n.adminOnly) return true
     if (!isAdmin) return false
     return viewMode === 'admin'
