@@ -159,17 +159,15 @@ export default async function FinancePage() {
                     <tr key={e.id} className="hover:bg-gray-50">
                       <td className="px-6 py-3 font-medium text-gray-900">
                         {idx === 0 ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-900"></span>
-                              <span className="font-medium">{g.name}</span>
-                            </span>
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-900 flex-shrink-0"></span>
+                            <span className="font-medium">{g.name}</span>
                             <a href={`/dashboard/invoice?client=${e.client_id}`}
-                              className="text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100 no-underline">
+                              className="text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100 no-underline whitespace-nowrap">
                               🧾 Invoice
                             </a>
                             <a href={`/reports/${e.client_id}`}
-                              className="text-[11px] px-2 py-0.5 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 no-underline">
+                              className="text-[11px] px-2 py-0.5 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 no-underline whitespace-nowrap">
                               📈 Report
                             </a>
                           </div>

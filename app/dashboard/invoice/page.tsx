@@ -13,7 +13,7 @@ export default async function InvoicePage() {
       .select(`id, title, stage, est_cost, add_cost, client_id,
                clients!work_orders_client_id_fkey(name),
                wo_line_items(id, description, qty, unit_price, total, sort_order)`)
-      .in('stage', ['deliverables-executed', 'invoiced', 'approved'])
+      .not('stage', 'in', '(archived,paid)')
       .order('created_at', { ascending: false })
       .limit(500),
   ])
