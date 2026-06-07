@@ -47,10 +47,10 @@ export async function POST(req: NextRequest) {
     // Invoice ref (far right)
     const invX = W - margin
     doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...black)
-    doc.text(`Invoice #${data.invoice_number}`, invX, y + 44, { align: 'right' })
+    doc.text(`Invoice #${data.invoice_number}`, invX, y + 8, { align: 'right' })
     doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...gray)
-    doc.text('Issue date', invX, y + 55, { align: 'right' })
-    doc.text(data.issue_date, invX, y + 65, { align: 'right' })
+    doc.text('Issue date', invX, y + 20, { align: 'right' })
+    doc.text(data.issue_date, invX, y + 30, { align: 'right' })
 
     y += 50
     doc.setDrawColor(...lightGray).setLineWidth(0.5).line(margin, y, W - margin, y)
