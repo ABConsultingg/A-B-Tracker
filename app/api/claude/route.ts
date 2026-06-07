@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import mammoth from 'mammoth'
-import * as pdfParse from 'pdf-parse'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -466,7 +464,7 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
           try {
             const res = await fetch(signed.signedUrl)
             const buffer = Buffer.from(await res.arrayBuffer())
-            const parsed = await (pdfParse as any).default(buffer)
+            const pdfParse = await import('pdf-parse'); const parsed = await (pdfParse as any).default(buffer)
             const text = parsed.text || ''
             results.push('=== ' + file.name + ' (PDF) ===\n' + text.substring(0, 4000) + (text.length > 4000 ? '\n...(truncated)' : ''))
           } catch (e: any) {
@@ -476,7 +474,7 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
           try {
             const res = await fetch(signed.signedUrl)
             const buffer = Buffer.from(await res.arrayBuffer())
-            const result = await mammoth.extractRawText({ buffer })
+            const mammoth = await import('mammoth'); const result = await mammoth.extractRawText({ buffer })
             const text = result.value || ''
             results.push('=== ' + file.name + ' (Word doc) ===\n' + text.substring(0, 4000) + (text.length > 4000 ? '\n...(truncated)' : ''))
           } catch (e: any) {
