@@ -333,17 +333,15 @@ export default function ClaudeClient({
   async function send(text?: string) {
     const userText = (text || input).trim()
 
-    // If files attached, process them as reports
-    if (attachedFiles.length > 0 && !text) {
+    // If files attached + user explicitly asks to process reports — run Sprout pipeline
+    const isReportRequest = userText.toLowerCase().includes('process') && userText.toLowerCase().includes('report')
+    if (attachedFiles.length > 0 && isReportRequest) {
       setProcessing(true)
       setInput('')
       const month = currentMonth()
-
-      // Add user message showing what files were uploaded
       const fileList = attachedFiles.map(f => f.name).join(', ')
       const userMsg = `Process ${monthLabel(month)} reports from these files: ${fileList}`
       setMessages(prev => [...prev, { role: 'user', content: userMsg }])
-
       try {
         const result = await processReportFiles(month)
         setMessages(prev => [...prev, { role: 'assistant', content: result }])
@@ -353,6 +351,39 @@ export default function ClaudeClient({
         setProcessing(false)
         setProcessingStatus('')
         setAttachedFiles([])
+      }
+      return
+    }
+
+    // Files attached but not a report request — include file contents as context in chat
+    if (attachedFiles.length > 0) {
+      const fileContext = attachedFiles
+        .filter(f => f.content)
+        .map(f => `[File: ${f.name}]\n${f.content.substring(0, 3000)}${f.content.length > 3000 ? '\n...(truncated)' : ''}`)
+        .join('\n\n')
+      const fullMessage = userText
+        ? `${userText}\n\n${fileContext}`
+        : `Please review these attached files:\n\n${fileContext}`
+      const displayMsg = userText
+        ? `${userText} [+ ${attachedFiles.length} file${attachedFiles.length > 1 ? 's' : ''}]`
+        : `Review: ${attachedFiles.map(f => f.name).join(', ')}`
+      setInput('')
+      setAttachedFiles([])
+      const newMessages: Message[] = [...messages, { role: 'user', content: fullMessage }]
+      setMessages(prev => [...prev, { role: 'user', content: displayMsg }])
+      setLoading(true)
+      try {
+        const res = await fetch('/api/claude', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: newMessages, authUserId, role, memberName }),
+        })
+        const data = await res.json()
+        setMessages(prev => [...prev, { role: 'assistant', content: data.text || 'Sorry, something went wrong.' }])
+      } catch {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error. Please try again.' }])
+      } finally {
+        setLoading(false)
       }
       return
     }
@@ -512,7 +543,7 @@ export default function ClaudeClient({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder={isProcessingFiles ? 'Files ready — click Process to run monthly reports' : 'Ask about work orders, clients, pipeline…'}
+            placeholder={attachedFiles.length > 0 ? `${attachedFiles.length} file${attachedFiles.length > 1 ? 's' : ''} attached — type a message or just Send` : 'Ask about work orders, clients, pipeline…'}
             style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)',
                      background: 'var(--bg)', color: 'var(--text)', fontSize: 14, fontFamily: 'inherit' }}
           />
@@ -522,7 +553,7 @@ export default function ClaudeClient({
             style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#1a2744',
                      color: '#b8860b', fontWeight: 700, fontSize: 14, cursor: 'pointer', flexShrink: 0,
                      opacity: (loading || processing || (!input.trim() && attachedFiles.length === 0)) ? 0.5 : 1 }}>
-            {isProcessingFiles ? 'Process' : 'Send'}
+            Send
           </button>
         </div>
         {messages.length > 0 && (
