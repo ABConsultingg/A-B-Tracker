@@ -76,22 +76,45 @@ export default function PortalWoDetail({
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [showMentionHint, setShowMentionHint] = useState(false)
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const fileInputRef = { current: null as HTMLInputElement | null }
   const sv = stageView(wo.stage)
   const cost = (wo.est_cost || 0) + (wo.add_cost || 0)
   const showCost = ['invoiced', 'paid'].includes(wo.stage) && cost > 0
 
   async function post() {
     const text = body.trim()
-    if (!text) return
+    if (!text && !attachedFile) return
     setBusy(true)
+
+    // Upload file if attached
+    let fileNote = ''
+    if (attachedFile) {
+      const path = `wo-files/${wo.id}/${Date.now()}_${attachedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const { error: upErr } = await supabase.storage.from('ab-files').upload(path, attachedFile, { upsert: false })
+      if (!upErr) {
+        await supabase.from('wo_files').insert({
+          work_order_id: wo.id, name: attachedFile.name, storage_path: path,
+          mime_type: attachedFile.type || 'application/octet-stream',
+          size_bytes: attachedFile.size, uploaded_by_type: 'client',
+          uploaded_by_id: currentUserId, internal_only: false,
+        })
+        fileNote = (text ? '\n' : '') + '📎 Attached: ' + attachedFile.name
+      }
+    }
+
+    const finalBody = (text + fileNote).trim()
+    if (!finalBody) { setBusy(false); return }
+
     const { data, error } = await supabase.from('wo_comments').insert({
-      work_order_id: wo.id, body: text, author_id: currentUserId,
+      work_order_id: wo.id, body: finalBody, author_id: currentUserId,
       author_type: 'client', internal_only: false,
     }).select('id, body, author_id, author_type, created_at').single()
     setBusy(false)
     if (error || !data) { alert('Could not post: ' + (error?.message || 'unknown')); return }
     setComments(prev => [...prev, data as Comment])
     setBody('')
+    setAttachedFile(null)
   }
 
   return (
@@ -304,11 +327,24 @@ export default function PortalWoDetail({
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-            <button onClick={post} disabled={busy || !body.trim()}
+          {attachedFile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '4px 10px', background: '#f5f4ef', borderRadius: 6, fontSize: 12, color: '#444' }}>
+              <span>📎 {attachedFile.name}</span>
+              <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: 14 }}>×</button>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <div>
+              <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]) }} />
+              <button onClick={() => fileInputRef.current?.click()} title="Attach file"
+                style={{ background: 'none', border: '1px solid #e8e6dd', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: '#888', fontSize: 16 }}>
+                📎
+              </button>
+            </div>
+            <button onClick={post} disabled={busy || (!body.trim() && !attachedFile)}
               style={{ background: '#0f1b34', color: 'white', border: 'none', borderRadius: 6,
                        padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                       opacity: body.trim() ? 1 : 0.5 }}>
+                       opacity: (body.trim() || attachedFile) ? 1 : 0.5 }}>
               {busy ? 'Sending…' : 'Send'}
             </button>
           </div>

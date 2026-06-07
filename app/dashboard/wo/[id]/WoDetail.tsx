@@ -90,6 +90,45 @@ function BackToBoardLink() {
   )
 }
 
+
+function AssigneesEditor({ woId, initialAssignees, team, isAdmin }: {
+  woId: string; initialAssignees: { id: string; name: string }[]
+  team: { id: string; name: string; auth_user_id: string | null }[]; isAdmin: boolean
+}) {
+  const supabase = createClient()
+  const [assignees, setAssignees] = useState(initialAssignees)
+  const [adding, setAdding] = useState(false)
+  const unassigned = team.filter(t => !assignees.find(a => a.id === t.id))
+  async function add(memberId: string) {
+    const m = team.find(t => t.id === memberId); if (!m) return
+    const { error } = await supabase.from('wo_assignees').insert({ work_order_id: woId, team_member_id: memberId })
+    if (!error) setAssignees(prev => [...prev, { id: m.id, name: m.name }])
+  }
+  async function remove(memberId: string) {
+    await supabase.from('wo_assignees').delete().eq('work_order_id', woId).eq('team_member_id', memberId)
+    setAssignees(prev => prev.filter(a => a.id !== memberId))
+  }
+  return (
+    <div className="flex flex-wrap gap-1 items-center">
+      {assignees.map(a => (
+        <span key={a.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-sunken,#f1f5f9)', color: 'var(--text)', fontSize: 12 }}>
+          {a.name}
+          {isAdmin && <button onClick={() => remove(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>}
+        </span>
+      ))}
+      {isAdmin && unassigned.length > 0 && (adding
+        ? <select autoFocus onChange={e => { if (e.target.value) { add(e.target.value); setAdding(false) } }} onBlur={() => setAdding(false)}
+            style={{ fontSize: 12, border: '1px solid var(--border)', borderRadius: 6, padding: '2px 6px', background: 'var(--bg)', color: 'var(--text)' }}>
+            <option value="">Add…</option>
+            {unassigned.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        : <button onClick={() => setAdding(true)} style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: '1px dashed var(--border)', borderRadius: 999, padding: '2px 8px', cursor: 'pointer' }}>+ Add</button>
+      )}
+      {assignees.length === 0 && !isAdmin && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>None</span>}
+    </div>
+  )
+}
+
 export default function WoDetail({
   wo,
   lineItems: initialLineItems,
@@ -497,26 +536,7 @@ function OverviewTab({
           </div>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Assignees</div>
-            {assignees.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)' }}>None</div>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {assignees.map(a => (
-                  <span
-                    key={a.id}
-                    style={{
-                      padding: '2px 8px',
-                      borderRadius: 999,
-                      background: 'var(--bg-sunken, #f1f5f9)',
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    {a.name}
-                  </span>
-                ))}
-              </div>
-            )}
+            <AssigneesEditor woId={wo.id} initialAssignees={assignees} team={team} isAdmin={isAdmin} />
           </div>
           <div>
             <div className="text-xs uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Branch / Location</div>
