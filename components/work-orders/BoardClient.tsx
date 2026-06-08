@@ -335,6 +335,13 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     if (!confirm(`PERMANENTLY DELETE "${wo.title}"? This cannot be undone.`)) return
     if (!confirm(`Are you absolutely sure? Type-confirm in your head: this work order will be gone forever.`)) return
     setSaving(true)
+    // Delete child records first to avoid FK constraint errors
+    await supabase.from('wo_line_items').delete().eq('work_order_id', wo.id)
+    await supabase.from('wo_tasks').delete().eq('work_order_id', wo.id)
+    await supabase.from('wo_comments').delete().eq('work_order_id', wo.id)
+    await supabase.from('wo_schedule').delete().eq('work_order_id', wo.id)
+    await supabase.from('wo_assignees').delete().eq('work_order_id', wo.id)
+    await supabase.from('wo_files').delete().eq('work_order_id', wo.id)
     const { error } = await supabase.from('work_orders').delete().eq('id', wo.id)
     setSaving(false)
     if (error) { alert('Delete failed: ' + error.message); return }
