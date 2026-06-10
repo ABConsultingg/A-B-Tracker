@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
-  const { clientId, clientName, month, summary } = await req.json()
+  const { clientId, clientName, month, summary, question } = await req.json()
   if (!summary) return NextResponse.json({ error: 'No data' }, { status: 400 })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -16,7 +16,9 @@ export async function POST(req: NextRequest) {
       max_tokens: 600,
       messages: [{
         role: 'user',
-        content: `You are a senior digital marketing strategist writing a concise monthly performance narrative for a client report.
+        content: question
+          ? `You are a senior digital marketing strategist. Client: ${clientName}. Month: ${month}.\n\nData:\n${summary}\n\n${question}`
+          : `You are a senior digital marketing strategist writing a concise monthly performance narrative for a client report.
 
 Client: ${clientName}
 Month: ${month}
