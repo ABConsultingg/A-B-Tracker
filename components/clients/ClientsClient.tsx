@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { STAGES } from '@/lib/types'
@@ -75,6 +76,98 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 50)
+}
+
+function ReportsHistory({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const supabase = createClient()
+  const [months, setMonths] = React.useState<{ month: string; status: string; metrics: Record<string, number> }[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    async function load() {
+      setLoading(true)
+      const { data: reports } = await supabase
+        .from('client_reports')
+        .select('month, status')
+        .eq('client_id', clientId)
+        .order('month', { ascending: false })
+        .limit(6)
+
+      if (!reports?.length) { setLoading(false); return }
+
+      const { data: reportData } = await supabase
+        .from('report_data')
+        .select('month, section, platform, metric, value')
+        .eq('client_id', clientId)
+        .in('month', reports.map(r => r.month))
+
+      const result = reports.map(r => {
+        const rows = (reportData || []).filter(d => d.month === r.month)
+        const get = (section: string, metric: string) =>
+          rows.filter(d => d.section === section && d.metric === metric).reduce((s, d) => s + (d.value ?? 0), 0)
+        return {
+          month: r.month,
+          status: r.status,
+          metrics: {
+            impressions: get('social_organic', 'impressions'),
+            engagements: get('social_organic', 'engagements'),
+            spend: get('meta_ads', 'spend'),
+          }
+        }
+      })
+      setMonths(result)
+      setLoading(false)
+    }
+    load()
+  }, [clientId])
+
+  function mLabel(m: string) {
+    const [y, mo] = m.split('-')
+    return new Date(Number(y), Number(mo) - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-1">
+        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Monthly Reports</div>
+        <a href={`/reports/${clientId}`} className="text-[11px] text-blue-500 hover:underline">View all →</a>
+      </div>
+      {loading ? (
+        <div className="text-xs text-gray-400 py-2">Loading...</div>
+      ) : months.length === 0 ? (
+        <div className="text-xs text-gray-400 italic py-2">No reports yet. Upload files at /reports/upload</div>
+      ) : (
+        <div className="space-y-1.5">
+          {months.map(m => (
+            <a key={m.month} href={`/reports/${clientId}?month=${m.month}`}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              style={{ textDecoration: 'none', border: '1px solid #f3f4f6' }}>
+              <div className="text-xs font-semibold text-gray-700 w-14 flex-shrink-0">{mLabel(m.month)}</div>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {m.metrics.impressions > 0 && (
+                  <span className="text-xs text-gray-500">{m.metrics.impressions.toLocaleString()} imp</span>
+                )}
+                {m.metrics.engagements > 0 && (
+                  <span className="text-xs text-gray-500">{m.metrics.engagements.toLocaleString()} eng</span>
+                )}
+                {m.metrics.spend > 0 && (
+                  <span className="text-xs text-gray-500">${m.metrics.spend.toLocaleString()} spend</span>
+                )}
+                {m.metrics.impressions === 0 && m.metrics.engagements === 0 && m.metrics.spend === 0 && (
+                  <span className="text-xs text-gray-400 italic">No data</span>
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                m.status === 'ready' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {m.status === 'ready' ? 'Live' : 'Draft'}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ClientsClient({
@@ -1042,6 +1135,11 @@ export default function ClientsClient({
                     )}
                   </div>
                 </>
+              )}
+
+              {/* ─── Reports history ─── */}
+              {!isNew && selected && draft.reports_enabled && (
+                <ReportsHistory clientId={selected.id} clientName={selected.name} />
               )}
 
               {/* Auto-save hint for existing clients */}
