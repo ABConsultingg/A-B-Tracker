@@ -1,16 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 
-const CLIENTS = [
-  { id: 'nico-roofing',          name: 'Nico Roofing & Exteriors',     initials: 'NR', color: '#ef4444' },
-  { id: 'culture',               name: 'Culture Construction',          initials: 'CC', color: '#10b981' },
-  { id: 'kbc-exteriors',         name: 'KBC Exteriors LLC',             initials: 'KB', color: '#f97316' },
-  { id: 'mvp-chiro',             name: 'MVP Chiropractic',              initials: 'MC', color: '#8b5cf6' },
-  { id: 'midwest-construction',  name: 'Midwest Construction Experts',  initials: 'ME', color: '#06b6d4' },
-  { id: 'rbs',                   name: 'Richards Building Supply',      initials: 'RB', color: '#0ea5e9' },
-  { id: 'apollo-events',         name: 'Apollo Supply',                 initials: 'AS', color: '#f59e0b' },
-]
-
 function currentMonth() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -29,10 +19,18 @@ export default async function ReportsPage() {
   const month = currentMonth()
   const FILE_TYPES = ['profile_performance', 'post_performance', 'paid_performance', 'metrics_excel']
 
-  const [{ data: uploads }, { data: reports }] = await Promise.all([
+  const [{ data: uploads }, { data: reports }, { data: clientRows }] = await Promise.all([
     supabase.from('monthly_uploads').select('client_id, file_type, parse_status').eq('month', month),
     supabase.from('client_reports').select('client_id, status, narrative_generated_at').eq('month', month),
+    supabase.from('clients').select('id, name, report_color, report_initials').eq('reports_enabled', true).order('name'),
   ])
+
+  const CLIENTS = (clientRows || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    initials: c.report_initials || (c.name.split(' ').slice(0,2).map((w: string) => w[0]?.toUpperCase() || '').join('')),
+    color: c.report_color || '#6366f1',
+  }))
 
   function uploadCountFor(clientId: string) {
     return uploads?.filter(u => u.client_id === clientId && u.parse_status === 'done').length || 0

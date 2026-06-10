@@ -21,6 +21,7 @@ type Client = {
   notes?: string | null
   looker_enabled?: boolean | null
   looker_url?: string | null
+  reports_enabled?: boolean | null
   created_at?: string
   updated_at?: string
 }
@@ -51,6 +52,7 @@ type Draft = {
   status: ClientStatus
   looker_enabled: boolean
   looker_url: string
+  reports_enabled: boolean
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -64,6 +66,7 @@ const EMPTY_DRAFT: Draft = {
   status: 'active',
   looker_enabled: false,
   looker_url: '',
+  reports_enabled: false,
 }
 
 function slugify(name: string): string {
@@ -254,6 +257,7 @@ export default function ClientsClient({
       status: (c.status || 'active') as ClientStatus,
       looker_enabled: !!c.looker_enabled,
       looker_url: c.looker_url || '',
+      reports_enabled: !!c.reports_enabled,
     })
   }
 
@@ -333,6 +337,7 @@ export default function ClientsClient({
       status: draft.status,
       looker_enabled: draft.looker_enabled,
       looker_url: draft.looker_enabled ? (draft.looker_url.trim() || null) : null,
+      reports_enabled: draft.reports_enabled,
     }
     const { data, error } = await supabase
       .from('clients')
@@ -781,6 +786,33 @@ export default function ClientsClient({
                     ) : (
                       <div className="text-sm text-gray-900 px-3 py-2 bg-gray-50 rounded">
                         {draft.looker_enabled ? 'Yes' : 'No'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">
+                      Monthly Reporting
+                    </label>
+                    {isAdmin ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <label className={`inline-flex items-center gap-2 px-3 py-1.5 border rounded-full cursor-pointer text-sm ${
+                          !draft.reports_enabled ? 'border-gray-200 bg-white text-gray-600' : 'border-green-300 bg-green-50 text-green-900'
+                        }`}>
+                          <input type="checkbox"
+                            checked={!!draft.reports_enabled}
+                            onChange={() => {
+                              const next = !draft.reports_enabled
+                              updateDraft({ reports_enabled: next })
+                              if (!isNew) autoSaveField('reports_enabled', next)
+                            }}
+                            className="accent-green-500" />
+                          <span>{draft.reports_enabled ? '✓ Enabled — appears in reports' : 'Off'}</span>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-900 px-3 py-2 bg-gray-50 rounded">
+                        {draft.reports_enabled ? '✓ Reporting enabled' : 'Off'}
                       </div>
                     )}
                   </div>

@@ -4,15 +4,7 @@ import ReportDashboard from './ReportDashboard'
 
 export const dynamic = 'force-dynamic'
 
-const CLIENTS: Record<string, { name: string; initials: string; color: string }> = {
-  'nico-roofing':         { name: 'Nico Roofing & Exteriors',    initials: 'NR', color: '#ef4444' },
-  'culture':              { name: 'Culture Construction',         initials: 'CC', color: '#10b981' },
-  'kbc-exteriors':        { name: 'KBC Exteriors LLC',            initials: 'KB', color: '#f97316' },
-  'mvp-chiro':            { name: 'MVP Chiropractic',             initials: 'MC', color: '#8b5cf6' },
-  'midwest-construction': { name: 'Midwest Construction Experts', initials: 'ME', color: '#06b6d4' },
-  'rbs':                  { name: 'Richards Building Supply',     initials: 'RB', color: '#0ea5e9' },
-  'apollo-events':        { name: 'Apollo Supply',                initials: 'AS', color: '#f59e0b' },
-}
+
 
 function currentMonth() {
   const d = new Date()
@@ -27,11 +19,20 @@ export default async function ReportPage({
   searchParams: { month?: string }
 }) {
   const { clientId } = params
-  const client = CLIENTS[clientId]
-  if (!client) redirect('/reports')
-
   const month = searchParams.month || currentMonth()
   const supabase = createClient()
+
+  const { data: clientRow } = await supabase
+    .from('clients')
+    .select('id, name, report_color, report_initials, reports_enabled')
+    .eq('id', clientId)
+    .maybeSingle()
+  if (!clientRow || !clientRow.reports_enabled) redirect('/reports')
+  const client = {
+    name: clientRow.name,
+    initials: clientRow.report_initials || (clientRow.name.split(' ').slice(0,2).map((w: string) => w[0]?.toUpperCase() || '').join('')),
+    color: clientRow.report_color || '#6366f1',
+  }
 
   const [
     { data: reportData },
