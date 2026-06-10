@@ -42,7 +42,7 @@ const HQ_ITEMS = [
 
 // Board-applicable toggle filters that operate via URL params
 type BoardFilter = {
-  key: 'assignedToMe' | 'ownedByMe' | 'flagged' | 'stale' | 'overdue'
+  key: 'assignedToMe' | 'ownedByMe' | 'flagged' | 'stale' | 'overdue' | 'recurring'
   label: string
   icon: string
   countKey: keyof SidebarCounts
@@ -54,6 +54,7 @@ const BOARD_FILTERS: BoardFilter[] = [
   { key: 'flagged',      label: 'Flagged',        icon: '⚑',  countKey: 'flagged' },
   { key: 'stale',        label: 'Stale',          icon: '◷',  countKey: 'stale' },
   { key: 'overdue',      label: 'Overdue',        icon: '!',  countKey: 'overdue' },
+  { key: 'recurring',    label: 'Recurring',      icon: '↺',  countKey: 'recurring' },
 ]
 
 export type SidebarCounts = {
@@ -65,6 +66,7 @@ export type SidebarCounts = {
   flagged?: number
   stale?: number
   overdue?: number
+  recurring?: number
   schedule?: number
 }
 

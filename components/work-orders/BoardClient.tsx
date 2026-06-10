@@ -104,11 +104,12 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   const urlOverdue            = searchParams.get('overdue') === '1'
   const urlActiveOnly         = searchParams.get('active') === '1'
   const urlOverdueOrFlagged   = searchParams.get('overdueOrFlagged') === '1'
+  const urlRecurring          = searchParams.get('recurring') === '1'
   const urlClient             = searchParams.get('client') || ''
   const urlStage              = searchParams.get('stage') || ''
 
   const hasUrlFilters = urlAssignedToMe || urlOwnedByMe || urlFlagged || urlStale ||
-    urlOverdue || urlActiveOnly || urlOverdueOrFlagged || !!urlClient || !!urlStage
+    urlOverdue || urlActiveOnly || urlOverdueOrFlagged || urlRecurring || !!urlClient || !!urlStage
 
   function clearUrlFilters() { router.push(pathname) }
 
@@ -121,6 +122,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     if (urlOverdue) parts.push('overdue')
     if (urlActiveOnly) parts.push('active delivery')
     if (urlOverdueOrFlagged) parts.push('overdue or flagged')
+    if (urlRecurring) parts.push('recurring')
     if (urlClient) {
       const c = clients.find((cc: any) => cc.id === urlClient)
       parts.push(`client: ${c?.name || urlClient}`)
@@ -266,6 +268,7 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         const overdue = isOverdue(wo)
         if (!flagged && !overdue) return false
       }
+      if (urlRecurring) { if ((wo as any).occurrence !== 'Recurring') return false }
       if (urlClient) { if (wo.client_id !== urlClient) return false }
       if (urlStage) {
         if (urlStage === 'approved-or-executed') {

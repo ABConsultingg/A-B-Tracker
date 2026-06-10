@@ -120,6 +120,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   counts.stale = staleCount
   counts.overdue = overdueCount
 
+  // Recurring WOs
+  const { count: recurringCount } = await supabase
+    .from('work_orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('occurrence', 'Recurring')
+    .not('stage', 'in', '(paid,archived)')
+  counts.recurring = recurringCount ?? 0
+
   // ----- Clients section: each active client with WO count -----
   const { data: allClients } = await supabase
     .from('clients')
