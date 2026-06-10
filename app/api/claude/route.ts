@@ -20,9 +20,11 @@ async function buildContext(level: 'owner' | 'admin' | 'team', authUserId: strin
   const { data: wos } = await supabaseAdmin
     .from('work_orders')
     .select(`id, title, stage, client_id, est_cost, add_cost, due_date, priority, created_at,
-             clients!work_orders_client_id_fkey(name),
+             clients!work_orders_client_id_fkey(name, contact_name, contact_email),
              services!work_orders_service_id_fkey(name),
-             team_members!work_orders_owner_id_fkey(name, auth_user_id)`)
+             team_members!work_orders_owner_id_fkey(name, auth_user_id),
+             wo_assignees(team_members(name)),
+             wo_schedule(title, scheduled_date, type)`)
     .not('stage', 'in', '(archived,paid)')
     .order('created_at', { ascending: false })
     .limit(500)
@@ -31,6 +33,22 @@ async function buildContext(level: 'owner' | 'admin' | 'team', authUserId: strin
     .from('team_members')
     .select('id, name, role, auth_user_id, active')
     .eq('active', true)
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: recentComms } = await supabaseAdmin
+    .from('client_comms')
+    .select('client_id, type, summary, contacted_at, clients!client_comms_client_id_fkey(name)')
+    .gte('contacted_at', thirtyDaysAgo)
+    .order('contacted_at', { ascending: false })
+    .limit(50)
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: stageHistory } = await supabaseAdmin
+    .from('wo_stage_history')
+    .select('work_order_id, from_stage, to_stage, changed_at, changed_by, work_orders!wo_stage_history_work_order_id_fkey(title, client_id, clients!work_orders_client_id_fkey(name))')
+    .gte('changed_at', sevenDaysAgo)
+    .order('changed_at', { ascending: false })
+    .limit(150)
 
   const filteredWos = level === 'team'
     ? (wos || []).filter((w: any) => w.team_members?.auth_user_id === authUserId)
@@ -53,13 +71,21 @@ async function buildContext(level: 'owner' | 'admin' | 'team', authUserId: strin
 
   const teamList = (team || []).map((t: any) => '- ' + t.name + ' (' + t.role + ')').join('\n')
 
-  const woList = filteredWos.slice(0, 50).map((w: any) =>
-    '- [' + w.stage + '] ' + w.title +
-    ' | Client: ' + (w.clients?.name || '?') +
-    ' | Service: ' + (w.services?.name || '?') +
-    ' | Due: ' + (w.due_date || 'none') +
-    ' | Owner: ' + (w.team_members?.name || 'unassigned')
-  ).join('\n')
+  const woList = filteredWos.slice(0, 50).map((w: any) => {
+    const assigneeNames = (w.wo_assignees || []).map((a: any) => a.team_members?.name).filter(Boolean).join(', ')
+    const scheduleItems = (w.wo_schedule || [])
+      .sort((a: any, b: any) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
+      .slice(0, 3)
+      .map((sc: any) => sc.title + ' (' + sc.scheduled_date + ')')
+      .join(', ')
+    return '- [' + w.stage + '] ' + w.title +
+      ' | Client: ' + (w.clients?.name || '?') +
+      ' | Service: ' + (w.services?.name || '?') +
+      ' | Due: ' + (w.due_date || 'none') +
+      ' | Owner: ' + (w.team_members?.name || 'unassigned') +
+      (assigneeNames ? ' | Assignees: ' + assigneeNames : '') +
+      (scheduleItems ? ' | Schedule: ' + scheduleItems : '')
+  }).join('\n')
 
   let context = 'You are the A&B Consulting Group internal AI assistant. IMPORTANT: Never share cost, pricing, invoice amounts, or financial data in any message that will be sent to a client or visible in client-facing communications. Cost data is internal only. Today is ' + now + '.\n' +
     'You help the team manage work orders, clients, schedules, and operations.\n' +
@@ -104,6 +130,36 @@ async function buildContext(level: 'owner' | 'admin' | 'team', authUserId: strin
   if (level === 'team') {
     // Strip any cost data — team sees no financials
     context += '\n\nNOTE: Financial data is not available at your access level.'
+  }
+
+  const teamNameMap = Object.fromEntries((team || []).map((t: any) => [t.auth_user_id, t.name]))
+  const stageHistoryList = (stageHistory || [])
+    .filter((h: any) => {
+      if (level === 'team') {
+        const wo = (wos || []).find((w: any) => w.id === h.work_order_id)
+        return (wo?.team_members as any)?.auth_user_id === authUserId
+      }
+      return true
+    })
+    .map((h: any) => {
+      const woTitle = (h.work_orders as any)?.title || h.work_order_id
+      const clientName = (h.work_orders as any)?.clients?.name || '?'
+      const changedBy = h.changed_by ? (teamNameMap[h.changed_by] || h.changed_by) : 'unknown'
+      const when = new Date(h.changed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+      return '- ' + when + ' | ' + woTitle + ' (' + clientName + ') | ' + (h.from_stage || '?') + ' → ' + h.to_stage + ' | by ' + changedBy
+    })
+    .join('\n')
+
+  if (stageHistoryList) {
+    context += '\n\nRECENT STAGE ACTIVITY (last 7 days):\n' + stageHistoryList
+  }
+
+  if (recentComms && recentComms.length > 0) {
+    const commsList = recentComms.map((c: any) => {
+      const when = new Date(c.contacted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return '- ' + when + ' | ' + (c.clients?.name || '?') + ' | ' + c.type + ': ' + (c.summary || '(no summary)')
+    }).join('\n')
+    context += '\n\nRECENT CLIENT COMMS (last 30 days):\n' + commsList
   }
 
   context += '\n\nGUIDELINES:\n' +
@@ -258,6 +314,40 @@ const TOOLS = [
         title: { type: 'string', description: 'What is going out on this date' },
       },
       required: ['scheduled_date', 'type'],
+    },
+  },
+  {
+    name: 'get_wo_detail',
+    description: 'Get full details of a specific work order: tasks, messages, assignees, schedule, and vendor invoices. Use when asked for details, what is left, or full breakdown of a specific WO.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        wo_id:    { type: 'string', description: 'Work order ID (UUID)' },
+        wo_title: { type: 'string', description: 'Work order title partial match' },
+      },
+    },
+  },
+  {
+    name: 'get_client_history',
+    description: 'Get full history for a client: all active WOs, recent stage changes, comms log, and contact info. Use when asked about a specific client overview, history, or relationship.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id:   { type: 'string', description: 'Client ID slug e.g. apollo-supply' },
+        client_name: { type: 'string', description: 'Client name partial match' },
+      },
+    },
+  },
+  {
+    name: 'search_archived_wos',
+    description: 'Search archived, paid, or completed work orders. Use for historical questions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_name: { type: 'string', description: 'Filter by client name' },
+        stage:       { type: 'string', enum: ['paid','archived','invoiced'], description: 'Stage to filter by' },
+        limit:       { type: 'number', description: 'Max results (default 20)' },
+      },
     },
   },
 ]
@@ -561,7 +651,80 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
     }
 
 
-        return 'Unknown tool: ' + name
+    if (name === 'get_wo_detail') {
+      let woId = input.wo_id
+      if (!woId && input.wo_title) {
+        const { data: found } = await supabaseAdmin.from('work_orders').select('id').ilike('title', '%' + input.wo_title + '%').maybeSingle()
+        woId = found?.id
+      }
+      if (!woId) return 'Error: Could not find work order'
+      const { data: wo } = await supabaseAdmin.from('work_orders')
+        .select(`id, title, stage, due_date, priority, notes, est_cost, add_cost,
+                 clients!work_orders_client_id_fkey(name),
+                 team_members!work_orders_owner_id_fkey(name),
+                 wo_assignees(team_members(name)),
+                 wo_tasks(title, status, priority, due_date, notes),
+                 wo_schedule(title, scheduled_date, type),
+                 wo_vendor_invoices(vendor_name, amount, status, due_date),
+                 wo_comments(body, created_at, internal_only)`)
+        .eq('id', woId).maybeSingle()
+      if (!wo) return 'Error: Work order not found'
+      const assignees = ((wo as any).wo_assignees || []).map((a: any) => a.team_members?.name).filter(Boolean).join(', ')
+      const tasks = ((wo as any).wo_tasks || []).map((t: any) => '  [' + t.status + '] ' + t.title + (t.due_date ? ' (due ' + t.due_date + ')' : '') + (t.notes ? ' - ' + t.notes : '')).join('\n')
+      const schedule = ((wo as any).wo_schedule || []).sort((a: any, b: any) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()).map((sc: any) => '  ' + sc.scheduled_date + ' | ' + sc.type + ' | ' + sc.title).join('\n')
+      const vendorInvoices = ((wo as any).wo_vendor_invoices || []).map((v: any) => '  ' + v.vendor_name + ' $' + v.amount + ' [' + v.status + ']' + (v.due_date ? ' due ' + v.due_date : '')).join('\n')
+      const messages = ((wo as any).wo_comments || []).filter((c: any) => level !== 'team' || !c.internal_only).slice(-10).map((c: any) => '  ' + new Date(c.created_at).toLocaleDateString() + ': ' + c.body).join('\n')
+      const parts = [
+        'WO: ' + (wo as any).title + ' [' + (wo as any).stage + ']',
+        'Client: ' + ((wo as any).clients?.name || '?') + ' | Owner: ' + ((wo as any).team_members?.name || 'unassigned') + (assignees ? ' | Assignees: ' + assignees : ''),
+        'Due: ' + ((wo as any).due_date || 'none') + ' | Priority: ' + ((wo as any).priority || 'medium'),
+        (wo as any).notes ? 'Notes: ' + (wo as any).notes : '',
+        tasks ? 'TASKS:\n' + tasks : 'TASKS: none',
+        schedule ? 'SCHEDULE:\n' + schedule : 'SCHEDULE: none',
+        vendorInvoices ? 'VENDOR INVOICES:\n' + vendorInvoices : '',
+        messages ? 'RECENT MESSAGES (last 10):\n' + messages : '',
+      ]
+      return parts.filter(Boolean).join('\n')
+    }
+
+    if (name === 'get_client_history') {
+      let clientId = input.client_id
+      if (!clientId && input.client_name) {
+        const { data: found } = await supabaseAdmin.from('clients').select('id').ilike('name', '%' + input.client_name + '%').maybeSingle()
+        clientId = found?.id
+      }
+      if (!clientId) return 'Error: Could not find client'
+      const { data: client } = await supabaseAdmin.from('clients').select('id, name, contact_name, contact_email, notes').eq('id', clientId).maybeSingle()
+      const { data: clientWos } = await supabaseAdmin.from('work_orders').select('id, title, stage, due_date, team_members!work_orders_owner_id_fkey(name)').eq('client_id', clientId).not('stage', 'in', '(archived,paid)').order('created_at', { ascending: false }).limit(30)
+      const { data: comms } = await supabaseAdmin.from('client_comms').select('type, summary, contacted_at').eq('client_id', clientId).order('contacted_at', { ascending: false }).limit(20)
+      const { data: history } = await supabaseAdmin.from('wo_stage_history').select('from_stage, to_stage, changed_at').in('work_order_id', ((clientWos || []).map((w: any) => w.id))).order('changed_at', { ascending: false }).limit(30)
+      const woLines = (clientWos || []).map((w: any) => '  [' + w.stage + '] ' + w.title + ' | Owner: ' + (w.team_members?.name || '?') + (w.due_date ? ' | Due: ' + w.due_date : '')).join('\n')
+      const commLines = (comms || []).map((c: any) => '  ' + new Date(c.contacted_at).toLocaleDateString() + ' | ' + c.type + ': ' + (c.summary || '(no summary)')).join('\n')
+      const histLines = (history || []).map((h: any) => '  ' + new Date(h.changed_at).toLocaleDateString() + ' | ' + h.from_stage + ' -> ' + h.to_stage).join('\n')
+      const cparts = [
+        'CLIENT: ' + (client as any)?.name,
+        (client as any)?.contact_name ? 'Contact: ' + (client as any).contact_name + ' <' + ((client as any).contact_email || 'no email') + '>' : '',
+        (client as any)?.notes ? 'Notes: ' + (client as any).notes : '',
+        woLines ? 'ACTIVE WOs (' + (clientWos || []).length + '):\n' + woLines : 'No active WOs',
+        commLines ? 'COMMS LOG:\n' + commLines : 'No comms logged',
+        histLines ? 'RECENT STAGE CHANGES:\n' + histLines : '',
+      ]
+      return cparts.filter(Boolean).join('\n')
+    }
+
+    if (name === 'search_archived_wos') {
+      const stageFilter = input.stage || 'paid'
+      const { data: archived } = await supabaseAdmin.from('work_orders')
+        .select('id, title, stage, due_date, created_at, clients!work_orders_client_id_fkey(name), team_members!work_orders_owner_id_fkey(name)')
+        .eq('stage', stageFilter)
+        .order('created_at', { ascending: false })
+        .limit(input.limit || 20)
+      if (!archived?.length) return 'No ' + stageFilter + ' work orders found'
+      const lines = archived.map((w: any) => '- [' + w.stage + '] ' + w.title + ' | Client: ' + (w.clients?.name || '?') + ' | Owner: ' + (w.team_members?.name || '?') + (w.due_date ? ' | Due: ' + w.due_date : '')).join('\n')
+      return 'Found ' + archived.length + ' ' + stageFilter + ' work orders:\n' + lines
+    }
+
+                return 'Unknown tool: ' + name
   } catch (e: any) {
     return 'Tool error: ' + e.message
   }
