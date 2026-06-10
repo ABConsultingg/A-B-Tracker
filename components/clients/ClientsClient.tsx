@@ -187,7 +187,7 @@ export default function ClientsClient({
   portalUsers: PortalUser[]
   recurringServices?: { client_id: string; amount: number; active: boolean }[]
 }) {
-  const isAdmin = currentMember?.role === 'admin'
+  const isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner'
   const portalByClient = useMemo(() => {
     const m: Record<string, PortalUser> = {}
     portalUsers.forEach(p => { m[p.client_id] = p })
