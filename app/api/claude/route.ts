@@ -390,6 +390,22 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
         updated_at: new Date().toISOString(),
       })
       if (error) return 'Error creating WO: ' + error.message
+
+      // Notify Tanya of new WO
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.abconsultingg.com'
+        await fetch(`${appUrl}/api/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            notifications: [{ user_id: 'f9d6e051-1545-4229-9980-c05a29f9dd90', type: 'new_wo' }],
+            wo_title: input.title,
+            wo_id: woId,
+            sender_name: 'Pancho',
+          }),
+        })
+      } catch (e) { console.error('notify error:', e) }
+
       return 'Created work order "' + input.title + '" (ID: ' + woId + ') successfully.'
     }
 

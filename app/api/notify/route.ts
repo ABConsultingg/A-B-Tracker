@@ -7,7 +7,7 @@ const supabaseAdmin = createClient(
 )
 
 type Notification =
-  | { user_id: string; type: 'mention' | 'assignment'; author_name?: string; body_preview?: string }
+  | { user_id: string; type: 'mention' | 'assignment' | 'new_wo'; author_name?: string; body_preview?: string }
   | { user_id: string; type: 'stage_change_team'; stage: string; stage_label: string }
   | { client_id: string; type: 'stage_change_client'; stage: string; stage_label: string }
 
@@ -179,13 +179,16 @@ export async function POST(req: NextRequest) {
         recipientName = recipient.name
 
         const isMention = notif.type === 'mention'
+        const isNewWo = (notif as any).type === 'new_wo'
         subject = isMention
           ? `${n.author_name || 'Someone'} mentioned you in a work order`
+          : isNewWo
+          ? `New work order: ${wo_title}`
           : `You've been assigned to a work order`
         const preview = n.body_preview ? `<p style="color:#555;font-size:14px;border-left:3px solid #b8860b;padding-left:12px;margin:16px 0;">${n.body_preview}</p>` : ''
         const actionUrl = isMention ? `${woUrl}?tab=messages` : woUrl
         const actionLabel = isMention ? 'View Message →' : 'View Work Order →'
-        html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f0;margin:0;padding:32px 16px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);"><div style="background:#1a2744;padding:20px 28px;"><span style="color:#b8860b;font-weight:700;font-size:16px;">A&amp;B Tracker</span></div><div style="padding:28px;"><p style="color:#1a2744;font-size:16px;font-weight:600;margin:0 0 8px;">Hi ${recipientName},</p><p style="color:#444;font-size:14px;margin:0 0 16px;">${isMention ? `<strong>${n.author_name || 'Someone'}</strong> mentioned you in <strong>${wo_title}</strong>.` : `You've been assigned to <strong>${wo_title}</strong>.`}</p>${preview}<a href="${actionUrl}" style="display:inline-block;margin-top:16px;background:#b8860b;color:#1a2744;font-weight:700;font-size:14px;padding:10px 22px;border-radius:6px;text-decoration:none;">${actionLabel}</a></div><div style="padding:16px 28px;border-top:1px solid #eee;"><p style="color:#aaa;font-size:11px;margin:0;">A&amp;B Consulting Group · app.abconsultingg.com</p></div></div></body></html>`
+        html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f0;margin:0;padding:32px 16px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);"><div style="background:#1a2744;padding:20px 28px;"><span style="color:#b8860b;font-weight:700;font-size:16px;">A&amp;B Tracker</span></div><div style="padding:28px;"><p style="color:#1a2744;font-size:16px;font-weight:600;margin:0 0 8px;">Hi ${recipientName},</p><p style="color:#444;font-size:14px;margin:0 0 16px;">${isNewWo ? `A new work order has been created: <strong>${wo_title}</strong>. Review and assign it.` : isMention ? `<strong>${n.author_name || 'Someone'}</strong> mentioned you in <strong>${wo_title}</strong>.` : `You've been assigned to <strong>${wo_title}</strong>.`}</p>${preview}<a href="${actionUrl}" style="display:inline-block;margin-top:16px;background:#b8860b;color:#1a2744;font-weight:700;font-size:14px;padding:10px 22px;border-radius:6px;text-decoration:none;">${actionLabel}</a></div><div style="padding:16px 28px;border-top:1px solid #eee;"><p style="color:#aaa;font-size:11px;margin:0;">A&amp;B Consulting Group · app.abconsultingg.com</p></div></div></body></html>`
 
       } else if (notif.type === 'stage_change_team') {
         const n = notif as { user_id: string; type: string; stage: string; stage_label: string }

@@ -415,6 +415,18 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
       .single()
     if (error) { setSaving(false); alert('Error creating: ' + error.message); return }
 
+    // Notify Tanya of new WO
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notifications: [{ user_id: 'f9d6e051-1545-4229-9980-c05a29f9dd90', type: 'new_wo' }],
+        wo_title: (data as any).title,
+        wo_id: (data as any).id,
+        sender_name: (currentMember as any)?.name || 'Team',
+      }),
+    }).catch(() => {})
+
     const woRow = data as WorkOrder
     if (isCampaignService(woRow.service_id) && campaignPicks.length > 0) {
       const lineItemRows = campaignPicks
