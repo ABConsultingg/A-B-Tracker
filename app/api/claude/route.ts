@@ -312,6 +312,38 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
       if (!woId) return 'Error: Could not find work order "' + (input.wo_title || input.wo_id) + '"'
       const { error } = await supabaseAdmin.from('work_orders').update({ stage: input.new_stage, updated_at: new Date().toISOString() }).eq('id', woId)
       if (error) return 'Error: ' + error.message
+
+      // Fire notifications server-side
+      try {
+        const { data: woData } = await supabaseAdmin.from('work_orders').select('title, client_id, owner_id').eq('id', woId).maybeSingle()
+        const { data: assigneeRows } = await supabaseAdmin.from('wo_assignees').select('team_members(id, auth_user_id)').eq('work_order_id', woId)
+        const { data: stageInfo } = await supabaseAdmin.from('team_members').select('auth_user_id').eq('id', woData?.owner_id || '').maybeSingle()
+        const assigneeAuthIds = (assigneeRows || []).map((r: any) => r.team_members?.auth_user_id).filter(Boolean) as string[]
+        const ownerAuthId = stageInfo?.auth_user_id || null
+        const NOTIFIES_CLIENT = new Set(['sent-for-approval', 'ordered', 'deliverables-executed'])
+        const NOTIFIES_TEAM   = new Set(['approved', 'revisions-received', 'deliverables-completed', 'deliverables-executed'])
+        const { STAGES } = await import('@/lib/types')
+        const stageLabel = STAGES.find((s: any) => s.id === input.new_stage)?.label || input.new_stage
+        const notifications: any[] = []
+        if (NOTIFIES_CLIENT.has(input.new_stage) && woData?.client_id) {
+          notifications.push({ client_id: woData.client_id, type: 'stage_change_client', stage: input.new_stage, stage_label: stageLabel })
+        }
+        if (NOTIFIES_TEAM.has(input.new_stage)) {
+          const teamIds = [...new Set([ownerAuthId, ...assigneeAuthIds].filter(Boolean))] as string[]
+          teamIds.forEach(uid => notifications.push({ user_id: uid, type: 'stage_change_team', stage: input.new_stage, stage_label: stageLabel }))
+        }
+        if (notifications.length && woData) {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.abconsultingg.com'
+          await fetch(`${appUrl}/api/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notifications, wo_title: woData.title, wo_id: woId, sender_name: 'Pancho' }),
+          })
+        }
+      } catch (notifyErr) {
+        console.error('Pancho notify error:', notifyErr)
+      }
+
       return 'Updated work order to stage "' + input.new_stage + '" successfully.'
     }
 

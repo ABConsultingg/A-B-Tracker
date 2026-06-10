@@ -474,8 +474,8 @@ function OverviewTab({
                   woId: wo.id,
                   woTitle: wo.title,
                   clientId: (wo as any).client_id || null,
-                  ownerAuthId: null, // saveField handles auth context
-                  assigneeAuthIds: [],
+                  ownerAuthId: team.find(t => t.id === woState.owner_id)?.auth_user_id || null,
+                  assigneeAuthIds: assignees.map(a => team.find(t => t.id === a.id)?.auth_user_id).filter(Boolean) as string[],
                 })
               }}
               className="rounded border px-2 py-0.5 text-sm"

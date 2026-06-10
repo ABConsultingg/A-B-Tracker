@@ -1,7 +1,7 @@
 import { STAGES } from './types'
 
-const STAGE_NOTIFIES_CLIENT = new Set(['in-progress', 'sent-for-approval', 'deliverables-executed'])
-const STAGE_NOTIFIES_TEAM   = new Set(['approved', 'revisions-received', 'deliverables-executed'])
+const STAGE_NOTIFIES_CLIENT = new Set(['sent-for-approval', 'ordered', 'deliverables-executed'])
+const STAGE_NOTIFIES_TEAM   = new Set(['approved', 'revisions-received', 'deliverables-completed', 'deliverables-executed'])
 
 export async function notifyStageChange({
   stage,

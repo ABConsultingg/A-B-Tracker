@@ -24,6 +24,7 @@ function stageEmail(
   const isDelivered = stageLabel.toLowerCase().includes('executed') || stageLabel.toLowerCase().includes('delivered')
   const isInProgress = stageLabel.toLowerCase().includes('progress')
   const isSentForApproval = stageLabel.toLowerCase().includes('approval')
+  const isOrdered = stageLabel.toLowerCase().includes('ordered')
 
   let emoji = '📋'
   let subject = ''
@@ -31,9 +32,9 @@ function stageEmail(
   let actionLabel = 'View Work Order →'
 
   if (type === 'client') {
-    if (isInProgress) {
-      emoji = '🚀'; subject = `We've started working on "${woTitle}"`
-      message = `Your project <strong>${woTitle}</strong> is now in progress. We'll keep you updated as work progresses.`
+    if (isOrdered) {
+      emoji = '📦'; subject = `Items have been ordered for "${woTitle}"`
+      message = `Great news — the items for <strong>${woTitle}</strong> have been ordered and are on their way. We'll notify you once everything is ready.`
     } else if (isSentForApproval) {
       emoji = '👀'; subject = `"${woTitle}" is ready for your review`
       message = `Your team has completed <strong>${woTitle}</strong> and it's ready for your approval.`
