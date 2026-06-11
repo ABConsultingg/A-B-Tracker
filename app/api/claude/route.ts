@@ -351,6 +351,22 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'match_invoice_to_wos',
+    description: 'Match line items from a paid invoice to work orders and mark them as paid. Use when a user uploads or pastes an invoice and asks to match it to WOs. Extract the line item titles, find matching invoiced WOs by title similarity, and update them to paid stage.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id:      { type: 'string', description: 'Client ID e.g. rbs' },
+        client_name:    { type: 'string', description: 'Client name if ID unknown' },
+        line_items:     { type: 'array', items: { type: 'string' }, description: 'List of invoice line item titles to match against WO titles' },
+        invoice_number: { type: 'string', description: 'Invoice number for reference' },
+        invoice_total:  { type: 'number', description: 'Total invoice amount' },
+        paid_date:      { type: 'string', description: 'Date payment was received YYYY-MM-DD' },
+      },
+      required: ['line_items'],
+    },
+  },
 ]
 
 // ── Tool execution ────────────────────────────────────────────────────────────
@@ -761,6 +777,60 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
       if (!archived?.length) return 'No ' + stageFilter + ' work orders found'
       const lines = archived.map((w: any) => '- [' + w.stage + '] ' + w.title + ' | Client: ' + (w.clients?.name || '?') + ' | Owner: ' + (w.team_members?.name || '?') + (w.due_date ? ' | Due: ' + w.due_date : '')).join('\n')
       return 'Found ' + archived.length + ' ' + stageFilter + ' work orders:\n' + lines
+    }
+
+
+    if (name === 'match_invoice_to_wos') {
+      const { line_items, client_id, client_name, invoice_number, invoice_total, paid_date } = input
+      if (!line_items?.length) return 'Error: no line items provided'
+
+      // Find client ID if only name provided
+      let clientId = client_id
+      if (!clientId && client_name) {
+        const { data: cl } = await supabaseAdmin.from('clients').select('id').ilike('name', '%' + client_name + '%').maybeSingle()
+        clientId = cl?.id
+      }
+
+      // Fetch all invoiced WOs for this client
+      const query = supabaseAdmin.from('work_orders').select('id, title, stage').eq('stage', 'invoiced')
+      if (clientId) query.eq('client_id', clientId)
+      const { data: wos } = await query.limit(200)
+      if (!wos?.length) return 'No invoiced work orders found for this client'
+
+      // Match each line item to a WO using keyword overlap
+      const matched: string[] = []
+      const unmatched: string[] = []
+
+      for (const item of line_items) {
+        const itemWords = item.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3)
+        let bestWo: any = null
+        let bestScore = 0
+        for (const wo of wos) {
+          const titleWords = wo.title.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+          const overlap = itemWords.filter((w: string) => titleWords.some((t: string) => t.includes(w) || w.includes(t))).length
+          const score = overlap / Math.max(itemWords.length, 1)
+          if (score > bestScore && score >= 0.3) { bestScore = score; bestWo = wo }
+        }
+        if (bestWo) matched.push(bestWo.id)
+        else unmatched.push(item)
+      }
+
+      // Deduplicate
+      const uniqueIds = [...new Set(matched)]
+
+      // Mark all matched WOs as paid
+      if (uniqueIds.length > 0) {
+        await supabaseAdmin.from('work_orders').update({ stage: 'paid' }).in('id', uniqueIds)
+      }
+
+      const matchedTitles = uniqueIds.map(id => wos.find((w: any) => w.id === id)?.title).filter(Boolean)
+      return [
+        'Invoice ' + (invoice_number || '') + ' processed.',
+        'Matched and marked PAID (' + uniqueIds.length + '): ' + matchedTitles.join(', '),
+        unmatched.length ? 'Could not match (' + unmatched.length + '): ' + unmatched.join(', ') : 'All line items matched.',
+        invoice_total ? 'Total: $' + invoice_total : '',
+        paid_date ? 'Paid: ' + paid_date : '',
+      ].filter(Boolean).join('\n')
     }
 
                 return 'Unknown tool: ' + name

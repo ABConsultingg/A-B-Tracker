@@ -148,6 +148,15 @@ export default function ClaudeClient({
           reader.readAsDataURL(file)
         })
         newFiles.push({ name: file.name, type: 'image', content, size: file.size, mimeType: file.type })
+      } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        // PDFs — read as base64 for Anthropic document API
+        const content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = e => resolve((e.target?.result as string).split(',')[1])
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        newFiles.push({ name: file.name, type: 'pdf', content, size: file.size, mimeType: 'application/pdf' })
       } else {
         // Any other file type — read as text if possible
         try {
@@ -367,18 +376,23 @@ export default function ClaudeClient({
     // Files attached but not a report request — include file contents as context in chat
     if (attachedFiles.length > 0) {
       const images = attachedFiles.filter(f => f.type === 'image' && f.content)
-      const nonImages = attachedFiles.filter(f => f.type !== 'image')
+      const pdfs = attachedFiles.filter(f => f.type === 'pdf' && f.content)
+      const nonImages = attachedFiles.filter(f => f.type !== 'image' && f.type !== 'pdf')
       const fileContext = nonImages
         .filter(f => f.content)
         .map(f => `[File: ${f.name}]\n${f.content.substring(0, 3000)}${f.content.length > 3000 ? '\n...(truncated)' : ''}`)
         .join('\n\n')
       const textContent = [userText, fileContext].filter(Boolean).join('\n\n') || `Please review these attached files: ${attachedFiles.map(f => f.name).join(', ')}`
 
-      // Build content array with images + text
+      // Build content array with images + PDFs + text
       const contentBlocks: any[] = [
         ...images.map(img => ({
           type: 'image',
           source: { type: 'base64', media_type: img.mimeType || 'image/png', data: img.content }
+        })),
+        ...pdfs.map(pdf => ({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: pdf.content }
         })),
         { type: 'text', text: textContent }
       ]
@@ -388,7 +402,7 @@ export default function ClaudeClient({
         : `Review: ${attachedFiles.map(f => f.name).join(', ')}`
       setInput('')
       setAttachedFiles([])
-      const newMessages: Message[] = [...messages, { role: 'user', content: images.length > 0 ? contentBlocks : textContent }]
+      const newMessages: Message[] = [...messages, { role: 'user', content: (images.length > 0 || pdfs.length > 0) ? contentBlocks : textContent }]
       setMessages(prev => [...prev, { role: 'user', content: displayMsg }])
       setLoading(true)
       try {
