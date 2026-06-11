@@ -438,7 +438,7 @@ export default function Sidebar({
       </aside>
       {/* Claude floating bubble — mobile only */}
       <Link href="/dashboard/claude"
-        className="md:hidden fixed bottom-6 right-4 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
+        className="md:hidden fixed top-1/2 -translate-y-1/2 right-4 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
         style={{ background: 'var(--brand-navy)', color: '#b8860b', fontSize: 22, fontWeight: 700, textDecoration: 'none' }}>
         ✦
       </Link>
