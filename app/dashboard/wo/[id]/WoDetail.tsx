@@ -245,7 +245,7 @@ export default function WoDetail({
                 <span>Owner: {ownerName}</span>
                 <span>·</span>
                 <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                  WO-{wo.id.slice(0, 8)}
+                  {wo.id.slice(0, 11)}
                 </span>
               </div>
             </div>

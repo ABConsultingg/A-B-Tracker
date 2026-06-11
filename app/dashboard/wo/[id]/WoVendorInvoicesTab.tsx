@@ -63,7 +63,7 @@ export default function WoVendorInvoicesTab({
   const [balanceDue, setBalanceDue] = useState('')
   const [pdfUrl, setPdfUrl] = useState('')
 
-  const woShortId = woId.slice(0, 8)
+  const woShortId = woId.slice(0, 11)
 
   const resetForm = () => {
     setInvoiceNumber('')
@@ -107,7 +107,7 @@ export default function WoVendorInvoicesTab({
         invoice_date: invoiceDate,
         amount: amt,
         balance_due: bal,
-        wo_number_text: 'WO-' + woShortId,
+        wo_number_text: woShortId,
         pdf_url: pdfUrl.trim() || null,
         vendor: 'Accurate Printing',
         source: 'manual',
@@ -335,7 +335,7 @@ export default function WoVendorInvoicesTab({
           <div style={{ fontSize: 14, marginBottom: 8 }}>No invoices linked yet.</div>
           <div style={{ fontSize: 12, marginBottom: 16 }}>
             Invoices flow in automatically from Accurate Printing emails.
-            Match is by WO number reference in the PDF (e.g. <code style={{ background: '#e5e7eb', padding: '1px 4px', borderRadius: 3 }}>WO-{woShortId}</code>).
+            Match is by WO number reference in the PDF (e.g. <code style={{ background: '#e5e7eb', padding: '1px 4px', borderRadius: 3 }}>{woShortId}</code>).
           </div>
           <button
             onClick={() => setShowForm(true)}
