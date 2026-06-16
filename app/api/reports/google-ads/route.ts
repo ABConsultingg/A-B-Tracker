@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+// Friendly labels for account IDs (shown in campaign table)
+const ACCOUNT_LABELS: Record<string, string> = {
+  '618-975-6542': 'Exteriors',
+  '468-650-8437': 'Design & Build',
+};
+
 // Culture Construction has two accounts: roofing + design&build
 const WINDSOR_GADS_ACCOUNTS: Record<string, string[]> = {
   'a-b-consulting-group':         ['322-970-4937'],
@@ -78,7 +84,9 @@ export async function GET(req: NextRequest) {
     const campaignMap: Record<string, { cost: number; impressions: number; clicks: number; conversions: number; account: string }> = {};
     rows.forEach(r => {
       const key = `${String(r.account_name)}__${String(r.campaign || 'Unknown')}`;
-      if (!campaignMap[key]) campaignMap[key] = { cost: 0, impressions: 0, clicks: 0, conversions: 0, account: String(r.account_name || '') };
+      const rawAccountId = String(r.account_id || '');
+      const friendlyAccount = ACCOUNT_LABELS[rawAccountId] || String(r.account_name || '');
+      if (!campaignMap[key]) campaignMap[key] = { cost: 0, impressions: 0, clicks: 0, conversions: 0, account: friendlyAccount };
       campaignMap[key].cost        += n(r.spend);
       campaignMap[key].impressions += n(r.impressions);
       campaignMap[key].clicks      += n(r.clicks);
