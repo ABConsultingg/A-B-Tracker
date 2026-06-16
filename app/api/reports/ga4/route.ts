@@ -8,12 +8,15 @@ const supabase = createClient(
 
 // GA4 Property IDs per client
 const GA4_PROPERTIES: Record<string, string> = {
-  'apollo-events':        '318435061',
-  'culture':              '420061105',
-  'kbc-exteriors':        '393206566',
-  'midwest-construction': '400265387',
-  'mvp-chiro':            '468364599',
-  'rbs':                  '305212769',
+  'a-b-consulting-group':         '290594151',
+  'apollo-events':                '318435061',
+  'culture':                      '420061105',
+  'kbc':                          '393206566',
+  'midwest-constrcution-experts': '400265387',
+  'mvp-chiro':                    '468364599',
+  'rbs':                          '305212769',
+  'affiliated-control':           '364563880',
+  'midway-windows-doors':         '254852905',
 }
 
 const IMPERSONATE_EMAIL = 'adrian@abconsultingg.com'
