@@ -46,8 +46,21 @@ export default async function PortalReportPage({
 
   if (!pu) redirect('/portal')
 
-  const month = searchParams.month || currentMonth()
   const clientId = pu.client_id
+
+  // Default to most recent month with approved channels, fallback to current month
+  let month: string = searchParams.month ?? ''
+  if (!month) {
+    const { data: latestApproval } = await supabase
+      .from('client_report_approvals')
+      .select('month')
+      .eq('client_id', clientId)
+      .eq('approved', true)
+      .order('month', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    month = latestApproval?.month ?? currentMonth()
+  }
 
   const [
     { data: report },
