@@ -421,6 +421,8 @@ export default function ReportDashboard({
   const hasData = reportData.length > 0
   const hasMeta = metrics.metaSpend != null
   const hasSocial = metrics.impressions != null
+  const hasLiveAds = liveAds != null && (liveAds.metaSpend != null || liveAds.gadsSpend != null)
+  const hasAnyData = hasData || hasLiveAds
 
   async function saveNarrative() {
     setSavingNarrative(true)
@@ -636,7 +638,7 @@ export default function ReportDashboard({
                     style={{ background: 'var(--bg)', border: '0.5px solid var(--border)', color: 'var(--text)' }}>
                     {savingHighlights ? 'Saving…' : 'Save'}
                   </button>
-                  <button onClick={generateHighlights} disabled={generatingHighlights || !hasData}
+                  <button onClick={generateHighlights} disabled={generatingHighlights || !hasAnyData}
                     className="text-xs px-3 py-1 rounded font-semibold disabled:opacity-40"
                     style={{ background: clientColor, color: 'white' }}>
                     {generatingHighlights ? 'Generating…' : highlights.some(h => h) ? '↺ Regenerate' : '✦ Auto-generate'}
@@ -695,7 +697,7 @@ export default function ReportDashboard({
                       {savingNarrative ? 'Saving…' : 'Save'}
                     </button>
                   )}
-                  <button onClick={generateNarrative} disabled={generating || !hasData}
+                  <button onClick={generateNarrative} disabled={generating || !hasAnyData}
                     className="text-xs px-3 py-1 rounded font-semibold disabled:opacity-40"
                     style={{ background: '#6366f1', color: 'white' }}>
                     {generating ? 'Generating…' : narrative ? '↺ Regenerate' : '✦ Generate'}
@@ -719,7 +721,7 @@ export default function ReportDashboard({
               ) : (
                 <div className="text-sm italic text-center py-6"
                   style={{ color: 'var(--text-muted)' }}>
-                  {hasData ? 'Click "Generate" to create the AI narrative for this report.' : 'Upload files first, then generate the narrative.'}
+                  {hasAnyData ? 'Click "Generate" to create the AI narrative for this report.' : 'Upload files first, then generate the narrative.'}
                 </div>
               )}
             </div>
