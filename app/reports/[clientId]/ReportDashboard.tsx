@@ -275,6 +275,37 @@ export default function ReportDashboard({
   const [generatingHighlights, setGeneratingHighlights] = useState(false)
   const [savingHighlights, setSavingHighlights] = useState(false)
 
+  // Live ad data from Windsor when report_data has no meta/gads
+  const [liveAds, setLiveAds] = useState<{
+    metaSpend: number | null; metaClicks: number | null; metaCtr: number | null; metaCpc: number | null; metaImpressions: number | null;
+    gadsSpend: number | null; gadsClicks: number | null; gadsCtr: number | null; gadsCpc: number | null; gadsConversions: number | null; gadsBilled: number | null;
+  } | null>(null)
+
+  useEffect(() => {
+    // Only fetch Windsor if report_data has no meta_ads rows
+    const hasMetaInDb = reportData.some(r => r.section === 'meta_ads')
+    if (hasMetaInDb) return
+    const q = `clientId=${clientId}&month=${month}`
+    Promise.all([
+      fetch(`/api/reports/meta?${q}`).then(r => r.json()).catch(() => null),
+      fetch(`/api/reports/google-ads?${q}`).then(r => r.json()).catch(() => null),
+    ]).then(([meta, gads]) => {
+      setLiveAds({
+        metaSpend:       meta?.data?.spend       ?? null,
+        metaClicks:      meta?.data?.clicks      ?? null,
+        metaCtr:         meta?.data?.ctr         ?? null,
+        metaCpc:         meta?.data?.cpc         ?? null,
+        metaImpressions: meta?.data?.impressions ?? null,
+        gadsSpend:       gads?.data?.spend       ?? null,
+        gadsBilled:      gads?.data?.billedSpend ?? null,
+        gadsClicks:      gads?.data?.clicks      ?? null,
+        gadsCtr:         gads?.data?.ctr         ?? null,
+        gadsCpc:         gads?.data?.cpc         ?? null,
+        gadsConversions: gads?.data?.conversions ?? null,
+      })
+    })
+  }, [clientId, month, reportData])
+
   async function generateHighlights() {
     setGeneratingHighlights(true)
     const summary = reportData.map(r => `${r.section} / ${r.platform} / ${r.metric}: ${r.value}`).join('\n')
@@ -549,17 +580,30 @@ export default function ReportDashboard({
         {tab === 'overview' && (
           <>
             {/* KPI cards */}
-            {hasSocial || hasMeta ? (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <KpiCard label="Impressions" value={fmt(metrics.impressions)} sub="organic social" color={clientColor} />
-                <KpiCard label="Engagements" value={fmt(metrics.engagements)} sub={`${pct(metrics.engRate)} rate`} color={clientColor} />
-                <KpiCard label="New Followers" value={fmt(metrics.gained)} sub="this month" color={clientColor} />
-                <KpiCard label="Meta Spend" value={money(metrics.metaSpend)} sub={`${pct(metrics.metaCtr)} CTR`} color={clientColor} />
-                <KpiCard label="Meta CPC" value={money(metrics.metaCpc)} sub={`${fmt(metrics.metaClicks)} clicks`} color={clientColor} />
-              </div>
-            ) : (
-              <NoData message="No data uploaded yet." action={`Upload files at /reports/upload`} />
-            )}
+            {(() => {
+              const metaSpend      = metrics.metaSpend      ?? liveAds?.metaSpend      ?? null
+              const metaClicks     = metrics.metaClicks     ?? liveAds?.metaClicks     ?? null
+              const metaCtr        = metrics.metaCtr        ?? liveAds?.metaCtr        ?? null
+              const metaCpc        = metrics.metaCpc        ?? liveAds?.metaCpc        ?? null
+              const gadsSpend      = liveAds?.gadsSpend     ?? null
+              const gadsBilled     = liveAds?.gadsBilled    ?? null
+              const gadsClicks     = liveAds?.gadsClicks    ?? null
+              const gadsCtr        = liveAds?.gadsCtr       ?? null
+              const hasAnyData     = hasSocial || metaSpend != null || gadsSpend != null
+              if (!hasAnyData) return <NoData message="No data uploaded yet." action="Upload files at /reports/upload" />
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <KpiCard label="Impressions"   value={fmt(metrics.impressions)}  sub="organic social"              color={clientColor} />
+                  <KpiCard label="Engagements"   value={fmt(metrics.engagements)}  sub={`${pct(metrics.engRate)} rate`} color={clientColor} />
+                  <KpiCard label="New Followers" value={fmt(metrics.gained)}       sub="this month"                  color={clientColor} />
+                  <KpiCard label="Meta Spend"    value={money(metaSpend)}          sub={`${pct(metaCtr)} CTR · ${fmt(metaClicks)} clicks`} color={clientColor} />
+                  {gadsSpend != null
+                    ? <KpiCard label="G Ads Spend" value={money(gadsBilled ?? gadsSpend)} sub={`${pct(gadsCtr)} CTR · ${fmt(gadsClicks)} clicks`} color={clientColor} />
+                    : <KpiCard label="Meta CPC"    value={money(metaCpc)}           sub={`${fmt(metaClicks)} clicks`} color={clientColor} />
+                  }
+                </div>
+              )
+            })()}
 
             {/* 3 Wins This Month */}
             <div className="rounded-xl border-2 p-5"
