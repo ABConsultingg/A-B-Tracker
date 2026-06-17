@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
@@ -21,6 +21,44 @@ interface Approval {
   notes: string;
   approved_by: string | null;
   approved_at: string | null;
+}
+
+function GA4Tab({ clientId, month }: { clientId: string; month: string }) {
+  const [data, setData] = React.useState<Record<string, number | string | null> | null>(null)
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    fetch(`/api/reports/ga4?clientId=${clientId}&month=${month}`)
+      .then(r => r.json())
+      .then(d => { setData(d.data || null); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [clientId, month])
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading GA4 data…</div>
+  if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>No GA4 data available for this period.</div>
+
+  const fmt = (n: number | null | undefined, dec = 0) => n != null ? n.toLocaleString('en-US', { maximumFractionDigits: dec }) : '—'
+  const pct = (n: number | null | undefined) => n != null ? `${Number(n).toFixed(1)}%` : '—'
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {[
+        { label: 'Sessions',     value: fmt(data.sessions as number) },
+        { label: 'Users',        value: fmt(data.users as number) },
+        { label: 'New Users',    value: fmt(data.newUsers as number) },
+        { label: 'Bounce Rate',  value: pct(data.bounceRate as number) },
+        { label: 'Avg Session',  value: data.avgSessionDuration ? `${Math.floor(Number(data.avgSessionDuration) / 60)}m ${Math.round(Number(data.avgSessionDuration) % 60)}s` : '—' },
+        { label: 'Page Views',   value: fmt(data.pageViews as number) },
+        { label: 'Conversions',  value: fmt(data.conversions as number) },
+        { label: 'Top Channel',  value: String(data.topChannel || '—') },
+      ].map(({ label, value }) => (
+        <div key={label} className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
+          <div className="text-xl font-bold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{value}</div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function LiveDataTab({ clientId, month }: { clientId: string; month: string }) {
@@ -906,20 +944,24 @@ export default function ReportDashboard({
 
         {/* ── GOOGLE ADS ──────────────────────────────────────────────────── */}
         {tab === 'google' && (
-          <PendingSection
-            title="Google Ads"
-            icon="🔍"
-            reason="Google Ads MCC permission pending — go to Tools → API Center in Google Ads MCC (663-027-0833) and approve Zapier as a data partner."
-          />
+          <>
+            {liveAds?.gadsSpend != null ? (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <KpiCard label="Raw Spend" value={money(liveAds.gadsSpend)} color={clientColor} />
+                <KpiCard label="Billed to Client" value={money(liveAds.gadsBilled ?? liveAds.gadsSpend)} color={clientColor} />
+                <KpiCard label="Clicks" value={fmt(liveAds.gadsClicks)} color={clientColor} />
+                <KpiCard label="CTR" value={pct(liveAds.gadsCtr)} color={clientColor} />
+                <KpiCard label="Conversions" value={fmt(liveAds.gadsConversions)} color={clientColor} />
+              </div>
+            ) : (
+              <NoData message="No Google Ads data yet." action="Loading from Windsor…" />
+            )}
+          </>
         )}
 
         {/* ── WEBSITE ─────────────────────────────────────────────────────── */}
         {tab === 'website' && (
-          <PendingSection
-            title="Website Analytics"
-            icon="🌐"
-            reason="GA4 API connection pending. Property IDs are configured — resolve Google Ads permission first, then wire GA4 via Zapier."
-          />
+          <GA4Tab clientId={clientId} month={month} />
         )}
 
         {/* ── EMAIL ───────────────────────────────────────────────────────── */}
