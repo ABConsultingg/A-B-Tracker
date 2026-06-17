@@ -25,6 +25,149 @@ interface Approval {
   approved_at: string | null;
 }
 
+function TopPostsSection({ clientId, month }: { clientId: string; month: string }) {
+  const [posts, setPosts] = React.useState<any[]>([])
+  const supabase = createClient()
+
+  React.useEffect(() => {
+    supabase
+      .from('post_performance_data')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('month', month)
+      .order('engagements', { ascending: false })
+      .limit(4)
+      .then(({ data }) => setPosts(data || []))
+  }, [clientId, month])
+
+  if (!posts.length) return null
+
+  const networkIcon: Record<string, string> = {
+    Facebook: '📘', Instagram: '📸', LinkedIn: '💼', Twitter: '🐦', X: '🐦',
+    YouTube: '▶️', TikTok: '🎵', Pinterest: '📌',
+  }
+
+  return (
+    <div>
+      <div className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>Top Posts</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {posts.map((p, i) => (
+          <div key={i} className="rounded-xl border flex flex-col"
+            style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+            {/* Header */}
+            <div className="px-3 pt-3 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-base">{networkIcon[p.network] || '📱'}</span>
+                <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>{p.profile}</span>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.post_date}</div>
+            </div>
+            {/* Content */}
+            <div className="px-3 py-2 flex-1">
+              <p className="text-xs leading-relaxed line-clamp-4"
+                style={{ color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {p.content || '—'}
+              </p>
+            </div>
+            {/* Metrics */}
+            <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)' }}>
+              <div className="font-bold text-sm mb-1" style={{ color: 'var(--text)' }}>
+                Engagements <span className="ml-1">{(p.engagements || 0).toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <span>Reactions {(p.reactions || 0).toLocaleString()}</span>
+                <span>Comments {(p.comments || 0).toLocaleString()}</span>
+                <span>Shares {(p.shares || 0).toLocaleString()}</span>
+                <span>Link Clicks {(p.post_link_clicks || 0).toLocaleString()}</span>
+                {p.impressions > 0 && <span className="col-span-2">Impressions {(p.impressions || 0).toLocaleString()}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GmbTab({ clientId, month }: { clientId: string; month: string }) {
+  const [locations, setLocations] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const supabase = createClient()
+
+  React.useEffect(() => {
+    supabase
+      .from('gmb_location_data')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('month', month)
+      .order('calls', { ascending: false })
+      .then(({ data }) => { setLocations(data || []); setLoading(false) })
+  }, [clientId, month])
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading GMB data…</div>
+  if (!locations.length) return (
+    <div className="rounded-xl border p-8 text-center" style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)' }}>
+      <div className="text-2xl mb-2">📍</div>
+      <div className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>No GMB data uploaded</div>
+      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Upload a GMB Performance CSV from Google Business Profile</div>
+    </div>
+  )
+
+  const totals = locations.reduce((a, l) => ({
+    search: a.search + l.search_mobile + l.search_desktop,
+    maps: a.maps + l.maps_mobile + l.maps_desktop,
+    calls: a.calls + l.calls,
+    directions: a.directions + l.directions,
+    website: a.website + l.website_clicks,
+  }), { search: 0, maps: 0, calls: 0, directions: 0, website: 0 })
+
+  const f = (n: number) => n.toLocaleString('en-US')
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'Search Views', value: f(totals.search) },
+          { label: 'Maps Views', value: f(totals.maps) },
+          { label: 'Calls', value: f(totals.calls) },
+          { label: 'Directions', value: f(totals.directions) },
+          { label: 'Website Clicks', value: f(totals.website) },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
+            <div className="text-xl font-bold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: 'var(--bg-sunken)' }}>
+              {['Location', 'Search', 'Maps', 'Calls', 'Directions', 'Website'].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {locations.map((l, i) => (
+              <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {l.address || l.business_name}
+                </td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.search_mobile + l.search_desktop)}</td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.maps_mobile + l.maps_desktop)}</td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.calls)}</td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.directions)}</td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.website_clicks)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function EmailTab({ clientId, month }: { clientId: string; month: string }) {
   const [data, setData] = React.useState<Record<string, any> | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -639,7 +782,7 @@ function pct(n: number | null | undefined) {
   return `${n.toFixed(2)}%`
 }
 
-type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live'
+type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb'
 
 export default function ReportDashboard({
   clientId, clientName, clientInitials, clientColor,
@@ -886,6 +1029,7 @@ export default function ReportDashboard({
     { id: 'google',   label: 'Google Ads', icon: '🔍' },
     { id: 'website',  label: 'Website',    icon: '🌐' },
     { id: 'email',    label: 'Email',      icon: '📧' },
+    { id: 'gmb',      label: 'GMB',        icon: '📍' },
   ]
 
   if (!mounted) return null
@@ -1222,6 +1366,7 @@ export default function ReportDashboard({
                   <KpiCard label="Engagement Rate" value={pct(metrics.engRate)} color={clientColor} />
                   <KpiCard label="New Followers" value={fmt(metrics.gained)} color={clientColor} />
                 </div>
+                <TopPostsSection clientId={clientId} month={month} />
 
                 {metrics.byPlatform.length > 0 && (
                   <div className="rounded-xl border" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
@@ -1310,6 +1455,11 @@ export default function ReportDashboard({
 
         {tab === 'email' && (
           <EmailTab clientId={clientId} month={month} />
+        )}
+
+        {/* ── GMB ─────────────────────────────────────────────────────────── */}
+        {tab === 'gmb' && (
+          <GmbTab clientId={clientId} month={month} />
         )}
 
       </div>

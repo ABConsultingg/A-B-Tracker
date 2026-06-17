@@ -41,6 +41,7 @@ function matchesClient(profile: string, clientId: string): boolean {
 const FILE_TYPES = [
   { key: 'profile_performance', label: 'Profile Performance', icon: '📊', accept: '.csv', desc: 'Sprout Social — daily profile metrics (all clients in one file)' },
   { key: 'post_performance',    label: 'Post Performance',    icon: '📊', accept: '.csv', desc: 'Sprout Social — individual post metrics (all clients in one file)' },
+  { key: 'gmb_performance',     label: 'GMB Performance',     icon: '📍', accept: '.csv', desc: 'Google Business Profile — location insights (searches, maps views, calls, directions)' },
   { key: 'paid_performance',    label: 'Paid Performance',    icon: '🎯', accept: '.csv', desc: 'Sprout Social — Meta Ads paid CSV' },
 ]
 
@@ -166,20 +167,117 @@ export default function ReportsUploadPage() {
     } else if (fileType === 'post_performance') {
       const profileCol = headers.indexOf('Profile')
       const networkCol = headers.indexOf('Network')
-      const byClient: Record<string, { rows: number; impressions: number; engagements: number }> = {}
+      const dateCol = headers.indexOf('Date')
+      const postTypeCol = headers.indexOf('Post Type')
+      const postCol = headers.indexOf('Post')
+      const linkCol = headers.indexOf('Link')
+      const impressionsCol2 = headers.indexOf('Impressions')
+      const engagementsCol2 = headers.indexOf('Engagements')
+      const reactionsCol = headers.indexOf('Reactions')
+      const commentsCol = headers.indexOf('Comments')
+      const sharesCol = headers.indexOf('Shares')
+      const plcCol = headers.indexOf('Post Link Clicks')
+      const videoCol = headers.indexOf('Video Views')
+      const erCol = headers.indexOf('Engagement Rate (per Impression)')
+
+      const byClient: Record<string, { rows: number; impressions: number; engagements: number; posts: any[] }> = {}
       for (let i = 1; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i])
         const profile = (cols[profileCol] ?? '').trim()
         const matchedClient = CLIENTS.find(c => matchesClient(profile, c.id))
         if (!matchedClient) continue
-        if (!byClient[matchedClient.id]) byClient[matchedClient.id] = { rows: 0, impressions: 0, engagements: 0 }
+        if (!byClient[matchedClient.id]) byClient[matchedClient.id] = { rows: 0, impressions: 0, engagements: 0, posts: [] }
         byClient[matchedClient.id].rows++
-        byClient[matchedClient.id].impressions += cleanNum(cols[headers.indexOf('Impressions')])
-        byClient[matchedClient.id].engagements += cleanNum(cols[headers.indexOf('Engagements')])
+        const impr = cleanNum(cols[impressionsCol2])
+        const engag = cleanNum(cols[engagementsCol2])
+        byClient[matchedClient.id].impressions += impr
+        byClient[matchedClient.id].engagements += engag
+        byClient[matchedClient.id].posts.push({
+          client_id: matchedClient.id,
+          month,
+          post_date: cols[dateCol]?.trim() || null,
+          network: cols[networkCol]?.trim() || null,
+          profile: profile,
+          post_type: cols[postTypeCol]?.trim() || null,
+          content: (cols[postCol] ?? '').trim().slice(0, 500),
+          link: cols[linkCol]?.trim() || null,
+          impressions: impr,
+          engagements: engag,
+          reactions: cleanNum(cols[reactionsCol]),
+          comments: cleanNum(cols[commentsCol]),
+          shares: cleanNum(cols[sharesCol]),
+          post_link_clicks: cleanNum(cols[plcCol]),
+          video_views: cleanNum(cols[videoCol]),
+          engagement_rate: parseFloat(cols[erCol] ?? '0') || 0,
+        })
       }
       for (const [clientId, data] of Object.entries(byClient)) {
         const client = CLIENTS.find(c => c.id === clientId)!
+        // Save top 10 posts by engagements to DB
+        const topPosts = data.posts.sort((a: any, b: any) => b.engagements - a.engagements).slice(0, 10)
+        if (topPosts.length > 0) {
+          // Delete existing posts for this client/month first
+          await supabase.from('post_performance_data').delete().eq('client_id', clientId).eq('month', month)
+          await supabase.from('post_performance_data').insert(topPosts)
+        }
         results.push({ clientId, clientName: client.name, rows: data.rows, metrics: { impressions: data.impressions, engagements: data.engagements } })
+      }
+
+    } else if (fileType === 'gmb_performance') {
+      // GMB CSV: Store code, Business name, Address, Labels, Search Mobile, Search Desktop, Maps Mobile, Maps Desktop, Calls, Messages, Bookings, Directions, Website clicks...
+      const storeCol = headers.indexOf('Store code')
+      const nameCol = headers.indexOf('Business name')
+      const addrCol = headers.indexOf('Address')
+      const smCol = headers.indexOf('Google Search - Mobile')
+      const sdCol = headers.indexOf('Google Search - Desktop')
+      const mmCol = headers.indexOf('Google Maps - Mobile')
+      const mdCol = headers.indexOf('Google Maps - Desktop')
+      const callsCol = headers.indexOf('Calls')
+      const dirCol = headers.indexOf('Directions')
+      const webCol = headers.indexOf('Website clicks')
+
+      // GMB doesn't have a client profile column — it's per-upload for a specific client
+      // We'll need clientId from context — for now save to 'all' and let user assign
+      // Actually, match by business name
+      const locationRows: any[] = []
+      let matchedClientId = ''
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i])
+        if (!cols[storeCol] && !cols[nameCol]) continue
+        const bizName = (cols[nameCol] ?? '').trim()
+        // Skip the description row (row 2 in the CSV — contains "Number of people...")
+        if (bizName === '' || bizName.startsWith('Number of')) continue
+        if (!matchedClientId) {
+          const mc = CLIENTS.find(c => matchesClient(bizName, c.id))
+          if (mc) matchedClientId = mc.id
+        }
+        locationRows.push({
+          client_id: matchedClientId || 'rbs', // fallback
+          month,
+          store_code: cols[storeCol]?.trim() || null,
+          business_name: bizName,
+          address: cols[addrCol]?.trim() || null,
+          search_mobile: cleanNum(cols[smCol]),
+          search_desktop: cleanNum(cols[sdCol]),
+          maps_mobile: cleanNum(cols[mmCol]),
+          maps_desktop: cleanNum(cols[mdCol]),
+          calls: cleanNum(cols[callsCol]),
+          directions: cleanNum(cols[dirCol]),
+          website_clicks: cleanNum(cols[webCol]),
+        })
+      }
+      if (locationRows.length > 0 && matchedClientId) {
+        // APPEND — dedupe by store_code so multiple regional uploads combine correctly
+        const storeCodes = locationRows.map((r: any) => r.store_code).filter(Boolean)
+        if (storeCodes.length > 0) {
+          await supabase.from('gmb_location_data').delete()
+            .eq('client_id', matchedClientId).eq('month', month).in('store_code', storeCodes)
+        }
+        await supabase.from('gmb_location_data').insert(locationRows.map((r: any) => ({ ...r, client_id: matchedClientId })))
+        const client = CLIENTS.find(c => c.id === matchedClientId)!
+        results.push({ clientId: matchedClientId, clientName: client.name, rows: locationRows.length, metrics: { locations: locationRows.length } })
+      } else {
+        results.push({ clientId: 'all', clientName: 'Could not match client — check business name', rows: locationRows.length, metrics: {} })
       }
 
     } else if (fileType === 'paid_performance') {
