@@ -23,6 +23,75 @@ interface Approval {
   approved_at: string | null;
 }
 
+function EmailTab({ clientId, month }: { clientId: string; month: string }) {
+  const [data, setData] = React.useState<Record<string, any> | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [msg, setMsg] = React.useState('')
+
+  React.useEffect(() => {
+    fetch(`/api/reports/email?clientId=${clientId}&month=${month}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.configured) { setMsg('Email not configured for this client.'); setLoading(false); return }
+        if (!d.data) { setMsg(d.message || 'No campaigns sent this month.'); setLoading(false); return }
+        setData(d.data); setLoading(false)
+      })
+      .catch(() => { setMsg('Error loading email data.'); setLoading(false) })
+  }, [clientId, month])
+
+  const f = (n: number | null | undefined) => n != null ? n.toLocaleString('en-US') : '—'
+  const p = (n: number | null | undefined) => n != null ? `${Number(n).toFixed(1)}%` : '—'
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading email data…</div>
+  if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>{msg}</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Campaigns', value: f(data.campaignCount) },
+          { label: 'Sends', value: f(data.sends) },
+          { label: 'Opens', value: f(data.opens) },
+          { label: 'Open Rate', value: p(data.openRate) },
+          { label: 'Clicks', value: f(data.clicks) },
+          { label: 'Click Rate', value: p(data.clickRate) },
+          { label: 'Unsubscribes', value: f(data.unsubscribes) },
+          { label: 'Bounces', value: f(data.bounces) },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-muted)' }}>{label}</div>
+            <div className="text-xl font-bold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      {data.campaigns?.length > 0 && (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-sunken)' }}>
+                {['Campaign', 'Sends', 'Opens', 'Open Rate', 'Clicks'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.campaigns.map((c: any, i: number) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.sends)}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.opens)}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{c.openRate}%</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.clicks)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function GA4Tab({ clientId, month }: { clientId: string; month: string }) {
   const [data, setData] = React.useState<Record<string, number | string | null> | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -970,11 +1039,7 @@ export default function ReportDashboard({
         )}
 
         {tab === 'email' && (
-          <PendingSection
-            title="Email Marketing"
-            icon="📧"
-            reason="ActiveCampaign API keys pending. Connect RBS and Apollo accounts in Zapier under My Apps → ActiveCampaign → Add new account."
-          />
+          <EmailTab clientId={clientId} month={month} />
         )}
 
       </div>
