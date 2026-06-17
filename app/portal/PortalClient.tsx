@@ -74,13 +74,13 @@ export default function PortalClient({
     <>
       {/* Hero */}
       <div style={{ background: 'linear-gradient(180deg,#0f1b34,#1e2a4a)', color: 'white',
-                    padding: '32px 24px 56px' }}>
+                    padding: 'clamp(20px, 5vw, 32px) clamp(16px, 4vw, 24px) 56px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase',
                         color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>
             Welcome back{greetingName ? `, ${greetingName}` : ''}
           </div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 32, fontWeight: 400, lineHeight: 1.2 }}>
+          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(22px, 5vw, 32px)', fontWeight: 400, lineHeight: 1.2 }}>
             {waitingOnYou.length > 0
               ? <>You have <span style={{ color: '#d99e2b', fontStyle: 'italic' }}>
                   {waitingOnYou.length} {waitingOnYou.length === 1 ? 'thing' : 'things'} to review</span>
@@ -92,7 +92,7 @@ export default function PortalClient({
         </div>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '-32px auto 60px', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '-32px auto 60px', padding: '0 clamp(12px, 4vw, 24px)' }}>
 
         {/* Request a project */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>

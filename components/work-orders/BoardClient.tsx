@@ -250,7 +250,12 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
       if (search && !wo.title.toLowerCase().includes(search.toLowerCase()) && !wo.id.toLowerCase().includes(search.toLowerCase())) return false
       if (filterClient && wo.client_id !== filterClient) return false
       if (filterService && wo.service_id !== filterService) return false
-      if (filterOwner && wo.owner_id !== filterOwner) return false
+      if (filterOwner) {
+        const isOwner = wo.owner_id === filterOwner
+        const woAssignees = assignmentsByWo?.[wo.id] || []
+        const isAssignee = woAssignees.includes(filterOwner)
+        if (!isOwner && !isAssignee) return false
+      }
       if (urlAssignedToMe) {
         if (!currentMember?.id) return false
         const woAssignees = assignmentsByWo?.[wo.id] || []
