@@ -285,6 +285,23 @@ function GA4Section({ ch }: { ch: ChannelData | null }) {
   );
 }
 
+function LeadsSection({ ch }: { ch: ChannelData | null }) {
+  if (!ch) return null
+  if (!ch.configured) return null
+  const d = ch.data as any
+  if (!d) return <div><SecHead icon="🎯" title="Leads (Jotform)" configured={ch.configured} /><NoData msg={ch.message || 'No leads this month.'} /></div>
+  return (
+    <div>
+      <SecHead icon="🎯" title="Leads (Jotform)" configured={ch.configured} />
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <Tile label="Total Leads" value={String(d.totalLeads || 0)} />
+        {d.totalSignups > 0 && <Tile label="Signups" value={String(d.totalSignups)} />}
+        {d.topManufacturers?.[0] && <Tile label="Top Manufacturer" value={d.topManufacturers[0].name} sub={`${d.topManufacturers[0].count} leads`} />}
+      </div>
+    </div>
+  )
+}
+
 function SocialSection({ ch }: { ch: ChannelData | null }) {
   if (!ch) return <div><SecHead icon="🌱" title="Social Media" configured={null} /><NoData msg="Loading…" /></div>;
   const d = ch.data;
@@ -411,17 +428,18 @@ export default function ReportsPage() {
   const fetchClientData = useCallback(async (clientId: string, month: string) => {
     setReportData(prev => ({
       ...prev,
-      [clientId]: { gmb: null, meta: null, gads: null, ga4: null, social: null, email: null, loading: true },
+      [clientId]: { gmb: null, meta: null, gads: null, ga4: null, social: null, email: null, leads: null, loading: true },
     }));
 
     const q = `clientId=${clientId}&month=${month}`;
-    const [gmbRes, metaRes, gadsRes, ga4Res, socialRes, emailRes] = await Promise.allSettled([
+    const [gmbRes, metaRes, gadsRes, ga4Res, socialRes, emailRes, leadsRes] = await Promise.allSettled([
       fetch(`/api/reports/gmb?${q}`).then(r => r.json()),
       fetch(`/api/reports/meta?${q}`).then(r => r.json()),
       fetch(`/api/reports/google-ads?${q}`).then(r => r.json()),
       fetch(`/api/reports/ga4?${q}`).then(r => r.json()),
       fetchSocial(clientId, month),
       fetch(`/api/reports/email?${q}`).then(r => r.json()),
+      fetch(`/api/reports/jotform?${q}`).then(r => r.json()),
     ]);
 
     const val = <T,>(r: PromiseSettledResult<T>): T | null =>
@@ -432,6 +450,7 @@ export default function ReportsPage() {
       [clientId]: {
         gmb: val(gmbRes), meta: val(metaRes), gads: val(gadsRes),
         ga4: val(ga4Res), social: val(socialRes), email: val(emailRes),
+        leads: val(leadsRes),
         loading: false,
       },
     }));
@@ -468,7 +487,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        {[['⭐','Reputation'],['📘','Meta Ads'],['🔵','Google Ads'],['📊','GA4'],['🌱','Social'],['✉️','Email']].map(([icon, label]) => (
+        {[['⭐','Reputation'],['📘','Meta Ads'],['🔵','Google Ads'],['📊','GA4'],['🌱','Social'],['✉️','Email'],['🎯','Leads']].map(([icon, label]) => (
           <span key={label} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {icon} {label}
           </span>
@@ -496,7 +515,7 @@ export default function ReportsPage() {
                       {!client.reports_enabled && <span style={{ fontSize: 10, background: '#f3f4f6', color: '#9ca3af', borderRadius: 20, padding: '1px 6px', fontWeight: 600 }}>Reporting off</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
-                      {[['⭐','Reputation'],['📘','Meta'],['🔵','G Ads'],['📊','GA4'],['🌱','Social'],['✉️','Email']].map(([icon, lbl]) => (
+                      {[['⭐','Reputation'],['📘','Meta'],['🔵','G Ads'],['📊','GA4'],['🌱','Social'],['✉️','Email'],['🎯','Leads']].map(([icon, lbl]) => (
                         <span key={lbl} style={{ fontSize: 10, color: 'var(--text-faint)' }}>{icon} {lbl}</span>
                       ))}
                     </div>
@@ -520,6 +539,7 @@ export default function ReportsPage() {
                         <SocialSection ch={d.social} />
                         <Divider />
                         <EmailSection ch={d.email} />
+                        {(d as any).leads?.configured && <LeadsSection ch={(d as any).leads} />}
                         <div style={{ display: 'flex', gap: 8, marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                           <a href={`/reports/${client.id}`} style={{ fontSize: 12, fontWeight: 600, color: color, border: `1px solid ${color}`, borderRadius: 7, padding: '6px 12px', textDecoration: 'none' }}>Full Report →</a>
                           <button onClick={(e) => { e.stopPropagation(); fetchClientData(client.id, selectedMonth); }} style={{ fontSize: 12, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 12px', background: 'transparent', cursor: 'pointer' }}>↺ Refresh</button>
