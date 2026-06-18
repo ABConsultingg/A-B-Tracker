@@ -89,6 +89,50 @@ async function fetchGA4ChannelBreakdown(propertyId: string, token: string, start
   return res.json()
 }
 
+async function fetchGA4Events(propertyId: string, token: string, startDate: string, endDate: string) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'eventName' }],
+      metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }],
+      orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+      limit: 15,
+    }),
+  })
+  return res.json()
+}
+
+async function fetchGA4Devices(propertyId: string, token: string, startDate: string, endDate: string) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'deviceCategory' }],
+      metrics: [{ name: 'sessions' }, { name: 'totalUsers' }],
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    }),
+  })
+  return res.json()
+}
+
+async function fetchGA4TopPages(propertyId: string, token: string, startDate: string, endDate: string) {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'pagePath' }],
+      metrics: [{ name: 'screenPageViews' }, { name: 'totalUsers' }, { name: 'bounceRate' }, { name: 'averageSessionDuration' }],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+      limit: 10,
+    }),
+  })
+  return res.json()
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { clientId, month } = await req.json()
@@ -211,18 +255,41 @@ export async function GET(req: NextRequest) {
 
     // No cached data — fetch live from GA4 and store
     const token = await getAccessToken();
-    const [overview, channelsData] = await Promise.all([
-      fetchGA4Metrics(propertyId, token,
-        `${month}-01`,
-        `${month}-${new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1]), 0).getDate()}`
-      ),
-      fetchGA4ChannelBreakdown(propertyId, token,
-        `${month}-01`,
-        `${month}-${new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1]), 0).getDate()}`
-      ),
+    const dateStart = `${month}-01`;
+    const dateEnd = `${month}-${new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1]), 0).getDate()}`;
+    const [overview, channelsData, eventsData, devicesData, pagesData] = await Promise.all([
+      fetchGA4Metrics(propertyId, token, dateStart, dateEnd),
+      fetchGA4ChannelBreakdown(propertyId, token, dateStart, dateEnd),
+      fetchGA4Events(propertyId, token, dateStart, dateEnd),
+      fetchGA4Devices(propertyId, token, dateStart, dateEnd),
+      fetchGA4TopPages(propertyId, token, dateStart, dateEnd),
     ]);
 
     const row = overview.rows?.[0]?.metricValues || [];
+    const channels = (channelsData.rows || []).map((r: any) => ({
+      channel: r.dimensionValues?.[0]?.value,
+      sessions: parseFloat(r.metricValues?.[0]?.value || '0'),
+      users: parseFloat(r.metricValues?.[1]?.value || '0'),
+      conversions: parseFloat(r.metricValues?.[2]?.value || '0'),
+    }));
+    const events = (eventsData.rows || []).map((r: any) => ({
+      name: r.dimensionValues?.[0]?.value,
+      count: parseFloat(r.metricValues?.[0]?.value || '0'),
+      users: parseFloat(r.metricValues?.[1]?.value || '0'),
+    }));
+    const devices = (devicesData.rows || []).map((r: any) => ({
+      device: r.dimensionValues?.[0]?.value,
+      sessions: parseFloat(r.metricValues?.[0]?.value || '0'),
+      users: parseFloat(r.metricValues?.[1]?.value || '0'),
+    }));
+    const topPages = (pagesData.rows || []).map((r: any) => ({
+      page: r.dimensionValues?.[0]?.value,
+      views: parseFloat(r.metricValues?.[0]?.value || '0'),
+      users: parseFloat(r.metricValues?.[1]?.value || '0'),
+      bounceRate: parseFloat(r.metricValues?.[2]?.value || '0') * 100,
+      avgDuration: parseFloat(r.metricValues?.[3]?.value || '0'),
+    }));
+
     return NextResponse.json({
       configured: true, clientId, month,
       data: {
@@ -233,11 +300,11 @@ export async function GET(req: NextRequest) {
         avgSessionDuration: parseFloat(row[4]?.value || '0'),
         pageViews:          parseFloat(row[5]?.value || '0'),
         conversions:        parseFloat(row[6]?.value || '0'),
-        topChannel: channelsData.rows?.[0]?.dimensionValues?.[0]?.value || null,
-        channels: (channelsData.rows || []).map((r: any) => ({
-          channel: r.dimensionValues?.[0]?.value,
-          sessions: parseFloat(r.metricValues?.[0]?.value || '0'),
-        })),
+        topChannel: channels[0]?.channel || null,
+        channels,
+        events,
+        devices,
+        topPages,
       },
     });
   } catch (err: unknown) {

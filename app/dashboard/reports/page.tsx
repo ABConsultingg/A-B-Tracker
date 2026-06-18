@@ -263,7 +263,9 @@ function GAdsSection({ ch }: { ch: ChannelData | null }) {
 
 function GA4Section({ ch }: { ch: ChannelData | null }) {
   if (!ch) return <div><SecHead icon="📊" title="Website (GA4)" configured={null} /><NoData msg="Loading…" /></div>;
-  const d = ch.data;
+  const d = ch.data as any;
+  const fmtDur = (s: number) => s ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : '—'
+  const fmtPct = (n: number) => n ? n.toFixed(1) + '%' : '—'
   return (
     <div>
       <SecHead icon="📊" title="Website (GA4)" configured={ch.configured} />
@@ -271,15 +273,114 @@ function GA4Section({ ch }: { ch: ChannelData | null }) {
         ? <NoData msg="GA4 property not mapped for this client." />
         : !d ? <NoData msg={ch.message} />
         : (
-          <TileGrid>
-            <Tile label="Sessions" value={fmt(d.sessions)} />
-            <Tile label="Users" value={fmt(d.users)} />
-            <Tile label="New Users" value={fmt(d.newUsers)} />
-            <Tile label="Bounce Rate" value={pct(d.bounceRate)} hi={d.bounceRate < 40 ? 'good' : d.bounceRate < 60 ? 'warn' : 'bad'} />
-            <Tile label="Avg Session" value={d.avgSessionDuration ? `${Math.floor(d.avgSessionDuration / 60)}m ${Math.round(d.avgSessionDuration % 60)}s` : '—'} />
-            <Tile label="Conversions" value={fmt(d.conversions)} />
-            {d.topChannel && <Tile label="Top Channel" value={d.topChannel} />}
-          </TileGrid>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <TileGrid>
+              <Tile label="Sessions"    value={fmt(d.sessions)} />
+              <Tile label="Users"       value={fmt(d.users)} />
+              <Tile label="New Users"   value={fmt(d.newUsers)} />
+              <Tile label="Page Views"  value={fmt(d.pageViews)} />
+              <Tile label="Bounce Rate" value={pct(d.bounceRate)} hi={d.bounceRate < 40 ? 'good' : d.bounceRate < 60 ? 'warn' : 'bad'} />
+              <Tile label="Avg Session" value={fmtDur(d.avgSessionDuration)} />
+              <Tile label="Conversions" value={fmt(d.conversions)} />
+              {d.topChannel && <Tile label="Top Channel" value={d.topChannel} />}
+            </TileGrid>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              {/* Traffic Channels */}
+              {d.channels?.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '6px 12px', background: 'var(--bg-sunken)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Traffic Sources</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ background: 'var(--bg-sunken)' }}>
+                      <th style={{ padding: '4px 10px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Channel</th>
+                      <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Sessions</th>
+                      <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Conv.</th>
+                    </tr></thead>
+                    <tbody>
+                      {d.channels.slice(0, 6).map((c: any, i: number) => (
+                        <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: '5px 10px', color: 'var(--text)', fontWeight: 500, textTransform: 'capitalize' }}>{c.channel}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(c.sessions)}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(c.conversions)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Devices */}
+              {d.devices?.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '6px 12px', background: 'var(--bg-sunken)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Devices</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ background: 'var(--bg-sunken)' }}>
+                      <th style={{ padding: '4px 10px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Device</th>
+                      <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Sessions</th>
+                      <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Users</th>
+                    </tr></thead>
+                    <tbody>
+                      {d.devices.map((dv: any, i: number) => (
+                        <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: '5px 10px', color: 'var(--text)', fontWeight: 500, textTransform: 'capitalize' }}>{dv.device}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(dv.sessions)}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(dv.users)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Top Events */}
+            {d.events?.length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '6px 12px', background: 'var(--bg-sunken)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Top Events</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: 'var(--bg-sunken)' }}>
+                    <th style={{ padding: '4px 10px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Event</th>
+                    <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Count</th>
+                    <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Users</th>
+                  </tr></thead>
+                  <tbody>
+                    {d.events.map((ev: any, i: number) => (
+                      <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '5px 10px', color: 'var(--text)', fontWeight: 500, fontFamily: 'monospace', fontSize: 11 }}>{ev.name}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(ev.count)}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(ev.users)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Top Pages */}
+            {d.topPages?.length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '6px 12px', background: 'var(--bg-sunken)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Top Pages</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: 'var(--bg-sunken)' }}>
+                    <th style={{ padding: '4px 10px', textAlign: 'left', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Page</th>
+                    <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Views</th>
+                    <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Users</th>
+                    <th style={{ padding: '4px 10px', textAlign: 'right', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>Avg Time</th>
+                  </tr></thead>
+                  <tbody>
+                    {d.topPages.map((pg: any, i: number) => (
+                      <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '5px 10px', color: 'var(--text)', fontFamily: 'monospace', fontSize: 11, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pg.page}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(pg.views)}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmt(pg.users)}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{fmtDur(pg.avgDuration)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
     </div>
   );
