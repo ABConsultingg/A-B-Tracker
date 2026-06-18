@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 type MorningData = {
   type: 'morning'; date: string; member: string
@@ -26,6 +27,9 @@ function getKey(type: string, date: string) { return `ab-popup-${type}-${date}` 
 
 export default function DailyPopups() {
   const [popup, setPopup] = useState<PopupData>(null)
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const fetchAndShow = useCallback(async (type: 'morning' | 'eod', isManual = false) => {
     const today = new Date().toISOString().slice(0, 10)
@@ -38,15 +42,39 @@ export default function DailyPopups() {
         const d = data as MorningData
         if (!d.overdueApproved.length && !d.dueToday.length && !d.tasksDue.length) return
       }
+      setNote('')
+      setSaved(false)
       setPopup(data)
     } catch {}
   }, [])
 
-  const dismiss = useCallback(() => {
+  const dismiss = useCallback(async () => {
     if (!popup) return
+    // Save note if present
+    if (note.trim()) {
+      setSaving(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: member } = await supabase
+            .from('team_members').select('id').eq('auth_user_id', user.id).maybeSingle()
+          if (member) {
+            await supabase.from('daily_standup_notes').upsert({
+              member_id: member.id,
+              date: popup.date,
+              type: popup.type,
+              note: note.trim(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'member_id,date,type' })
+          }
+        }
+      } catch {}
+      setSaving(false)
+    }
     localStorage.setItem(getKey(popup.type, popup.date), '1')
     setPopup(null)
-  }, [popup])
+  }, [popup, note])
 
   useEffect(() => {
     const check = () => {
@@ -83,6 +111,7 @@ export default function DailyPopups() {
           </div>
           <button onClick={dismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--text-muted)', padding: '4px 8px', lineHeight: 1 }}>×</button>
         </div>
+
         {isMorning ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {m.overdueApproved.length > 0 && <Section title={`🚨 Overdue — Needs Action (${m.overdueApproved.length})`} color="#ef4444">
@@ -111,8 +140,32 @@ export default function DailyPopups() {
             )}
           </div>
         )}
-        <button onClick={dismiss} style={{ marginTop: 20, width: '100%', padding: '10px 0', background: 'var(--brand-navy, #1a2744)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-          Got it 👍
+
+        {/* Daily note input */}
+        <div style={{ marginTop: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+            {isMorning ? '📝 What are you working on today?' : '📝 Any notes or blockers to share?'}
+          </label>
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder={isMorning ? 'e.g. Finishing the Culture Construction deliverables, then working on RBS GMB updates...' : 'e.g. Completed 3 WOs, waiting on client feedback for Apollo...'}
+            rows={3}
+            style={{
+              width: '100%', fontSize: 13, padding: '10px 12px', border: '1px solid var(--border)',
+              borderRadius: 10, background: 'var(--bg)', color: 'var(--text)',
+              resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box',
+              outline: 'none', lineHeight: 1.5,
+            }}
+          />
+        </div>
+
+        <button
+          onClick={dismiss}
+          disabled={saving}
+          style={{ marginTop: 12, width: '100%', padding: '12px 0', background: 'var(--brand-navy, #1a2744)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
+        >
+          {saving ? 'Saving...' : note.trim() ? 'Submit & Got it 👍' : 'Got it 👍'}
         </button>
       </div>
     </div>
