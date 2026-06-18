@@ -288,18 +288,33 @@ export default function ReportsUploadPage() {
       const webCol = headers.indexOf('Website clicks')
 
       // Match each row independently to a client by business name
+      // NOTE: Google GMB CSV has a 2-row header — row 0 = column names, row 1 = descriptions.
+      // Start at i=2 to skip the description row.
       const locationRows: any[] = []
-      for (let i = 1; i < lines.length; i++) {
+      for (let i = 2; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i])
         if (!cols[storeCol] && !cols[nameCol]) continue
         const bizName = (cols[nameCol] ?? '').trim()
         if (bizName === '' || bizName.startsWith('Number of')) continue
         const mc = CLIENTS.find(c => matchesClient(bizName, c.id))
         if (!mc) continue // skip unmatched rows
+        // Normalize store code: strip leading zeros, keep as string
+        const rawCode = cols[storeCol]?.trim() || null
+        const storeCode = rawCode ? String(parseInt(rawCode, 10)) : null
+        // Look up RVP from branch directory
+        let rvp: string | null = null
+        if (storeCode) {
+          const { data: branch } = await supabase
+            .from('rbs_branch_directory')
+            .select('rvp')
+            .eq('store_code', storeCode)
+            .single()
+          rvp = branch?.rvp || null
+        }
         locationRows.push({
           client_id: mc.id,
           month,
-          store_code: cols[storeCol]?.trim() || null,
+          store_code: storeCode,
           business_name: bizName,
           address: cols[addrCol]?.trim() || null,
           search_mobile: cleanNum(cols[smCol]),
@@ -309,6 +324,7 @@ export default function ReportsUploadPage() {
           calls: cleanNum(cols[callsCol]),
           directions: cleanNum(cols[dirCol]),
           website_clicks: cleanNum(cols[webCol]),
+          area_manager: rvp,
         })
       }
       // Group by client and upsert
