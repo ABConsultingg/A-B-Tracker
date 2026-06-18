@@ -58,15 +58,24 @@ export async function GET(req: NextRequest) {
           calls:            totals.calls,
           directions:       totals.directions,
           websiteClicks:    totals.website_clicks,
-          locations:        locations.map((l: any) => ({
-            name:          l.business_name,
-            address:       l.address,
-            searchViews:   (l.search_mobile || 0) + (l.search_desktop || 0),
-            mapsViews:     (l.maps_mobile   || 0) + (l.maps_desktop   || 0),
-            calls:         l.calls || 0,
-            directions:    l.directions || 0,
-            websiteClicks: l.website_clicks || 0,
-          })),
+          locations:        locations.map((l: any) => {
+            // Extract city from address e.g. "4150 E 81st Ave, Merrillville, IN 46410" -> "Merrillville, IN"
+            const addrParts = (l.address || '').split(',')
+            const city = addrParts.length >= 3
+              ? `${addrParts[addrParts.length - 2].trim()}, ${addrParts[addrParts.length - 1].trim().split(' ')[0]}`
+              : l.address || l.business_name
+            return {
+              name:          city || l.business_name,
+              fullName:      l.business_name,
+              address:       l.address,
+              storeCode:     l.store_code,
+              searchViews:   (l.search_mobile || 0) + (l.search_desktop || 0),
+              mapsViews:     (l.maps_mobile   || 0) + (l.maps_desktop   || 0),
+              calls:         l.calls || 0,
+              directions:    l.directions || 0,
+              websiteClicks: l.website_clicks || 0,
+            }
+          }),
           source: 'csv',
         },
       })
