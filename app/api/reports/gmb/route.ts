@@ -1,6 +1,478 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleAuth } from 'google-auth-library';
 
+const RBS_BRANCH_MAP: Record<string, { city: string; state: string; area_manager: string; regional_vp: string; location: string }> = {
+  "01": {
+    "city": "Chicago",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "111TH ST."
+  },
+  "02": {
+    "city": "Joliet",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "JOLIET"
+  },
+  "03": {
+    "city": "Chicago",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "63RD ST."
+  },
+  "04": {
+    "city": "Kankakee",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "KANKAKEE"
+  },
+  "10": {
+    "city": "Homer Glen",
+    "state": "IL",
+    "area_manager": ".",
+    "regional_vp": ".",
+    "location": "HOMER GLEN"
+  },
+  "11": {
+    "city": "Michigan City",
+    "state": "IN",
+    "area_manager": "Brendan Kiernan",
+    "regional_vp": "Cory Evans",
+    "location": "MICHIGAN CITY"
+  },
+  "13": {
+    "city": "West Allis",
+    "state": "WI",
+    "area_manager": "Honey Schult",
+    "regional_vp": "Cory Evans",
+    "location": "WEST ALLIS"
+  },
+  "15": {
+    "city": "Frankfort",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "FRANKFORT"
+  },
+  "19": {
+    "city": "Calumet City",
+    "state": "IL",
+    "area_manager": "Joe Linn",
+    "regional_vp": "Angelos Manolis",
+    "location": "CALUMET CITY"
+  },
+  "21": {
+    "city": "Rolling Meadows",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "ROLLING MEADOWS"
+  },
+  "22": {
+    "city": "Carol Stream",
+    "state": "IL",
+    "area_manager": "Joe Linn",
+    "regional_vp": "Angelos Manolis",
+    "location": "CAROL STREAM"
+  },
+  "24": {
+    "city": "Holland",
+    "state": "MI",
+    "area_manager": "Bill Seech",
+    "regional_vp": "Cory Evans",
+    "location": "HOLLAND"
+  },
+  "25": {
+    "city": "Muskegon",
+    "state": "MI",
+    "area_manager": "Bill Seech",
+    "regional_vp": "Cory Evans",
+    "location": "MUSKEGON"
+  },
+  "26": {
+    "city": "Peoria",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "PEORIA"
+  },
+  "27": {
+    "city": "Decatur",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "DECATUR"
+  },
+  "28": {
+    "city": "Champaign",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "CHAMPAIGN"
+  },
+  "29": {
+    "city": "Rock Island",
+    "state": "IL",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "ROCK ISLAND"
+  },
+  "31": {
+    "city": "Elkhart",
+    "state": "IN",
+    "area_manager": "Brendan Kiernan",
+    "regional_vp": "Cory Evans",
+    "location": "ELKHART"
+  },
+  "32": {
+    "city": "Merrillville",
+    "state": "IN",
+    "area_manager": "Brendan Kiernan",
+    "regional_vp": "Cory Evans",
+    "location": "MERRILLVILLE"
+  },
+  "33": {
+    "city": "Westfield",
+    "state": "IN",
+    "area_manager": "Brendan Kiernan",
+    "regional_vp": "Cory Evans",
+    "location": "WESTFIELD"
+  },
+  "34": {
+    "city": "South Bend",
+    "state": "IN",
+    "area_manager": "Brendan Kiernan",
+    "regional_vp": "Cory Evans",
+    "location": "SOUTH BEND"
+  },
+  "37": {
+    "city": "Lindenhurst",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "LINDENHURST"
+  },
+  "38": {
+    "city": "Itasca",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "ITASCA"
+  },
+  "39": {
+    "city": "Ballwin",
+    "state": "MO",
+    "area_manager": "Samatha Smith",
+    "regional_vp": "Cory Evans",
+    "location": "BALLWIN"
+  },
+  "40": {
+    "city": "Kaiser",
+    "state": "MO",
+    "area_manager": "Samatha Smith",
+    "regional_vp": "Cory Evans",
+    "location": "KAISER"
+  },
+  "45": {
+    "city": "Chicago",
+    "state": "IL",
+    "area_manager": "Joe Linn",
+    "regional_vp": "Angelos Manolis",
+    "location": "BELMONT AVE."
+  },
+  "46": {
+    "city": "Ft. Wayne",
+    "state": "IN",
+    "area_manager": "Bill Seech",
+    "regional_vp": "Cory Evans",
+    "location": "FT. WAYNE"
+  },
+  "47": {
+    "city": "Lima",
+    "state": "OH",
+    "area_manager": "Bill Seech",
+    "regional_vp": "Cory Evans",
+    "location": "LIMA"
+  },
+  "49": {
+    "city": "Columbus",
+    "state": "OH",
+    "area_manager": "Cory Price",
+    "regional_vp": "Cory Evans",
+    "location": "COLUMBUS"
+  },
+  "53": {
+    "city": "Normal",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "NORMAL"
+  },
+  "54": {
+    "city": "Maryland Heights",
+    "state": "MO",
+    "area_manager": "Samatha Smith",
+    "regional_vp": "Cory Evans",
+    "location": "MARYLAND HEIGHTS"
+  },
+  "55": {
+    "city": "Poughkeepsie",
+    "state": "NY",
+    "area_manager": "Steve Smith",
+    "regional_vp": "Angelos Manolis",
+    "location": "POUGHKEEPSIE"
+  },
+  "56": {
+    "city": "Middletown",
+    "state": "NY",
+    "area_manager": "Steve Smith",
+    "regional_vp": "Angelos Manolis",
+    "location": "MIDDLETOWN"
+  },
+  "57": {
+    "city": "Albany",
+    "state": "NY",
+    "area_manager": "Steve Smith",
+    "regional_vp": "Angelos Manolis",
+    "location": "COLONIE"
+  },
+  "59": {
+    "city": "Danbury",
+    "state": "CT",
+    "area_manager": "Steve Smith",
+    "regional_vp": "Angelos Manolis",
+    "location": "DANBURY"
+  },
+  "60": {
+    "city": "Milford",
+    "state": "CT",
+    "area_manager": "Steve Smith",
+    "regional_vp": "Angelos Manolis",
+    "location": "MILFORD"
+  },
+  "63": {
+    "city": "Jackson",
+    "state": "MI",
+    "area_manager": "Bill Seech",
+    "regional_vp": "Cory Evans",
+    "location": "JACKSON"
+  },
+  "64": {
+    "city": "Hampton",
+    "state": "VA",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "HAMPTON"
+  },
+  "65": {
+    "city": "Chesapeake",
+    "state": "VA",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "CHESAPEAKE"
+  },
+  "66": {
+    "city": "Richmond",
+    "state": "VA",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "RICHMOND"
+  },
+  "68": {
+    "city": "Elizabeth City",
+    "state": "NC",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "ELIZABETH CITY"
+  },
+  "69": {
+    "city": "Winston-Salem",
+    "state": "NC",
+    "area_manager": "Craig Miller",
+    "regional_vp": "Paige Barwick",
+    "location": "WINSTON-SALEM"
+  },
+  "70": {
+    "city": "Johnson City",
+    "state": "TN",
+    "area_manager": "Craig Miller",
+    "regional_vp": "Paige Barwick",
+    "location": "JOHNSON CITY"
+  },
+  "71": {
+    "city": "Goldsboro",
+    "state": "NC",
+    "area_manager": "Paige Barwick",
+    "regional_vp": "Paige Barwick",
+    "location": "GOLDSBORO"
+  },
+  "72": {
+    "city": "Fayetteville",
+    "state": "NC",
+    "area_manager": "Chris Heston",
+    "regional_vp": "Paige Barwick",
+    "location": "FAYETTEVILLE"
+  },
+  "73": {
+    "city": "Wilmington",
+    "state": "NC",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "WILMINGTON"
+  },
+  "74": {
+    "city": "Winterville",
+    "state": "NC",
+    "area_manager": "Chris Heston",
+    "regional_vp": "Paige Barwick",
+    "location": "WINTERVILLE"
+  },
+  "75": {
+    "city": "Rocky Mount",
+    "state": "NC",
+    "area_manager": "Chris Heston",
+    "regional_vp": "Paige Barwick",
+    "location": "ROCKY MOUNT"
+  },
+  "76": {
+    "city": "Jacksonville",
+    "state": "NC",
+    "area_manager": "Mike Shenton",
+    "regional_vp": "Paige Barwick",
+    "location": "JACKSONVILLE"
+  },
+  "77": {
+    "city": "Myrtle Beach",
+    "state": "SC",
+    "area_manager": "Erin Oliver",
+    "regional_vp": "Paige Barwick",
+    "location": "MYRTLE BEACH"
+  },
+  "78": {
+    "city": "Ladson",
+    "state": "SC",
+    "area_manager": "Erin Oliver",
+    "regional_vp": "Paige Barwick",
+    "location": "LADSON"
+  },
+  "79": {
+    "city": "Raleigh",
+    "state": "NC",
+    "area_manager": "Chris Heston",
+    "regional_vp": "Paige Barwick",
+    "location": "RALEIGH"
+  },
+  "80": {
+    "city": "Greer",
+    "state": "SC",
+    "area_manager": "Erin Oliver",
+    "regional_vp": "Paige Barwick",
+    "location": "GREER"
+  },
+  "81": {
+    "city": "Charlotte",
+    "state": "NC",
+    "area_manager": "Glenn Waters",
+    "regional_vp": "Paige Barwick",
+    "location": "CHARLOTTE"
+  },
+  "82": {
+    "city": "Hardy",
+    "state": "VA",
+    "area_manager": "Craig Miller",
+    "regional_vp": "Paige Barwick",
+    "location": "HARDY"
+  },
+  "83": {
+    "city": "Kansas City",
+    "state": "KS",
+    "area_manager": "Samatha Smith",
+    "regional_vp": "Cory Evans",
+    "location": "KANSAS CITY"
+  },
+  "85": {
+    "city": "Rockford",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "ROCKFORD"
+  },
+  "88": {
+    "city": "Commerce",
+    "state": "GA",
+    "area_manager": "Erin Oliver",
+    "regional_vp": "Paige Barwick",
+    "location": "COMMERCE"
+  },
+  "89": {
+    "city": "Springfield",
+    "state": "IL",
+    "area_manager": "Dave McCourt",
+    "regional_vp": "Angelos Manolis",
+    "location": "SPRINGFIELD"
+  },
+  "90": {
+    "city": "Des Moines",
+    "state": "IA",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "DES MOINES"
+  },
+  "92": {
+    "city": "Dayton",
+    "state": "OH",
+    "area_manager": "Cory Price",
+    "regional_vp": "Cory Evans",
+    "location": "DAYTON"
+  },
+  "93": {
+    "city": "Montgomery",
+    "state": "IL",
+    "area_manager": "Ed Waxmansky",
+    "regional_vp": "Angelos Manolis",
+    "location": "MONTGOMERY"
+  },
+  "94": {
+    "city": "Fond du Lac",
+    "state": "WI",
+    "area_manager": "Honey Schult",
+    "regional_vp": "Cory Evans",
+    "location": "FOND DU LAC"
+  },
+  "95": {
+    "city": "Colorado Springs",
+    "state": "CO",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "COLORADO SPRINGS"
+  },
+  "96": {
+    "city": "Loveland",
+    "state": "CO",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "LOVELAND"
+  },
+  "97": {
+    "city": "Denver",
+    "state": "CO",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "52ND AVE"
+  },
+  "98": {
+    "city": "Denver",
+    "state": "CO",
+    "area_manager": "Shane Seymore",
+    "regional_vp": "Angelos Manolis",
+    "location": "YORK ST."
+  }
+}
+
 const GMB_LOCATION_MAP: Record<string, string> = {
   'culture': '',
   'rbs': '',
@@ -74,6 +546,8 @@ export async function GET(req: NextRequest) {
               calls:         l.calls || 0,
               directions:    l.directions || 0,
               websiteClicks: l.website_clicks || 0,
+              areaManager:   l.area_manager || (l.store_code ? RBS_BRANCH_MAP[String(l.store_code).padStart(2,'0')]?.area_manager : null) || 'Unknown',
+              regionalVp:    l.store_code ? RBS_BRANCH_MAP[String(l.store_code).padStart(2,'0')]?.regional_vp || 'Unknown' : 'Unknown',
             }
           }),
           source: 'csv',
