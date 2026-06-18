@@ -168,6 +168,98 @@ function GmbTab({ clientId, month }: { clientId: string; month: string }) {
   )
 }
 
+function JotformLeadsTab({ clientId, month }: { clientId: string; month: string }) {
+  const [data, setData] = React.useState<Record<string, any> | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [msg, setMsg] = React.useState('')
+
+  React.useEffect(() => {
+    fetch(`/api/reports/jotform?clientId=${clientId}&month=${month}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.configured) { setMsg('No Jotform configured for this client.'); setLoading(false); return }
+        if (!d.data) { setMsg(d.message || 'No leads this month.'); setLoading(false); return }
+        setData(d.data); setLoading(false)
+      })
+      .catch(() => { setMsg('Error loading leads data.'); setLoading(false) })
+  }, [clientId, month])
+
+  const f = (n: number | null | undefined) => n != null ? n.toLocaleString('en-US') : '—'
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading leads data…</div>
+  if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>{msg}</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-muted)' }}>Total Leads</div>
+          <div className="text-2xl font-bold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{f(data.totalLeads)}</div>
+        </div>
+        {data.totalSignups > 0 && (
+          <div className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-muted)' }}>Newsletter Signups</div>
+            <div className="text-2xl font-bold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{f(data.totalSignups)}</div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {data.topManufacturers?.length > 0 && (
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <div className="px-4 py-2 text-xs font-bold uppercase tracking-wide" style={{ background: 'var(--bg-sunken)', color: 'var(--text-muted)' }}>Top Manufacturers</div>
+            {data.topManufacturers.map((m: any, i: number) => (
+              <div key={i} className="flex justify-between px-4 py-2 border-t text-sm" style={{ borderColor: 'var(--border)' }}>
+                <span style={{ color: 'var(--text)' }}>{m.name}</span>
+                <span className="font-mono font-semibold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{m.count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {data.topSources?.length > 0 && (
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <div className="px-4 py-2 text-xs font-bold uppercase tracking-wide" style={{ background: 'var(--bg-sunken)', color: 'var(--text-muted)' }}>How They Found Us</div>
+            {data.topSources.map((s: any, i: number) => (
+              <div key={i} className="flex justify-between px-4 py-2 border-t text-sm" style={{ borderColor: 'var(--border)' }}>
+                <span style={{ color: 'var(--text)' }}>{s.name}</span>
+                <span className="font-mono font-semibold" style={{ color: 'var(--brand-navy, #1a2744)' }}>{s.count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {data.recentLeads?.length > 0 && (
+        <div>
+          <div className="text-sm font-bold mb-2" style={{ color: 'var(--text)' }}>Recent Leads</div>
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-sunken)' }}>
+                  {['Date', 'Name', 'Company', 'Manufacturer', 'Request'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentLeads.map((l: any, i: number) => (
+                  <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: 12 }}>{l.date}</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)' }}>{l.name}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-muted)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.company}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{l.manufacturer}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.request}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EmailTab({ clientId, month }: { clientId: string; month: string }) {
   const [data, setData] = React.useState<Record<string, any> | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -813,7 +905,7 @@ function pct(n: number | null | undefined) {
   return `${n.toFixed(2)}%`
 }
 
-type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb'
+type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads'
 
 export default function ReportDashboard({
   clientId, clientName, clientInitials, clientColor,
@@ -1061,6 +1153,7 @@ export default function ReportDashboard({
     { id: 'website',  label: 'Website',    icon: '🌐' },
     { id: 'email',    label: 'Email',      icon: '📧' },
     { id: 'gmb',      label: 'GMB',        icon: '📍' },
+    { id: 'leads',    label: 'Leads',      icon: '🎯' },
   ]
 
   if (!mounted) return null
@@ -1491,6 +1584,11 @@ export default function ReportDashboard({
         {/* ── GMB ─────────────────────────────────────────────────────────── */}
         {tab === 'gmb' && (
           <GmbTab clientId={clientId} month={month} />
+        )}
+
+        {/* ── LEADS (Jotform) ─────────────────────────────────────────────── */}
+        {tab === 'leads' && (
+          <JotformLeadsTab clientId={clientId} month={month} />
         )}
 
       </div>
