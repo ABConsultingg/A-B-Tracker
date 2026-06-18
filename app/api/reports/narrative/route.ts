@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       messages: [{
         role: 'user',
         content: question
-          ? `You are a senior digital marketing strategist. Client: ${clientName}. Month: ${month}.\n\nData:\n${summary}\n\n${question}`
+          ? `You are a senior digital marketing strategist. Client: ${clientName}. Month: ${month}. All currency values are in USD ($).\n\nData:\n${summary}\n\n${question}`
           : `You are a senior digital marketing strategist writing a concise monthly performance narrative for a client report.
 
 Client: ${clientName}
@@ -31,7 +31,7 @@ Write 3 short paragraphs (2-3 sentences each):
 2. The biggest concern or gap with a specific number and why it matters
 3. One clear recommendation the client should act on next month
 
-Rules: plain language, lead with the most important fact, be specific, no headers or bullets, no "This month" or "Overall" openers, sound like a strategic advisor.`,
+Rules: plain language, lead with the most important fact, be specific, no headers or bullets, no "This month" or "Overall" openers, sound like a strategic advisor. All currency values are in USD — always use $ symbol, never £ or € or any other currency symbol.`,
       }],
     }),
   })
