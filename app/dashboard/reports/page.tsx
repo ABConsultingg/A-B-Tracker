@@ -172,15 +172,11 @@ function GmbSection({ ch }: { ch: ChannelData | null }) {
               <Tile label="Website Clicks" value={fmt(d.websiteClicks)} />
             </TileGrid>
             {d.locations?.length > 0 && (() => {
-              const byVp: Record<string, Record<string, any[]>> = {}
+              const byVp: Record<string, any[]> = {}
               d.locations.forEach((l: any) => {
-                const vp = l.regionalVp && l.regionalVp !== 'Unknown' ? l.regionalVp : null
-                const am = l.areaManager && l.areaManager !== 'Unknown' ? l.areaManager : null
-                const vpKey = vp || 'All Locations'
-                const amKey = am || 'Unknown'
-                if (!byVp[vpKey]) byVp[vpKey] = {}
-                if (!byVp[vpKey][amKey]) byVp[vpKey][amKey] = []
-                byVp[vpKey][amKey].push(l)
+                const vpKey = (l.regionalVp && l.regionalVp !== 'Unknown') ? l.regionalVp : 'All Locations'
+                if (!byVp[vpKey]) byVp[vpKey] = []
+                byVp[vpKey].push(l)
               })
               const hasVpData = Object.keys(byVp).some(k => k !== 'All Locations')
               const renderTable = (locs: any[]) => (
@@ -211,26 +207,15 @@ function GmbSection({ ch }: { ch: ChannelData | null }) {
               )
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                  {Object.entries(byVp).map(([vp, areas]) => {
-                    const vpLocs = Object.values(areas).flat() as any[]
-                    const vpC = vpLocs.reduce((a,l)=>({calls:a.calls+l.calls,websiteClicks:a.websiteClicks+l.websiteClicks}),{calls:0,websiteClicks:0})
+                  {Object.entries(byVp).map(([vp, locs]) => {
+                    const vpC = (locs as any[]).reduce((a,l)=>({calls:a.calls+l.calls,websiteClicks:a.websiteClicks+l.websiteClicks}),{calls:0,websiteClicks:0})
                     return (
                       <div key={vp} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
                         <div style={{ padding: '7px 12px', background: 'var(--brand-navy,#1a2744)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
                           <span>🏢 {vp}</span>
-                          <span style={{ fontWeight: 400, fontSize: 11, opacity: 0.8 }}>{vpLocs.length} loc · {fmt(vpC.calls)} calls · {fmt(vpC.websiteClicks)} clicks</span>
+                          <span style={{ fontWeight: 400, fontSize: 11, opacity: 0.8 }}>{(locs as any[]).length} loc · {fmt(vpC.calls)} calls · {fmt(vpC.websiteClicks)} clicks</span>
                         </div>
-                        {Object.entries(areas).map(([am, locs]) => {
-                          const amC = (locs as any[]).reduce((a,l)=>({calls:a.calls+l.calls,websiteClicks:a.websiteClicks+l.websiteClicks}),{calls:0,websiteClicks:0})
-                          return (
-                            <div key={am}>
-                              <div style={{ padding: '4px 12px', background: 'var(--bg-sunken)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
-                                <span>👤 {am}</span><span>{(locs as any[]).length} loc · {fmt(amC.calls)} calls · {fmt(amC.websiteClicks)} clicks</span>
-                              </div>
-                              {renderTable(locs as any[])}
-                            </div>
-                          )
-                        })}
+                        {renderTable(locs as any[])}
                       </div>
                     )
                   })}
