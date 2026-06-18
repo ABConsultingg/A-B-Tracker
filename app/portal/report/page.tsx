@@ -198,84 +198,9 @@ export default async function PortalReportPage({
         </div>
       )}
 
-      {/* KPI cards */}
-      {hasData && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                      gap: 12, marginBottom: 20 }}>
-          {[
-            { label: 'Social Impressions', value: fmt(impressions) },
-            { label: 'Engagements', value: fmt(engagements) },
-            { label: 'Engagement Rate', value: pct(engRate) },
-            { label: 'New Followers', value: fmt(gained) },
-            { label: 'Meta Ads Spend', value: money(metaSpend) },
-            { label: 'Meta Ads CTR', value: pct(metaCtr) },
-          ].map(k => (
-            <div key={k.label}
-              style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 10,
-                       padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.8px',
-                            color: '#9ca3af', marginBottom: 6, fontWeight: 600 }}>
-                {k.label}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#0f1b34', letterSpacing: '-0.5px' }}>
-                {k.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {/* Social platform breakdown */}
-      {hasData && (() => {
-        const platforms = ['facebook', 'instagram', 'linkedin']
-        const rows = platforms.map(p => ({
-          name: p.charAt(0).toUpperCase() + p.slice(1),
-          impressions: (reportData || [])
-            .filter(r => r.section === 'social_organic' && r.platform?.includes(p) && r.metric === 'impressions')
-            .reduce((s, r) => s + (r.value ?? 0), 0),
-          engagements: (reportData || [])
-            .filter(r => r.section === 'social_organic' && r.platform?.includes(p) && r.metric === 'engagements')
-            .reduce((s, r) => s + (r.value ?? 0), 0),
-        })).filter(r => r.impressions > 0 || r.engagements > 0)
 
-        if (!rows.length) return null
-        return (
-          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12,
-                        padding: 24, marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f1b34', marginBottom: 16 }}>
-              📱 Social Media by Platform
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  {['Platform', 'Impressions', 'Engagements', 'Eng. Rate'].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '6px 12px 10px',
-                                         color: '#9ca3af', fontWeight: 600, fontSize: 11,
-                                         textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.name} style={{ borderBottom: '1px solid #f9fafb' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0f1b34' }}>{r.name}</td>
-                    <td style={{ padding: '10px 12px', color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>
-                      {r.impressions.toLocaleString()}
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>
-                      {r.engagements.toLocaleString()}
-                    </td>
-                    <td style={{ padding: '10px 12px', fontVariantNumeric: 'tabular-nums',
-                                  color: r.impressions > 0 && (r.engagements / r.impressions * 100) > 2 ? '#10b981' : '#6b7280' }}>
-                      {r.impressions > 0 ? pct(r.engagements / r.impressions * 100) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      })()}
+
 
       {/* Footer */}
       <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', paddingTop: 24 }}>
