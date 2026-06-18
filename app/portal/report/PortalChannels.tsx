@@ -54,8 +54,7 @@ function renderMeta(d: any) {
   return (
     <div>
       <KpiGrid items={[
-        { label: 'Raw Spend', value: money(d.spend) },
-        { label: 'Billed', value: money(d.billedSpend ?? d.spend) },
+        { label: 'Ad Spend', value: money(d.billedSpend ?? d.spend) },
         { label: 'Impressions', value: fmt(d.impressions) },
         { label: 'Clicks', value: fmt(d.clicks) },
         { label: 'CTR', value: pct(d.ctr) },
@@ -63,7 +62,6 @@ function renderMeta(d: any) {
         { label: 'CPM', value: money(d.cpm) },
         { label: 'Reach', value: fmt(d.reach) },
         { label: 'Conversions', value: fmt(d.conversions) },
-        { label: 'ROAS', value: d.roas != null ? `${d.roas}x` : '—' },
       ]} />
       <DataTable title="Campaign Breakdown" headers={['Campaign', 'Spend', 'Impressions', 'Clicks', 'CTR', 'Conv.']}
         rows={(d.campaigns || []).map((c: any) => [c.name, money(c.spend), fmt(c.impressions), fmt(c.clicks), c.clicks > 0 && c.impressions > 0 ? pct((c.clicks/c.impressions)*100) : '—', fmt(c.conversions)])} />
@@ -75,8 +73,7 @@ function renderGads(d: any) {
   return (
     <div>
       <KpiGrid items={[
-        { label: 'Raw Spend', value: money(d.spend) },
-        { label: 'Billed', value: money(d.billedSpend ?? d.spend) },
+        { label: 'Ad Spend', value: money(d.billedSpend ?? d.spend) },
         { label: 'Impressions', value: fmt(d.impressions) },
         { label: 'Clicks', value: fmt(d.clicks) },
         { label: 'CTR', value: pct(d.ctr) },
@@ -84,7 +81,6 @@ function renderGads(d: any) {
         { label: 'CPM', value: money(d.cpm) },
         { label: 'Conversions', value: fmt(d.conversions) },
         { label: 'Cost/Conv.', value: money(d.costPerConversion) },
-        { label: 'ROAS', value: d.roas != null ? `${d.roas}x` : '—' },
       ]} />
       <DataTable title="Campaign Breakdown" headers={['Campaign', 'Spend', 'Clicks', 'CTR', 'Conv.']}
         rows={(d.campaigns || []).map((c: any) => [c.name, money(c.cost), fmt(c.clicks), pct(c.ctr), fmt(c.conversions)])} />
@@ -203,8 +199,30 @@ function renderSocial(d: any) {
         { label: 'Video Views', value: fmt(d.videoViews) },
         { label: 'Link Clicks', value: fmt(d.postLinkClicks) },
       ]} />
-      <DataTable title="By Platform" headers={['Platform', 'Posts', 'Impressions', 'Engagements', 'Eng. Rate']}
-        rows={(d.platforms || []).map((p: any) => [p.platform, fmt(p.posts), fmt(p.impressions), fmt(p.engagements), p.impressions > 0 ? pct((p.engagements/p.impressions)*100) : '—'])} />
+      <DataTable title="By Platform" headers={['Platform', 'Posts', 'Impressions', 'Engagements', 'Video Views', 'Link Clicks']}
+        rows={(d.platforms || []).map((p: any) => [p.platform, fmt(p.posts), fmt(p.impressions), fmt(p.engagements), fmt(p.videoViews), fmt(p.postLinkClicks)])} />
+      {d.branchPages && (
+        <div style={{ marginTop: 16, border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', background: '#f0f9ff', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0f1b34' }}>📍 Branch Pages — {fmt(d.branchPages.branchCount)} Locations (Facebook)</div>
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Aggregate performance across all branch Facebook pages</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, padding: 12 }}>
+            {[
+              { label: 'Impressions', value: fmt(d.branchPages.impressions) },
+              { label: 'Engagements', value: fmt(d.branchPages.engagements) },
+              { label: 'Video Views', value: fmt(d.branchPages.videoViews) },
+              { label: 'Link Clicks', value: fmt(d.branchPages.postLinkClicks) },
+              { label: 'Eng. Rate', value: d.branchPages.impressions > 0 ? pct(d.branchPages.engagements / d.branchPages.impressions * 100) : '—' },
+            ].map(k => (
+              <div key={k.label} style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px' }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.7px', color: '#9ca3af', fontWeight: 600, marginBottom: 3 }}>{k.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f1b34' }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
