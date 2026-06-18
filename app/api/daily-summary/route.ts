@@ -38,14 +38,14 @@ export async function GET(req: NextRequest) {
       (w.wo_assignees || []).some((a: any) => a.team_members?.auth_user_id === user.id)
     )
 
-    const EXCLUDE_OVERDUE = ['approved', 'sent-for-approval', 'revisions-received', 'paid', 'invoiced', 'archived']
+    const EXCLUDE_OVERDUE = ['approved', 'sent-for-approval', 'revisions-received', 'paid', 'invoiced', 'archived', 'deliverables-executed', 'on-hold']
     const overdueApproved = filtered.filter((w: any) => w.due_date && w.due_date < today && !EXCLUDE_OVERDUE.includes(w.stage))
     const dueToday = filtered.filter((w: any) => w.due_date === today)
 
     const { data: tasks } = await supabaseAdmin
       .from('wo_tasks')
       .select('id, title, status, due_date, work_order_id, work_orders!wo_tasks_work_order_id_fkey(title, clients!work_orders_client_id_fkey(name))')
-      .not('status', 'eq', 'done')
+      .not('status', 'in', '(done,on-hold,cancelled)')
       .lte('due_date', today)
       .order('due_date', { ascending: true })
       .limit(50)
@@ -58,19 +58,42 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const { data: stageChanges } = await supabaseAdmin
+  // EOD: fetch WO ids the user owns or is assigned to (for non-admins)
+  let userWoIds: string[] | null = null
+  if (!isAdmin) {
+    const { data: ownedWos } = await supabaseAdmin
+      .from('work_orders').select('id').eq('owner_id', member.id)
+    const { data: assignedWos } = await supabaseAdmin
+      .from('wo_assignees').select('work_order_id').eq('team_member_id', member.id)
+    userWoIds = [
+      ...new Set([
+        ...(ownedWos || []).map((w: any) => w.id),
+        ...(assignedWos || []).map((a: any) => a.work_order_id),
+      ])
+    ]
+  }
+
+  let stageQuery = supabaseAdmin
     .from('wo_stage_history')
     .select('work_order_id, to_stage, changed_at, work_orders!wo_stage_history_work_order_id_fkey(title, clients!work_orders_client_id_fkey(name))')
     .in('to_stage', ['deliverables-completed', 'deliverables-executed', 'approved', 'sent-for-approval', 'invoiced', 'paid'])
     .gte('changed_at', todayStart).lte('changed_at', todayEnd)
     .order('changed_at', { ascending: false })
+  if (userWoIds !== null) stageQuery = stageQuery.in('work_order_id', userWoIds.length ? userWoIds : ['none'])
+  const { data: stageChanges } = await stageQuery
 
-  const { data: doneTasks } = await supabaseAdmin
+  let tasksQuery = supabaseAdmin
     .from('wo_tasks')
-    .select('id, title, updated_at, work_orders!wo_tasks_work_order_id_fkey(title, clients!work_orders_client_id_fkey(name))')
+    .select('id, title, updated_at, work_orders!wo_tasks_work_order_id_fkey(id, title, clients!work_orders_client_id_fkey(name))')
     .eq('status', 'done')
     .gte('updated_at', todayStart).lte('updated_at', todayEnd)
     .order('updated_at', { ascending: false }).limit(30)
+  if (userWoIds !== null) {
+    const woIds = userWoIds.length ? userWoIds : ['none']
+    // filter tasks to only those belonging to user's WOs
+    tasksQuery = tasksQuery.in('work_order_id', woIds)
+  }
+  const { data: doneTasks } = await tasksQuery
 
   return NextResponse.json({
     type: 'eod', date: today, member: member.name,
