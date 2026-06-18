@@ -601,7 +601,7 @@ export default function ReportsPage() {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     // Default to previous month if we're in the first week, otherwise current month
     const now = new Date()
-    if (now.getDate() <= 10) {
+    if (now.getDate() <= 20) {
       // First 10 days — likely no data for current month yet, show previous
       const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       return prev.toISOString().slice(0, 7)

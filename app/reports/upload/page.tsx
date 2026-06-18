@@ -318,11 +318,9 @@ export default function ReportsUploadPage() {
         byClient[r.client_id].push(r)
       })
       for (const [clientId, rows] of Object.entries(byClient)) {
-        const storeCodes = rows.map((r: any) => r.store_code).filter(Boolean)
-        if (storeCodes.length > 0) {
-          await supabase.from('gmb_location_data').delete()
-            .eq('client_id', clientId).eq('month', month).in('store_code', storeCodes)
-        }
+        // Delete all existing rows for this client+month before inserting fresh
+        await supabase.from('gmb_location_data').delete()
+          .eq('client_id', clientId).eq('month', month)
         await supabase.from('gmb_location_data').insert(rows)
         const client = CLIENTS.find(c => c.id === clientId)!
         results.push({ clientId, clientName: client?.name || clientId, rows: rows.length, metrics: { locations: rows.length } })
