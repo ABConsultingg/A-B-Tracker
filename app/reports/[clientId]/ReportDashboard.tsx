@@ -92,6 +92,7 @@ function TopPostsSection({ clientId, month }: { clientId: string; month: string 
 function GmbTab({ clientId, month }: { clientId: string; month: string }) {
   const [locations, setLocations] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [rvpFilter, setRvpFilter] = React.useState<string>('All')
   const supabase = createClient()
 
   React.useEffect(() => {
@@ -113,12 +114,16 @@ function GmbTab({ clientId, month }: { clientId: string; month: string }) {
     </div>
   )
 
-  const totals = locations.reduce((a, l) => ({
-    search: a.search + l.search_mobile + l.search_desktop,
-    maps: a.maps + l.maps_mobile + l.maps_desktop,
-    calls: a.calls + l.calls,
-    directions: a.directions + l.directions,
-    website: a.website + l.website_clicks,
+  // RVP filter options
+  const rvps = ['All', ...Array.from(new Set(locations.map(l => l.area_manager).filter(Boolean))).sort()]
+  const filtered = rvpFilter === 'All' ? locations : locations.filter(l => l.area_manager === rvpFilter)
+
+  const totals = filtered.reduce((a, l) => ({
+    search: a.search + (l.search_mobile || 0) + (l.search_desktop || 0),
+    maps: a.maps + (l.maps_mobile || 0) + (l.maps_desktop || 0),
+    calls: a.calls + (l.calls || 0),
+    directions: a.directions + (l.directions || 0),
+    website: a.website + (l.website_clicks || 0),
   }), { search: 0, maps: 0, calls: 0, directions: 0, website: 0 })
 
   const f = (n: number) => n.toLocaleString('en-US')
@@ -139,28 +144,58 @@ function GmbTab({ clientId, month }: { clientId: string; month: string }) {
           </div>
         ))}
       </div>
+
+      {/* RVP filter tabs */}
+      {rvps.length > 1 && (
+        <div className="flex gap-2 flex-wrap">
+          {rvps.map(rvp => (
+            <button
+              key={rvp}
+              onClick={() => setRvpFilter(rvp)}
+              style={{
+                padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: rvpFilter === rvp ? 'var(--brand-navy, #1a2744)' : 'var(--bg-elevated)',
+                color: rvpFilter === rvp ? '#fff' : 'var(--text)',
+              }}
+            >
+              {rvp === 'All' ? `All (${locations.length})` : `${rvp.split(' ')[0]} (${locations.filter(l => l.area_manager === rvp).length})`}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--bg-sunken)' }}>
-              {['Location', 'Search', 'Maps', 'Calls', 'Directions', 'Website'].map(h => (
+              {['BR#', 'Location', 'Search', 'Maps', 'Calls', 'Directions', 'Website'].map(h => (
                 <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {locations.map((l, i) => (
-              <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {l.address || l.business_name}
-                </td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.search_mobile + l.search_desktop)}</td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.maps_mobile + l.maps_desktop)}</td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.calls)}</td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.directions)}</td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.website_clicks)}</td>
-              </tr>
-            ))}
+            {filtered.map((l, i) => {
+              const addrParts = (l.address || '').split(',')
+              const city = addrParts.length >= 3
+                ? `${addrParts[addrParts.length - 2].trim()}, ${addrParts[addrParts.length - 1].trim().split(' ')[0]}`
+                : l.address || l.business_name
+              return (
+                <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    #{l.store_code}
+                  </td>
+                  <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {city}
+                  </td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f((l.search_mobile || 0) + (l.search_desktop || 0))}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f((l.maps_mobile || 0) + (l.maps_desktop || 0))}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.calls || 0)}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.directions || 0)}</td>
+                  <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(l.website_clicks || 0)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
