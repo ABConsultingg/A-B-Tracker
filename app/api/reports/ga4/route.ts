@@ -272,7 +272,7 @@ export async function GET(req: NextRequest) {
       users: parseFloat(r.metricValues?.[1]?.value || '0'),
       conversions: parseFloat(r.metricValues?.[2]?.value || '0'),
     }));
-    const EXCLUDED_EVENTS = ['gtm.init', 'gtm.js', 'gtm.dom', 'gtm.click', 'gtm.init_consent', 'gtm.consent_update']
+    const EXCLUDED_EVENTS = ['gtm.init', 'gtm.js', 'gtm.dom', 'gtm.click', 'gtm.init_consent', 'gtm.consent_update', 'page_view', 'session_start', 'first_visit', 'user_engagement', 'scroll']
     const events = (eventsData.rows || [])
       .map((r: any) => ({
         name: r.dimensionValues?.[0]?.value,
