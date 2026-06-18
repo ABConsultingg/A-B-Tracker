@@ -347,6 +347,119 @@ function EmailTab({ clientId, month }: { clientId: string; month: string }) {
   )
 }
 
+function MetaTab({ clientId, month, clientColor }: { clientId: string; month: string; clientColor: string }) {
+  const [data, setData] = React.useState<Record<string, any> | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [msg, setMsg] = React.useState('')
+  const [prevData, setPrevData] = React.useState<Record<string, any> | null>(null)
+  const [lastYearData, setLastYearData] = React.useState<Record<string, any> | null>(null)
+
+  React.useEffect(() => {
+    const [year, mon] = month.split('-').map(Number)
+    const prevMonth = mon === 1 ? `${year-1}-12` : `${year}-${String(mon-1).padStart(2,'0')}`
+    const lastYearMonth = `${year-1}-${String(mon).padStart(2,'0')}`
+
+    fetch(`/api/reports/meta?clientId=${clientId}&month=${month}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.configured) { setMsg('Meta Ads not configured for this client.'); setLoading(false); return }
+        if (!d.data) { setMsg(d.message || 'No Meta Ads data for this period.'); setLoading(false); return }
+        setData(d.data); setLoading(false)
+      })
+      .catch(() => { setMsg('Error loading Meta Ads data.'); setLoading(false) })
+
+    fetch(`/api/reports/meta?clientId=${clientId}&month=${prevMonth}`)
+      .then(r => r.json()).then(d => { if (d.data) setPrevData(d.data) }).catch(() => {})
+    fetch(`/api/reports/meta?clientId=${clientId}&month=${lastYearMonth}`)
+      .then(r => r.json()).then(d => { if (d.data) setLastYearData(d.data) }).catch(() => {})
+  }, [clientId, month])
+
+  const f = (n: number | null | undefined) => n != null ? n.toLocaleString('en-US') : '—'
+  const p = (n: number | null | undefined) => n != null ? `${Number(n).toFixed(2)}%` : '—'
+  const m = (n: number | null | undefined) => n != null ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+
+  if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading Meta Ads data…</div>
+  if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>{msg}</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <KpiCard label="Total Spend" value={m(data.spend)} color={clientColor} rawValue={data.spend} prevValue={prevData?.spend} lastYearValue={lastYearData?.spend} />
+        <KpiCard label="Impressions" value={f(data.impressions)} color={clientColor} rawValue={data.impressions} prevValue={prevData?.impressions} lastYearValue={lastYearData?.impressions} />
+        <KpiCard label="Clicks" value={f(data.clicks)} color={clientColor} rawValue={data.clicks} prevValue={prevData?.clicks} lastYearValue={lastYearData?.clicks} />
+        <KpiCard label="CTR" value={p(data.ctr)} color={clientColor} rawValue={data.ctr} prevValue={prevData?.ctr} lastYearValue={lastYearData?.ctr} />
+        <KpiCard label="Avg CPC" value={m(data.cpc)} color={clientColor} rawValue={data.cpc} prevValue={prevData?.cpc} lastYearValue={lastYearData?.cpc} />
+        <KpiCard label="Reach" value={f(data.reach)} color={clientColor} rawValue={data.reach} prevValue={prevData?.reach} lastYearValue={lastYearData?.reach} />
+        <KpiCard label="CPM" value={m(data.cpm)} color={clientColor} rawValue={data.cpm} prevValue={prevData?.cpm} lastYearValue={lastYearData?.cpm} />
+        <KpiCard label="Conversions" value={f(data.conversions)} color={clientColor} rawValue={data.conversions} prevValue={prevData?.conversions} lastYearValue={lastYearData?.conversions} />
+        <KpiCard label="Conv. Value" value={m(data.conversion_value)} color={clientColor} rawValue={data.conversion_value} prevValue={prevData?.conversion_value} lastYearValue={lastYearData?.conversion_value} />
+        <KpiCard label="ROAS" value={data.roas != null ? `${data.roas}x` : '—'} color={clientColor} rawValue={data.roas} prevValue={prevData?.roas} lastYearValue={lastYearData?.roas} />
+      </div>
+
+      {data.daily?.length > 1 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2 rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+            <div className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>Impressions & Clicks Over Time</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={data.daily}>
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(val: any) => Number(val).toLocaleString()} labelFormatter={(d: any) => d} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line yAxisId="left" type="monotone" dataKey="impressions" stroke="#3b82f6" dot={false} name="Impressions" />
+                <Line yAxisId="right" type="monotone" dataKey="clicks" stroke="#f59e0b" dot={false} name="Clicks" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {data.devices?.length > 0 && (
+            <div className="rounded-xl border p-4" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+              <div className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>Clicks by Device</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={data.devices} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: any) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                    {data.devices.map((_: unknown, i: number) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(val: any) => Number(val).toLocaleString()} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {data.campaigns?.length > 0 && (
+        <div>
+          <div className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>Campaign Breakdown</div>
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-sunken)' }}>
+                  {['Campaign', 'Spend', 'Impressions', 'Clicks', 'CTR', 'Conv.'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.campaigns.map((c: any, i: number) => (
+                  <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m(c.spend)}</td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.impressions)}</td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.clicks)}</td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{c.clicks > 0 && c.impressions > 0 ? p((c.clicks/c.impressions)*100) : '—'}</td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.conversions)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function GAdsTab({ clientId, month, clientColor }: { clientId: string; month: string; clientColor: string }) {
   const [data, setData] = React.useState<Record<string, any> | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -1536,31 +1649,7 @@ export default function ReportDashboard({
         )}
 
         {/* ── META ADS ────────────────────────────────────────────────────── */}
-        {tab === 'meta' && (
-          <>
-            {hasMeta ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <KpiCard label="Total Spend" value={money(metrics.metaSpend ?? liveAds?.metaSpend)} color={clientColor} />
-                  <KpiCard label="Impressions" value={fmt(metrics.metaImpressions ?? liveAds?.metaImpressions)} color={clientColor} />
-                  <KpiCard label="Clicks" value={fmt(metrics.metaClicks ?? liveAds?.metaClicks)} color={clientColor} />
-                  <KpiCard label="CTR" value={pct(metrics.metaCtr ?? liveAds?.metaCtr)} color={clientColor} />
-                  <KpiCard label="Avg CPC" value={money(metrics.metaCpc ?? liveAds?.metaCpc)} color={clientColor} />
-                </div>
-                <div className="rounded-xl border p-5"
-                  style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
-                  <div className="text-sm font-bold mb-2" style={{ color: 'var(--text)' }}>Additional Metrics</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Row label="Engagements" value={fmt(metrics.metaEngagements)} />
-                    <Row label="Landing Page Views" value={fmt(metrics.metaLpv)} />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <NoData message="No Meta Ads data yet." action="Upload Paid Performance CSV from Sprout Social (requires Meta Ad Account connected in Sprout)." />
-            )}
-          </>
-        )}
+        {tab === 'meta' && <MetaTab clientId={clientId} month={month} clientColor={clientColor} />}
 
         {/* ── GOOGLE ADS ──────────────────────────────────────────────────── */}
         {tab === 'google' && (
