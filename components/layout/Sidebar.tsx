@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/messages',  label: 'Messages',        icon: '💬', section: 'filters' },
   { href: '/dashboard/claude', label: 'Pancho', icon: '✦', section: 'filters' },
   { href: '/reports', label: 'Reports', icon: '📈', adminOnly: true, section: 'filters' },
+  { href: '/dashboard/social', label: 'Social Hub', icon: '📱', adminOnly: true, section: 'filters' },
   { href: '/dashboard/mentions',  label: 'My Mentions',     icon: '@', section: 'filters' },
   { href: '/dashboard/recent',    label: 'Recent Changes',  icon: '🔔', section: 'filters' },
 ]
