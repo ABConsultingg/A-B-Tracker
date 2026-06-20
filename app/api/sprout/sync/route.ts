@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         for (const post of posts) {
           const pid = Number(post.customer_profile_id)
           const meta = profileMap[pid]
-          const postId = post.profile_guid ?? post.guid ?? post.id
+          const postId = post.guid ?? post.id
           if (!postId) continue
           postBatch.push({
             post_id: String(postId), profile_id: String(pid ?? ''),
