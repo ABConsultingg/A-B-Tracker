@@ -101,10 +101,13 @@ async function fetchPostAnalytics(profileIds: string[], startDate: string, endDa
 
 export async function POST(req: NextRequest) {
   // Allow internal cron or manual trigger with a secret
-  const authHeader = req.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Auth: only enforce if CRON_SECRET is explicitly set and non-empty
+  const cronSecret = (process.env.CRON_SECRET || '').trim()
+  if (cronSecret) {
+    const authHeader = req.headers.get('authorization') || ''
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const body = await req.json().catch(() => ({}))
