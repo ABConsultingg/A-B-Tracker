@@ -46,7 +46,7 @@ async function fetchProfileAnalytics(sproutProfileIds: number[], startDate: stri
       `customer_profile_id.eq(${sproutProfileIds.join(',')})`,
       `reporting_period.in(${startDate}...${endDate})`,
     ],
-    metrics: ['lifetime.followers.count', 'lifetime.following.count', 'net_follower.count', 'impressions.count', 'engagements.count', 'posts_sent.count'],
+    metrics: ['lifetime.followers.count', 'net_follower.count', 'impressions', 'engagements', 'posts_sent'],
     page,
   }
   const res = await fetch(`${SPROUT_BASE}/analytics/profiles`, { method: 'POST', headers: HEADERS, body: JSON.stringify(body) })
@@ -128,9 +128,9 @@ export async function POST(req: NextRequest) {
             followers: row.metrics?.['lifetime.followers.count'] ?? 0,
             following: row.metrics?.['lifetime.following.count'] ?? 0,
             net_follower_change: row.metrics?.['net_follower.count'] ?? 0,
-            impressions: row.metrics?.['impressions.count'] ?? 0,
-            engagements: row.metrics?.['engagements.count'] ?? 0,
-            posts_sent: row.metrics?.['posts_sent.count'] ?? 0,
+            impressions: row.metrics?.['impressions'] ?? 0,
+            engagements: row.metrics?.['engagements'] ?? 0,
+            posts_sent: row.metrics?.['posts_sent'] ?? 0,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'profile_id,reported_date' })
           profilesUpserted++
@@ -150,9 +150,9 @@ export async function POST(req: NextRequest) {
         const posts = resp.data ?? []
         if (!posts.length) break
         for (const post of posts) {
-          const pid = post.customer_profile_id as number
+          const pid = Number(post.customer_profile_id)
           const meta = profileMap[pid]
-          const postId = post.guid ?? post.id
+          const postId = post.profile_guid ?? post.guid ?? post.id
           if (!postId) continue
           await supabase.from('sprout_posts').upsert({
             post_id: String(postId), profile_id: String(pid ?? ''),
