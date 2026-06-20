@@ -339,6 +339,14 @@ export default function SocialHubPage() {
           </section>
         )}
 
+        {/* Quick links */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 32 }}>
+          <a href="/dashboard/social/rbs" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, textDecoration: 'none', color: '#1C1917', fontSize: 14, fontWeight: 500 }}>
+            <span style={{ fontSize: 18 }}>🏗</span>
+            <div><div style={{ fontWeight: 600 }}>RBS Branch Scorecard</div><div style={{ fontSize: 12, color: '#78716C' }}>47 branches · performance by RVP</div></div>
+          </a>
+        </div>
+
         {/* Client ranking table */}
         <section style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16 }}>
