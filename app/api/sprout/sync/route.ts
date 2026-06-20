@@ -117,12 +117,13 @@ export async function POST(req: NextRequest) {
         const resp = await fetchProfileAnalytics(batch, startStr, endStr, page)
         const rows = resp.data ?? []
         if (!rows.length) break
+        const profileBatch: any[] = []
         for (const row of rows) {
           const pid = row.dimensions?.['customer_profile_id'] as number
           const meta = profileMap[pid]
           const reportedDate = row.dimensions?.['reporting_period.by(day)']
           if (!meta || !pid || !reportedDate) continue
-          await supabase.from('sprout_profiles').upsert({
+          profileBatch.push({
             profile_id: String(pid), client_name: meta.clientName, network: meta.network,
             username: meta.username, display_name: meta.displayName, reported_date: reportedDate,
             followers: row.metrics?.['lifetime.followers.count'] ?? 0,
@@ -132,8 +133,11 @@ export async function POST(req: NextRequest) {
             engagements: row.metrics?.['engagements'] ?? 0,
             posts_sent: row.metrics?.['posts_sent'] ?? 0,
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'profile_id,reported_date' })
-          profilesUpserted++
+          })
+        }
+        if (profileBatch.length > 0) {
+          await supabase.from('sprout_profiles').upsert(profileBatch, { onConflict: 'profile_id,reported_date' })
+          profilesUpserted += profileBatch.length
         }
         hasMore = (resp.paging?.current_page ?? page) < (resp.paging?.total_pages ?? 1)
         page++
@@ -149,12 +153,13 @@ export async function POST(req: NextRequest) {
         const resp = await fetchPostAnalytics(batch, startStr, endStr, page)
         const posts = resp.data ?? []
         if (!posts.length) break
+        const postBatch: any[] = []
         for (const post of posts) {
           const pid = Number(post.customer_profile_id)
           const meta = profileMap[pid]
           const postId = post.profile_guid ?? post.guid ?? post.id
           if (!postId) continue
-          await supabase.from('sprout_posts').upsert({
+          postBatch.push({
             post_id: String(postId), profile_id: String(pid ?? ''),
             client_name: meta?.clientName ?? 'Unknown', network: meta?.network ?? 'unknown',
             post_type: post.post_type ?? null, published_at: post.created_time ?? null,
@@ -163,13 +168,14 @@ export async function POST(req: NextRequest) {
             reach: 0,
             engagements: post.metrics?.['lifetime.engagements'] ?? 0,
             reactions: post.metrics?.['lifetime.reactions'] ?? 0,
-            comments: 0,
-            shares: 0,
-            clicks: 0,
+            comments: 0, shares: 0, clicks: 0,
             video_views: post.metrics?.['lifetime.video_views'] ?? 0,
             tags: [], updated_at: new Date().toISOString(),
-          }, { onConflict: 'post_id' })
-          postsUpserted++
+          })
+        }
+        if (postBatch.length > 0) {
+          await supabase.from('sprout_posts').upsert(postBatch, { onConflict: 'post_id' })
+          postsUpserted += postBatch.length
         }
         hasMore = (resp.paging?.current_page ?? page) < (resp.paging?.total_pages ?? 1)
         page++

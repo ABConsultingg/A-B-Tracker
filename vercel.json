@@ -1,12 +1,13 @@
 {
   "crons": [
     {
-      "path": "/api/cron/create-recurring-wos",
-      "schedule": "0 8 1 * *"
-    },
-    {
       "path": "/api/sprout/sync",
       "schedule": "0 6 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/sprout/sync/route.ts": {
+      "maxDuration": 300
+    }
+  }
 }
