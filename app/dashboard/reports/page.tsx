@@ -798,6 +798,7 @@ export default function ReportsPage() {
                         {(d as any).leads?.configured && <LeadsSection ch={(d as any).leads} />}
                         <div style={{ display: 'flex', gap: 8, marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                           <a href={`/reports/${client.id}`} style={{ fontSize: 12, fontWeight: 600, color: color, border: `1px solid ${color}`, borderRadius: 7, padding: '6px 12px', textDecoration: 'none' }}>Full Report →</a>
+                          {client.id === 'culture' && (<a href={`/reports/culture?month=${selectedMonth}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: 'white', background: color, borderRadius: 7, padding: '6px 12px', textDecoration: 'none' }}>📊 Marketing Dashboard</a>)}
                           <button onClick={(e) => { e.stopPropagation(); fetchClientData(client.id, selectedMonth); }} style={{ fontSize: 12, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 12px', background: 'transparent', cursor: 'pointer' }}>↺ Refresh</button>
                         </div>
                       </>
