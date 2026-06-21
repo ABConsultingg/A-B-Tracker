@@ -526,8 +526,8 @@ export default function ReportsUploadPage() {
                         <span style={{ color: 'var(--text-muted)' }}>
                           {r.rows} rows
                           {Object.keys(r.metrics).slice(0, 3).map(k => {
-                            const [platform, metric] = k.split('__')
-                            return ` · ${platform} ${metric}: ${Math.round(r.metrics[k]).toLocaleString()}`
+                            const parts = k.split('__'); const [platform, metric] = parts.length > 1 ? parts : [k, null]
+                            return metric ? ` · ${platform} ${metric}: ${Math.round(r.metrics[k]).toLocaleString()}` : ` · ${Math.round(r.metrics[k]).toLocaleString()} ${platform}`
                           }).join('')}
                         </span>
                       </div>
