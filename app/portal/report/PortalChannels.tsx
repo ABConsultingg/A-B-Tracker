@@ -266,7 +266,7 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!open || data) return
+    if (!open) return
     setLoading(true)
     const endpoints: Record<string, string> = {
       meta:           `/api/reports/meta?clientId=${clientId}&month=${month}`,
