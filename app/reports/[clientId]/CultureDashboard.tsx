@@ -1,4 +1,5 @@
 'use client'
+import CallsTab from '@/components/reports/CallsTab'
 import ApprovalTab from '@/components/reports/ApprovalTab'
 import React, { useState, useEffect, useCallback } from 'react'
 import {
@@ -9,7 +10,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ViewMode = 'lm' | 'ytd'
-type TabId = 'overview' | 'google' | 'meta' | 'social' | 'lsa' | 'website' | 'cpl' | 'reputation' | 'approve'
+type TabId = 'overview' | 'google' | 'meta' | 'social' | 'lsa' | 'website' | 'cpl' | 'reputation' | 'approve' | 'calls'
 
 interface AdData {
   spend: number; billedSpend: number; markupPct: number
@@ -1019,6 +1020,7 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'website',     label: 'Website & SEO',     icon: '🌐' },
   { id: 'cpl',         label: 'Acquisition Cost',  icon: '💰' },
   { id: 'reputation',  label: 'Reputation',        icon: '⭐' },
+  { id: 'calls',       label: 'Calls',             icon: '📞' },
 ]
 
 export default function CultureDashboard({ clientId, clientName, clientInitials, clientColor, month,
@@ -1109,6 +1111,10 @@ export default function CultureDashboard({ clientId, clientName, clientInitials,
         {tab === 'reputation' && (
           <Stub icon="⭐" title="Reputation data pending Chrome backfill"
             body="Once the Chrome extension backfills Google review data into Supabase, this section will show overall rating, review count trend (LM vs PM, YTD), response rate, and recent reviews." />
+        )}
+
+        {tab === 'calls' && (
+          <CallsTab clientId={clientId} month={month} crmType="acculynx" />
         )}
 
         {tab === 'approve' && isAdmin && (

@@ -1,4 +1,5 @@
 'use client'
+import CallsTab from '@/components/reports/CallsTab'
 import ApprovalTab from '@/components/reports/ApprovalTab'
 import React, { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -1088,7 +1089,7 @@ function pct(n: number | null | undefined) {
   return `${n.toFixed(2)}%`
 }
 
-type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve'
+type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve' | 'calls'
 
 export default function ReportDashboard({
   clientId, clientName, clientInitials, clientColor,
@@ -1714,6 +1715,10 @@ export default function ReportDashboard({
 
         {tab === 'leads' && (
           <JotformLeadsTab clientId={clientId} month={month} />
+        )}
+
+        {tab === 'calls' && (
+          <CallsTab clientId={clientId} month={month} />
         )}
 
         {tab === 'approve' && isAdmin && (
