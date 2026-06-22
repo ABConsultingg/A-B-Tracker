@@ -261,6 +261,25 @@ function renderAcquisition(d: any) {
   )
 }
 
+function renderCalls(d: any) {
+  return (
+    <div>
+      <KpiGrid items={[
+        { label: 'Total Calls', value: fmt(d.total) },
+        { label: 'New Leads', value: fmt(d.newLeads) },
+        { label: 'Qualified', value: fmt(d.qualified) },
+        { label: 'Existing Customers', value: fmt(d.existing) },
+        { label: 'Avg Duration', value: d.avgDuration > 0 ? `${Math.floor(d.avgDuration/60)}m ${d.avgDuration%60}s` : '—' },
+        { label: 'LSA Matched', value: fmt(d.lsaMatched) },
+      ]} />
+      {(d.topics || []).length > 0 && (
+        <DataTable title="Call Topics" headers={['Topic', 'Calls']}
+          rows={d.topics.map((t: any) => [t.topic, fmt(t.count)])} />
+      )}
+    </div>
+  )
+}
+
 function ChannelCard({ id, icon, label, note, clientId, month }: {
   id: string; icon: string; label: string; note: string; clientId: string; month: string
 }) {
@@ -284,6 +303,7 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
       social_organic: `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
       lsa:            `/api/reports/culture-lsa?clientId=${clientId}&month=${month}`,
       acquisition:    `/api/reports/google-ads?clientId=${clientId}&month=${month}`,
+      calls:          `/api/reports/calls?clientId=${clientId}&month=${month}`,
     }
     fetch(endpoints[id]).then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
     if (!open || data) return
@@ -300,6 +320,7 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
     if (id === 'ga4' || id === 'website')             return renderGa4(d)
     if (id === 'social' || id === 'social_organic')   return renderSocial(d)
     if (id === 'lsa')                                 return renderLsa(d)
+    if (id === 'calls')                               return renderCalls(d)
     if (id === 'acquisition')                         return renderAcquisition(d)
     return <div style={{ fontSize: 13, color: '#9ca3af', paddingTop: 10 }}>No data available.</div>
   }

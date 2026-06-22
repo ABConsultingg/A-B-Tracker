@@ -178,6 +178,7 @@ export default async function PortalReportPage({
               { id: 'email',          icon: '✉️',  label: 'Email Marketing' },
               { id: 'lsa',            icon: '📋', label: 'LSA Leads' },
               { id: 'acquisition',    icon: '💰', label: 'Acquisition Cost' },
+              { id: 'calls',          icon: '📞', label: 'Call Log' },
             ]
               .filter(ch => approvedChannels.has(ch.id))
               .map(ch => ({ ...ch, note: approvalNotes[ch.id] || '' }))
