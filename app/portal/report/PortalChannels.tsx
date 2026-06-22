@@ -279,7 +279,7 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
       website:        `/api/reports/ga4?clientId=${clientId}&month=${month}`,
       social:         `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
       social_organic: `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
-      lsa:            `/api/reports/culture-social?clientId=${clientId}&month=${month}`,
+      lsa:            `/api/reports/culture-lsa?clientId=${clientId}&month=${month}`,
       acquisition:    `/api/reports/culture-social?clientId=${clientId}&month=${month}`,
     }
     fetch(endpoints[id]).then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
