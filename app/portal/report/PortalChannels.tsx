@@ -238,12 +238,18 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
     if (!open || data) return
     setLoading(true)
     const endpoints: Record<string, string> = {
-      meta:   `/api/reports/meta?clientId=${clientId}&month=${month}`,
-      gads:   `/api/reports/google-ads?clientId=${clientId}&month=${month}`,
-      gmb:    `/api/reports/gmb?clientId=${clientId}&month=${month}`,
-      email:  `/api/reports/email?clientId=${clientId}&month=${month}`,
-      ga4:    `/api/reports/ga4?clientId=${clientId}&month=${month}`,
-      social: `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
+      meta:           `/api/reports/meta?clientId=${clientId}&month=${month}`,
+      meta_ads:       `/api/reports/meta?clientId=${clientId}&month=${month}`,
+      gads:           `/api/reports/google-ads?clientId=${clientId}&month=${month}`,
+      google_ads:     `/api/reports/google-ads?clientId=${clientId}&month=${month}`,
+      gmb:            `/api/reports/gmb?clientId=${clientId}&month=${month}`,
+      email:          `/api/reports/email?clientId=${clientId}&month=${month}`,
+      ga4:            `/api/reports/ga4?clientId=${clientId}&month=${month}`,
+      website:        `/api/reports/ga4?clientId=${clientId}&month=${month}`,
+      social:         `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
+      social_organic: `/api/reports/social-portal?clientId=${clientId}&month=${month}`,
+      lsa:            `/api/reports/culture-social?clientId=${clientId}&month=${month}`,
+      acquisition:    `/api/reports/culture-social?clientId=${clientId}&month=${month}`,
     }
     fetch(endpoints[id]).then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
   }, [open, id, clientId, month, data])
@@ -252,12 +258,12 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
     if (loading) return <div style={{ fontSize: 13, color: '#9ca3af', paddingTop: 10 }}>Loading…</div>
     if (!data?.data) return <div style={{ fontSize: 13, color: '#9ca3af', paddingTop: 10 }}>No data available for this period.</div>
     const d = data.data
-    if (id === 'meta')   return renderMeta(d)
-    if (id === 'gads')   return renderGads(d)
-    if (id === 'gmb')    return renderGmb(d)
-    if (id === 'email')  return renderEmail(d)
-    if (id === 'ga4')    return renderGa4(d)
-    if (id === 'social') return renderSocial(d)
+    if (id === 'meta' || id === 'meta_ads')           return renderMeta(d)
+    if (id === 'gads' || id === 'google_ads')         return renderGads(d)
+    if (id === 'gmb')                                 return renderGmb(d)
+    if (id === 'email')                               return renderEmail(d)
+    if (id === 'ga4' || id === 'website')             return renderGa4(d)
+    if (id === 'social' || id === 'social_organic')   return renderSocial(d)
     return <div style={{ fontSize: 13, color: '#9ca3af', paddingTop: 10 }}>No data available.</div>
   }
 
