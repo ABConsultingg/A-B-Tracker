@@ -227,6 +227,37 @@ function renderSocial(d: any) {
   )
 }
 
+function renderLsa(d: any) {
+  return (
+    <div>
+      <KpiGrid items={[
+        { label: 'Total Leads', value: fmt(d.total) },
+        { label: 'Charged', value: fmt(d.charged) },
+        { label: 'Not Charged', value: fmt(d.notCharged) },
+        { label: 'Credited', value: fmt(d.credited) },
+        { label: 'Charge Rate', value: pct(d.chargeRate) },
+        { label: 'LSA CPL', value: d.charged > 0 && d.totalSpend ? money(d.totalSpend / d.charged) : '—' },
+      ]} />
+    </div>
+  )
+}
+
+function renderAcquisition(d: any) {
+  return (
+    <div>
+      <KpiGrid items={[
+        { label: 'Best CPL', value: money(d.bestCpl?.cpl) },
+        { label: 'Worst CPL', value: money(d.worstCpl?.cpl) },
+        { label: 'Blended CPL', value: money(d.blendedCpl) },
+      ]} />
+      {(d.channels || []).length > 0 && (
+        <DataTable title="CPL by Channel" headers={['Channel', 'Conversions', 'Spend', 'CPL']}
+          rows={(d.channels || []).map((c: any) => [c.name, fmt(c.conversions), money(c.spend), money(c.cpl)])} />
+      )}
+    </div>
+  )
+}
+
 function ChannelCard({ id, icon, label, note, clientId, month }: {
   id: string; icon: string; label: string; note: string; clientId: string; month: string
 }) {
@@ -264,6 +295,8 @@ function ChannelCard({ id, icon, label, note, clientId, month }: {
     if (id === 'email')                               return renderEmail(d)
     if (id === 'ga4' || id === 'website')             return renderGa4(d)
     if (id === 'social' || id === 'social_organic')   return renderSocial(d)
+    if (id === 'lsa')                                 return renderLsa(d)
+    if (id === 'acquisition')                         return renderAcquisition(d)
     return <div style={{ fontSize: 13, color: '#9ca3af', paddingTop: 10 }}>No data available.</div>
   }
 
