@@ -46,7 +46,7 @@ async function fetchProfileAnalytics(sproutProfileIds: number[], startDate: stri
       `customer_profile_id.eq(${sproutProfileIds.join(',')})`,
       `reporting_period.in(${startDate}...${endDate})`,
     ],
-    metrics: ['lifetime.followers.count', 'net_follower.count', 'impressions', 'engagements', 'posts_sent'],
+    metrics: ['lifetime.followers.count', 'net_follower.count', 'impressions', 'engagements', 'posts_sent', 'video_views', 'post_link_clicks'],
     page,
   }
   const res = await fetch(`${SPROUT_BASE}/analytics/profiles`, { method: 'POST', headers: HEADERS, body: JSON.stringify(body) })
@@ -61,7 +61,7 @@ async function fetchPostAnalytics(sproutProfileIds: number[], startDate: string,
       `created_time.in(${startDate}T00:00:00...${endDate}T23:59:59)`,
     ],
     fields: ['guid', 'created_time', 'perma_link', 'text', 'post_type', 'customer_profile_id'],
-    metrics: ['lifetime.impressions', 'lifetime.engagements', 'lifetime.reactions', 'lifetime.video_views'],
+    metrics: ['lifetime.impressions', 'lifetime.engagements', 'lifetime.reactions', 'lifetime.video_views', 'lifetime.link_clicks'],
     timezone: 'America/Chicago',
     page,
     limit: 50,
@@ -140,6 +140,8 @@ export async function POST(req: NextRequest) {
             impressions: row.metrics?.['impressions'] ?? 0,
             engagements: row.metrics?.['engagements'] ?? 0,
             posts_sent: row.metrics?.['posts_sent'] ?? 0,
+            video_views: row.metrics?.['video_views'] ?? 0,
+            post_link_clicks: row.metrics?.['post_link_clicks'] ?? 0,
             updated_at: new Date().toISOString(),
           })
         }
@@ -176,8 +178,9 @@ export async function POST(req: NextRequest) {
             reach: 0,
             engagements: post.metrics?.['lifetime.engagements'] ?? 0,
             reactions: post.metrics?.['lifetime.reactions'] ?? 0,
-            comments: 0, shares: 0, clicks: 0,
+            comments: 0, shares: 0,
             video_views: post.metrics?.['lifetime.video_views'] ?? 0,
+            clicks: post.metrics?.['lifetime.link_clicks'] ?? 0,
             tags: [], updated_at: new Date().toISOString(),
           })
         }
@@ -229,7 +232,7 @@ export async function POST(req: NextRequest) {
       const to   = `${month}-31`
       const { data: aggRows } = await supabase
         .from('sprout_profiles')
-        .select('client_name, network, impressions, engagements, posts_sent, net_follower_change')
+        .select('client_name, network, impressions, engagements, posts_sent, net_follower_change, video_views, post_link_clicks')
         .gte('reported_date', from)
         .lte('reported_date', to)
 
@@ -241,11 +244,13 @@ export async function POST(req: NextRequest) {
         if (!clientId) continue
         const platform = NET_MAP[row.network] || row.network
         if (!agg[clientId]) agg[clientId] = {}
-        if (!agg[clientId][platform]) agg[clientId][platform] = { impressions: 0, engagements: 0, posts: 0, audience_gained: 0 }
-        agg[clientId][platform].impressions     += row.impressions || 0
-        agg[clientId][platform].engagements     += row.engagements || 0
-        agg[clientId][platform].posts           += row.posts_sent || 0
-        agg[clientId][platform].audience_gained += row.net_follower_change || 0
+        if (!agg[clientId][platform]) agg[clientId][platform] = { impressions: 0, engagements: 0, posts: 0, audience_gained: 0, video_views: 0, post_link_clicks: 0 }
+        agg[clientId][platform].impressions      += row.impressions || 0
+        agg[clientId][platform].engagements      += row.engagements || 0
+        agg[clientId][platform].posts            += row.posts_sent || 0
+        agg[clientId][platform].audience_gained  += row.net_follower_change || 0
+        agg[clientId][platform].video_views      += (row as any).video_views || 0
+        agg[clientId][platform].post_link_clicks += (row as any).post_link_clicks || 0
       }
 
       const upserts: any[] = []
@@ -259,6 +264,44 @@ export async function POST(req: NextRequest) {
       }
       if (upserts.length > 0) {
         await supabase.from('report_data').upsert(upserts, { onConflict: 'client_id,month,section,platform,metric' })
+      }
+    }
+    // ── Also aggregate video_views + post_link_clicks from sprout_posts ───────
+    for (const month of months) {
+      const from = `${month}-01`
+      const to   = `${month}-31`
+      const { data: postRows } = await supabase
+        .from('sprout_posts')
+        .select('client_name, network, video_views, clicks')
+        .gte('published_at', from)
+        .lte('published_at', to)
+
+      if (!postRows?.length) continue
+
+      const postAgg: Record<string, Record<string, { video_views: number; post_link_clicks: number }>> = {}
+      for (const row of postRows) {
+        const clientId = CLIENT_ID_MAP[row.client_name]
+        if (!clientId) continue
+        const platform = NET_MAP[row.network] || row.network
+        if (!postAgg[clientId]) postAgg[clientId] = {}
+        if (!postAgg[clientId][platform]) postAgg[clientId][platform] = { video_views: 0, post_link_clicks: 0 }
+        postAgg[clientId][platform].video_views      += row.video_views || 0
+        postAgg[clientId][platform].post_link_clicks += row.clicks || 0
+      }
+
+      const postUpserts: any[] = []
+      for (const [clientId, platforms] of Object.entries(postAgg)) {
+        for (const [platform, metrics] of Object.entries(platforms)) {
+          if (metrics.video_views > 0) {
+            postUpserts.push({ client_id: clientId, month, section: 'social_organic', platform, metric: 'video_views', value: metrics.video_views, source: 'sprout_api' })
+          }
+          if (metrics.post_link_clicks > 0) {
+            postUpserts.push({ client_id: clientId, month, section: 'social_organic', platform, metric: 'post_link_clicks', value: metrics.post_link_clicks, source: 'sprout_api' })
+          }
+        }
+      }
+      if (postUpserts.length > 0) {
+        await supabase.from('report_data').upsert(postUpserts, { onConflict: 'client_id,month,section,platform,metric' })
       }
     }
     // ── End aggregation ────────────────────────────────────────────────────────
