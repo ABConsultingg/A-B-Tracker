@@ -43,11 +43,22 @@ async function fetchLSAForMonth(supabase: Awaited<ReturnType<typeof createClient
       .sort((a, b) => b.count - a.count)
       .slice(0, 8)
 
+    // Fetch LSA spend from report_data
+    const { data: spendRow } = await supabase
+      .from('report_data').select('value')
+      .eq('client_id', 'culture').eq('month', month)
+      .eq('section', 'lsa').eq('platform', 'all').eq('metric', 'total_spend')
+      .maybeSingle()
+    const totalSpend = Number(spendRow?.value || 0)
+    const cpl = charged > 0 && totalSpend > 0 ? parseFloat((totalSpend / charged).toFixed(2)) : null
+
     return {
       total, charged, notCharged, credited,
       chargeRate: total > 0 ? parseFloat(((charged / total) * 100).toFixed(1)) : 0,
       phone, message,
       categories,
+      totalSpend,
+      cpl,
       source: 'lsa_leads',
     }
   }
@@ -72,6 +83,8 @@ async function fetchLSAForMonth(supabase: Awaited<ReturnType<typeof createClient
       phone: get('phone_leads'),
       message: get('message_leads'),
       categories: [],
+      totalSpend: get('total_spend'),
+      cpl: charged > 0 && get('total_spend') > 0 ? parseFloat((get('total_spend') / charged).toFixed(2)) : null,
       source: 'report_data',
     }
   }

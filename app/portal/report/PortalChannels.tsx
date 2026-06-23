@@ -236,7 +236,7 @@ function renderLsa(d: any) {
         { label: 'Not Charged', value: fmt(d.notCharged) },
         { label: 'Credited', value: fmt(d.credited) },
         { label: 'Charge Rate', value: pct(d.chargeRate) },
-        { label: 'LSA CPL', value: d.charged > 0 && d.totalSpend ? money(d.totalSpend / d.charged) : '—' },
+        { label: 'LSA CPL', value: d.cpl ? money(d.cpl) : '—' },
       ]} />
     </div>
   )
