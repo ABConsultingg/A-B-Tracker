@@ -1619,16 +1619,6 @@ export default function ReportDashboard({
           </>
         )}
 
-        {/* ── LIVE DATA (approval panel) — shown in Overview too ─────────── */}
-        {tab === 'overview' && (
-          <div className="rounded-xl border p-5 mt-2"
-            style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
-            <div className="text-sm font-bold mb-4" style={{ color: 'var(--text)' }}>
-              ⚡ Channel Approvals — publish to client portal
-            </div>
-            <LiveDataTab clientId={clientId} month={month} />
-          </div>
-        )}
 
         {/* ── SOCIAL ──────────────────────────────────────────────────────── */}
         {tab === 'social' && (
