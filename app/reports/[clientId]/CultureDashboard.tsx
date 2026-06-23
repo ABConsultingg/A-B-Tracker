@@ -723,30 +723,50 @@ function CPLTab({ clientId, month }: { clientId: string; month: string }) {
   const [meta, setMeta] = useState<MetaData | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const [lsa, setLsa] = useState<any>(null)
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
       fetch(`/api/reports/google-ads?clientId=${clientId}&month=${month}`).then(r => r.json()).catch(() => null),
       fetch(`/api/reports/meta?clientId=${clientId}&month=${month}`).then(r => r.json()).catch(() => null),
-    ]).then(([g, m]) => {
-      setGads(g?.data || null); setMeta(m?.data || null); setLoading(false)
+      fetch(`/api/reports/culture-lsa?clientId=${clientId}&month=${month}`).then(r => r.json()).catch(() => null),
+    ]).then(([g, m, l]) => {
+      setGads(g?.data || null); setMeta(m?.data || null); setLsa(l?.data || null); setLoading(false)
     })
   }, [clientId, month])
 
   if (loading) return <Loading />
 
-  const channels = [
-    { name: 'Google LSA (Exteriors)', spend: 5659, conv: 127, cpl: 45, color: '#2d7a3e' },
-    { name: 'Google LSA (Design & Build)', spend: 8834, conv: 122, cpl: 72, color: '#2d7a3e' },
-    { name: 'James Hardie Perf Max', spend: 813, conv: 9, cpl: 91, color: '#4a90c9' },
-    { name: 'Storm Damage Search', spend: 5998, conv: 18, cpl: 333, color: '#c25613' },
-    { name: 'Hail Storm Calls', spend: 6567, conv: 8, cpl: 821, color: '#c1373c' },
-    { name: 'James Hardie Catalog', spend: 1070, conv: 1, cpl: 1070, color: '#c1373c' },
-    { name: 'Meta Ads', spend: meta?.spend || 0, conv: meta?.conversions || 0, cpl: meta?.conversions ? (meta.spend / meta.conversions) : null, color: '#8b5cf6' },
-    { name: 'Design & Build 2026', spend: 155, conv: 0, cpl: null, color: '#8a96a4' },
-  ].filter(c => c.spend > 0 || c.conv > 0)
+  const campaignChannels = (gads?.campaigns || []).map((c: any) => {
+    const cpl = c.conversions > 0 ? c.cost / c.conversions : null
+    const isLSA = c.account === 'Exteriors' || c.account === 'Design & Build'
+    const color = isLSA ? '#2d7a3e' : cpl == null ? '#8a96a4' : cpl < 100 ? '#4a90c9' : cpl < 400 ? '#c25613' : '#c1373c'
+    return { name: (c.account ? '[' + c.account + '] ' : '') + c.name, spend: c.cost, conv: c.conversions, cpl, color }
+  })
 
-  const maxCPL = Math.max(...channels.filter(c => c.cpl != null).map(c => c.cpl as number))
+  if (meta && (meta.spend > 0 || meta.conversions > 0)) {
+    campaignChannels.push({
+      name: 'Meta Ads',
+      spend: meta.spend || 0,
+      conv: meta.conversions || 0,
+      cpl: meta.conversions > 0 ? (meta.spend / meta.conversions) : null,
+      color: '#8b5cf6',
+    })
+  }
+
+  const channels = campaignChannels.filter((c: any) => c.spend > 0 || c.conv > 0)
+
+  const lsaCampaigns = (gads?.campaigns || []).filter((c: any) => c.account === 'Exteriors' || c.account === 'Design & Build')
+  const lsaSpend = lsaCampaigns.reduce((s: number, c: any) => s + c.cost, 0)
+  const lsaConv  = lsaCampaigns.reduce((s: number, c: any) => s + c.conversions, 0)
+  const lsaCpl   = lsaConv > 0 ? lsaSpend / lsaConv : null
+
+  const bestCh  = channels.filter((c: any) => c.cpl != null).sort((a: any, b: any) => a.cpl - b.cpl)[0]
+  const worstCh = channels.filter((c: any) => c.cpl != null).sort((a: any, b: any) => b.cpl - a.cpl)[0]
+  const highCplCampaigns = channels.filter((c: any) => c.cpl != null && c.cpl > 400)
+
+  const maxCPL = Math.max(...channels.filter((c: any) => c.cpl != null).map((c: any) => c.cpl as number), 1)
 
   return (
     <div className="space-y-5">
@@ -755,10 +775,10 @@ function CPLTab({ clientId, month }: { clientId: string; month: string }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Best CPL Channel" value="$45" sub="Google LSA Exteriors" featured />
-        <KpiCard label="Worst CPL Channel" value="$1,070" sub="JH Catalog · 1 conv" color={NAVY} />
-        <KpiCard label="Blended CPL" value={gads ? m$(gads.costPerConversion) : '$111'} sub="All Google channels" color={NAVY} />
-        <KpiCard label="LSA Blended CPL" value="$58" sub="Both LSA accounts" color={NAVY} />
+        <KpiCard label="Best CPL Channel" value={bestCh ? m$(bestCh.cpl) : '—'} sub={bestCh?.name || ''} featured />
+        <KpiCard label="Worst CPL Channel" value={worstCh ? m$(worstCh.cpl) : '—'} sub={worstCh ? f(worstCh.conv) + ' conv' : ''} color={NAVY} />
+        <KpiCard label="Blended CPL" value={gads?.costPerConversion ? m$(gads.costPerConversion) : '—'} sub="All Google channels" color={NAVY} />
+        <KpiCard label="LSA Blended CPL" value={lsaCpl ? m$(lsaCpl) : lsa?.cpl ? m$(lsa.cpl) : '—'} sub="Both LSA accounts" color={NAVY} />
       </div>
 
       <div className="rounded-xl border p-5" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
@@ -794,9 +814,11 @@ function CPLTab({ clientId, month }: { clientId: string; month: string }) {
         </div>
       </div>
 
-      <SectionAlert type="danger" icon="⚠️"
-        title="Hail Storm campaigns: $6,567 spent · 8 conversions · $821 CPL"
-        body="LSA converts at $45–$72. Hail Storm is 11–18× more expensive per conversion. Recommend pausing or restructuring before next storm season." />
+      {highCplCampaigns.length > 0 && (
+        <SectionAlert type="danger" icon="⚠️"
+          title={highCplCampaigns.length + ' campaign' + (highCplCampaigns.length > 1 ? 's' : '') + ' with CPL over $400'}
+          body={highCplCampaigns.map((c: any) => c.name + ': ' + m$(c.spend) + ' spent · ' + f(c.conv) + ' conv · ' + m$(c.cpl) + ' CPL').join(' · ')} />
+      )}
 
       <div className="rounded-xl border p-5" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)', borderStyle: 'dashed' }}>
         <div className="text-sm font-bold mb-2" style={{ color: NAVY }}>🔗 True CAC — Coming with AccuLynx + Cira.ai</div>
