@@ -1340,7 +1340,8 @@ export default function ReportDashboard({
     { id: 'website',  label: 'Website',    icon: '🌐' },
     { id: 'email',    label: 'Email',      icon: '📧' },
     { id: 'gmb',      label: 'GMB',        icon: '📍' },
-    { id: 'leads',    label: 'Leads',      icon: '🎯' },
+    { id: 'leads',    label: 'LSA Leads',  icon: '🎯' },
+    { id: 'calls',    label: 'Calls',      icon: '📞' },
     { id: 'acquisition', label: 'Acquisition Cost', icon: '💰' },
     ...(isAdmin ? [{ id: 'approve' as TabId,  label: 'Approve',    icon: '✅' }] : []),
   ]
