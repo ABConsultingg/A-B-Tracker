@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/server'
 // Configure in Cira → Integrations → Webhooks → Add
 // URL: https://app.abconsultingg.com/api/webhooks/cira?client=culture
 
-const CLIENT_ID = 'culture'
 
 function parseDurationSec(s: string | undefined): number {
   if (!s) return 0
@@ -69,6 +68,7 @@ function classifyCall(summary: string, durationSec: number): {
 
 export async function POST(req: NextRequest) {
   try {
+    const CLIENT_ID = new URL(req.url).searchParams.get('client') || 'culture'
     const body = await req.json().catch(() => null)
 
     if (!body) {
@@ -172,5 +172,5 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const challenge = new URL(req.url).searchParams.get('challenge')
   if (challenge) return NextResponse.json({ challenge })
-  return NextResponse.json({ ok: true, service: 'cira-webhook', client: CLIENT_ID })
+  return NextResponse.json({ ok: true, service: 'cira-webhook', client: new URL(req.url).searchParams.get('client') || 'culture' })
 }
