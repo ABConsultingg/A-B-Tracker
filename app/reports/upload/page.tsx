@@ -478,6 +478,38 @@ export default function ReportsUploadPage() {
   }
 
   const uploadedClients = new Set(uploads.map(u => u.client_id))
+  const [clientDataStatus, setClientDataStatus] = useState<Record<string, any>>({})
+
+  useEffect(() => {
+    async function loadClientStatus() {
+      const { data } = await supabase
+        .from('report_data')
+        .select('client_id, section')
+        .eq('month', month)
+      const { data: ciraCalls } = await supabase
+        .from('cira_calls')
+        .select('client_id')
+        .eq('call_month', month)
+      const { data: portalUsers } = await supabase
+        .from('portal_users')
+        .select('client_id')
+      const statusMap: Record<string, any> = {}
+      for (const row of data || []) {
+        if (!statusMap[row.client_id]) statusMap[row.client_id] = {}
+        statusMap[row.client_id][row.section] = true
+      }
+      for (const row of ciraCalls || []) {
+        if (!statusMap[row.client_id]) statusMap[row.client_id] = {}
+        statusMap[row.client_id]['calls'] = (statusMap[row.client_id]['calls'] || 0) + 1
+      }
+      for (const row of portalUsers || []) {
+        if (!statusMap[row.client_id]) statusMap[row.client_id] = {}
+        statusMap[row.client_id]['portal'] = true
+      }
+      setClientDataStatus(statusMap)
+    }
+    loadClientStatus()
+  }, [month, uploads])
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -621,59 +653,81 @@ export default function ReportsUploadPage() {
           })}
         </div>
 
-        {/* Per-client status + actions */}
+        {/* Per-client status table */}
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
             Client Status — {monthLabel(month)}
           </h2>
-          <div className="space-y-2">
-            {CLIENTS.map(client => {
-              const clientUploads = uploads.filter(u => u.client_id === client.id)
-              const hasData = uploadedClients.has(client.id)
-              const ns = narrativeStatus[client.id] || 'idle'
-              return (
-                <div key={client.id} className="rounded-xl border p-4 flex items-center justify-between gap-4"
-                  style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${hasData ? 'bg-green-500' : 'bg-gray-300'}`} />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate" style={{ color: 'var(--text)' }}>{client.name}</div>
-                      {clientUploads.length > 0 && (
-                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {clientUploads.map(u => u.file_type.replace('_', ' ')).join(' · ')}
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Client</th>
+                  {['Social', 'GMB', 'G Ads', 'Meta', 'LSA', 'Calls', 'Portal', 'Actions'].map(h => (
+                    <th key={h} style={{ textAlign: 'center', padding: '8px 8px', fontWeight: 600, color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {CLIENTS.map((client, i) => {
+                  const s = clientDataStatus[client.id] || {}
+                  const ns = narrativeStatus[client.id] || 'idle'
+                  const hasData = uploadedClients.has(client.id)
+                  const chk = (v: boolean) => v
+                    ? <span style={{ color: '#16a34a', fontSize: 15 }}>✓</span>
+                    : <span style={{ color: 'var(--text-muted)', opacity: 0.3, fontSize: 13 }}>—</span>
+                  return (
+                    <tr key={client.id} style={{ borderTop: i === 0 ? 'none' : '0.5px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                      <td style={{ padding: '9px 12px', fontWeight: 500, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: hasData ? '#16a34a' : 'var(--border)', flexShrink: 0 }} />
+                          {client.name}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {hasData && (
-                      <>
-                        <button onClick={() => generateNarrative(client.id)}
-                          disabled={ns === 'generating'}
-                          className="text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-40"
-                          style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}>
-                          {ns === 'generating' ? 'Generating…' : ns === 'done' ? '✓ Narrative' : '✦ Generate narrative'}
-                        </button>
-                        <a href={`/reports/${client.id}`} target="_blank"
-                          className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                          style={{ background: 'var(--bg)', border: '0.5px solid var(--border)', color: 'var(--text)' }}>
-                          View →
-                        </a>
-                        <button onClick={() => clearClientMonth(client.id)}
-                          disabled={clearing === client.id}
-                          className="text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-40"
-                          style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>
-                          {clearing === client.id ? 'Clearing…' : '× Clear & redo'}
-                        </button>
-                      </>
-                    )}
-                    {!hasData && (
-                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>No data yet</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.social_organic)}</td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.gmb)}</td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>
+                        {s.google_ads ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>
+                        {s.meta_ads ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.lsa)}</td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>
+                        {s.calls > 0 ? <span style={{ fontSize: 10, background: '#EAF3DE', color: '#3B6D11', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>{s.calls}</span> : chk(false)}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.portal)}</td>
+                      <td style={{ textAlign: 'center', padding: '9px 4px' }}>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
+                          {hasData && (
+                            <>
+                              <button onClick={() => generateNarrative(client.id)} disabled={ns === 'generating'}
+                                style={{ fontSize: 10, padding: '3px 7px', borderRadius: 6, background: 'rgba(99,102,241,0.1)', color: '#6366f1', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', opacity: ns === 'generating' ? 0.5 : 1 }}>
+                                {ns === 'generating' ? '…' : ns === 'done' ? '✓' : '✦ Narrative'}
+                              </button>
+                              <a href={`/reports/${client.id}`} target="_blank"
+                                style={{ fontSize: 10, padding: '3px 7px', borderRadius: 6, background: 'var(--bg)', border: '0.5px solid var(--border)', color: 'var(--text)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                View
+                              </a>
+                              <button onClick={() => clearClientMonth(client.id)} disabled={clearing === client.id}
+                                style={{ fontSize: 10, padding: '3px 7px', borderRadius: 6, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', opacity: clearing === client.id ? 0.5 : 1 }}>
+                                {clearing === client.id ? '…' : '× Clear'}
+                              </button>
+                            </>
+                          )}
+                          {!hasData && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No data</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+            <span><span style={{ color: '#16a34a' }}>✓</span> Data uploaded</span>
+            <span><span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '1px 5px', borderRadius: 8, fontWeight: 600 }}>Live</span> Windsor live</span>
+            <span><span style={{ fontSize: 10, background: '#EAF3DE', color: '#3B6D11', padding: '1px 5px', borderRadius: 8, fontWeight: 600 }}>n</span> Call count</span>
           </div>
         </div>
 
