@@ -18,6 +18,17 @@ const CLIENTS = [
   { id: 'rg-general-roofing',            name: 'RG General Roofing' },
 ]
 
+// Clients with Windsor Google Ads connected (live data)
+const WINDSOR_GADS_CLIENTS = new Set([
+  'culture', 'mvp-chiro', 'rbs', 'nico-roofing', 'midwest-constrcution-experts',
+  'apollo-events', 'a-b-consulting-group', 'affiliated-control', 'kbc',
+])
+
+// Clients with Windsor Meta Ads connected (live data)
+const WINDSOR_META_CLIENTS = new Set([
+  'culture',
+])
+
 // Derived from actual Sprout Social profile names in the CSV
 function matchesClient(profile: string, clientId: string): boolean {
   const p = profile.replace(/^'+/, '').toLowerCase().trim()
@@ -687,10 +698,10 @@ export default function ReportsUploadPage() {
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.social_organic)}</td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.gmb)}</td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>
-                        {s.google_ads ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
+                        {WINDSOR_GADS_CLIENTS.has(client.id) ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
                       </td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>
-                        {s.meta_ads ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
+                        {WINDSOR_META_CLIENTS.has(client.id) ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
                       </td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.lsa)}</td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>
