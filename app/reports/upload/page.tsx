@@ -35,15 +35,15 @@ function matchesClient(profile: string, clientId: string): boolean {
     case 'midwest-constrcution-experts':
       return p.includes('midwest construction') || p === 'midwest_construction_exp'
     case 'nico-roofing':
-      return p === 'nico roofing' || p === '@nicoroofing' || p.includes('nico exterior') || p.includes('nico roofing')
+      return p === 'nico roofing' || p === '@nicoroofing' || p.includes('nico exterior') || p.includes('nico roofing') || p === 'nico exteriors'
     case 'a-b-consulting-group':
       return p === 'a&b consulting group' || p === 'ab_consulting_group' || p.includes('a&b consulting') || p === '@abconsultingg' || p === 'abconsultingg'
     case 'affiliated-control':
       return p.includes('affiliated control')
     case 'midway-windows-doors':
-      return p.includes('midway windows')
+      return p.includes('midway windows') || p === 'midway windows & doors, inc.'
     case 'apek':
-      return p.includes('apek') || p === 'apekincorporated'
+      return p.includes('apek') || p === 'apekincorporated' || p.includes('apek incorporated')
     case 'franos-roofing':
       return p.includes('franos roofing') || p === 'franos'
     case 'rg-general-roofing':
