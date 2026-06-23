@@ -162,6 +162,20 @@ export default async function PortalReportPage({
         </div>
       )}
 
+      {/* Narrative */}
+      {report?.narrative && (
+        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12,
+                      padding: 24, marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px',
+                        color: '#6366f1', marginBottom: 12 }}>
+            ✦ Monthly Insights
+          </div>
+          <div style={{ fontSize: 14, lineHeight: 1.75, color: '#374151', whiteSpace: 'pre-wrap' }}>
+            {report.narrative}
+          </div>
+        </div>
+      )}
+
       {/* Live Channel Data */}
       {approvedChannels.size > 0 && (
         <div style={{ marginBottom: 24 }}>
@@ -184,20 +198,6 @@ export default async function PortalReportPage({
               .map(ch => ({ ...ch, note: approvalNotes[ch.id] || '' }))
             }
           />
-        </div>
-      )}
-
-      {/* Narrative */}
-      {report?.narrative && (
-        <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12,
-                      padding: 24, marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px',
-                        color: '#6366f1', marginBottom: 12 }}>
-            ✦ Monthly Insights
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.75, color: '#374151', whiteSpace: 'pre-wrap' }}>
-            {report.narrative}
-          </div>
         </div>
       )}
 
