@@ -29,6 +29,12 @@ const WINDSOR_META_CLIENTS = new Set([
   'culture',
 ])
 
+// Clients running LSA
+const LSA_CLIENTS = new Set([
+  'culture', 'mvp-chiro', 'kbc', 'midwest-constrcution-experts',
+  'nico-roofing', 'apollo-events', 'affiliated-control',
+])
+
 // Derived from actual Sprout Social profile names in the CSV
 function matchesClient(profile: string, clientId: string): boolean {
   const p = profile.replace(/^'+/, '').toLowerCase().trim()
@@ -703,7 +709,9 @@ export default function ReportsUploadPage() {
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>
                         {WINDSOR_META_CLIENTS.has(client.id) ? <span style={{ fontSize: 10, background: '#E6F1FB', color: '#185FA5', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>Live</span> : chk(false)}
                       </td>
-                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>{chk(!!s.lsa)}</td>
+                      <td style={{ textAlign: 'center', padding: '9px 8px' }}>
+                        {LSA_CLIENTS.has(client.id) ? <span style={{ fontSize: 10, background: '#EAF3DE', color: '#3B6D11', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>LSA</span> : chk(false)}
+                      </td>
                       <td style={{ textAlign: 'center', padding: '9px 8px' }}>
                         {s.calls > 0 ? <span style={{ fontSize: 10, background: '#EAF3DE', color: '#3B6D11', padding: '2px 6px', borderRadius: 10, fontWeight: 600 }}>{s.calls}</span> : chk(false)}
                       </td>
