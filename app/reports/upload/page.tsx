@@ -26,7 +26,7 @@ const WINDSOR_GADS_CLIENTS = new Set([
 
 // Clients with Windsor Meta Ads connected (live data)
 const WINDSOR_META_CLIENTS = new Set([
-  'culture',
+  'culture', 'apollo-events', 'a-b-consulting-group', 'rbs', 'nico-roofing',
 ])
 
 // Clients running LSA
