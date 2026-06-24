@@ -25,6 +25,28 @@ function fmtDate(d: string | null) {
   catch { return d }
 }
 
+function WoRow({ w, onClick, showCost, costVal }: { w: any; onClick: () => void; showCost: boolean; costVal: number }) {
+  const sv = stageView(w.stage)
+  return (
+    <div onClick={onClick}
+      style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 14,
+               alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e8e6dd', cursor: 'pointer' }}>
+      <span style={{ width: 10, height: 10, borderRadius: '50%', background: sv.dot }} />
+      <div>
+        <div style={{ fontWeight: 600, color: '#0f1b34', fontSize: 14.5 }}>{w.title}</div>
+        <div style={{ fontSize: 12.5, color: '#6b6a63', marginTop: 2 }}>
+          <span style={{ color: sv.color, fontWeight: 500 }}>{sv.label}</span>
+          {w.services?.name ? ' · ' + w.services.name : ''}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', fontSize: 12, color: '#6b6a63', fontFamily: 'monospace' }}>
+        {showCost && <div style={{ color: '#0f1b34', fontWeight: 600 }}>{'$' + costVal.toLocaleString('en-US')}</div>}
+        {w.due_date && <div>{new Date(w.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>}
+      </div>
+    </div>
+  )
+}
+
 export default function PortalClient({
   greetingName, client, workOrders, schedule, services, currentUserId,
 }: {
@@ -38,6 +60,7 @@ export default function PortalClient({
   const router = useRouter()
   const [approvalWo, setApprovalWo] = useState<WO | null>(null)
   const [requestOpen, setRequestOpen] = useState(false)
+  const [stageFilter, setStageFilter] = useState<string | null>(null)
 
   const visible = useMemo(
     () => workOrders.filter(w => !HIDDEN_STAGES.has(w.stage)),
@@ -59,6 +82,23 @@ export default function PortalClient({
       return d.getMonth() === m && d.getFullYear() === y
     }).length
   }, [visible])
+
+  const PIPELINE_GROUPS = [
+    { key: 'received',    label: 'Received by A&B',   stages: ['submitted', 'not-started'] },
+    { key: 'in-progress', label: 'In Progress',        stages: ['in-progress', 'deliverables-completed'] },
+    { key: 'approval',    label: 'Ready for Approval', stages: ['sent-for-approval'] },
+    { key: 'revisions',   label: 'Revisions Sent',     stages: ['revisions-received'] },
+    { key: 'approved',    label: 'Approved',           stages: ['approved', 'deliverables-executed', 'ordered'] },
+    { key: 'invoiced',    label: 'Invoiced',           stages: ['invoiced'] },
+    { key: 'paid',        label: 'Completed',          stages: ['paid'] },
+  ]
+  const filteredVisible = useMemo(() => {
+    if (!stageFilter) return visible
+    if (stageFilter === 'active') return active
+    if (stageFilter === 'approval') return waitingOnYou
+    if (stageFilter === 'paid') return visible.filter((w: WO) => w.stage === 'paid')
+    return visible
+  }, [visible, active, waitingOnYou, stageFilter])
 
   const upcoming = useMemo(() => {
     const t = todayISO()
@@ -132,12 +172,18 @@ export default function PortalClient({
           </div>
         )}
 
-        {/* Stat cards */}
+        {/* Stat cards - clickable filters */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 28 }}>
-          <Stat label="Active projects" value={active.length} />
-          <Stat label="Awaiting approval" value={waitingOnYou.length}
-                sub={waitingOnYou.length ? 'Need your review' : undefined} subColor="#ea580c" />
-          <Stat label="Completed this month" value={completedThisMonth} />
+          {[
+            { key: 'active',   label: 'Active projects',      value: active.length,       sub: undefined as string|undefined, subColor: undefined as string|undefined },
+            { key: 'approval', label: 'Awaiting approval',    value: waitingOnYou.length, sub: (waitingOnYou.length ? 'Need your review' : undefined) as string|undefined, subColor: '#ea580c' as string|undefined },
+            { key: 'paid',     label: 'Completed this month', value: completedThisMonth,  sub: undefined as string|undefined, subColor: undefined as string|undefined },
+          ].map(({ key, label, value, sub, subColor }) => (
+            <div key={key} onClick={() => setStageFilter(f => f === key ? null : key)}
+              style={{ cursor: 'pointer', borderRadius: 12, outline: stageFilter === key ? '2px solid #d99e2b' : '2px solid transparent', transition: 'outline 0.15s' }}>
+              <Stat label={label} value={value} sub={sub} subColor={subColor} />
+            </div>
+          ))}
         </div>
 
         {/* Looker */}
@@ -163,28 +209,33 @@ export default function PortalClient({
                   No projects yet. Use “Request a project” to get started.
                 </div>
               )}
-              {visible.map(w => {
-                const sv = stageView(w.stage)
-                return (
-                  <div key={w.id} onClick={() => router.push(`/portal/wo/${w.id}`)}
-                    style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 14,
-                             alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e8e6dd',
-                             cursor: 'pointer' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: sv.dot }} />
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#0f1b34', fontSize: 14.5 }}>{w.title}</div>
-                      <div style={{ fontSize: 12.5, color: '#6b6a63', marginTop: 2 }}>
-                        <span style={{ color: sv.color, fontWeight: 500 }}>{sv.label}</span>
-                        {w.services?.name ? ` · ${w.services.name}` : ''}
+              {stageFilter ? (
+                filteredVisible.length === 0
+                  ? <div style={{ padding: 32, textAlign: 'center', color: '#a3a097', fontSize: 14 }}>No projects in this category.</div>
+                  : filteredVisible.map((w: WO) => (
+                    <WoRow key={w.id} w={w} onClick={() => router.push(`/portal/wo/${w.id}`)} showCost={showCost(w)} costVal={cost(w)} />
+                  ))
+              ) : (
+                PIPELINE_GROUPS.map(group => {
+                  const items = visible.filter((w: WO) => group.stages.includes(w.stage))
+                  if (!items.length) return null
+                  const sv = stageView(group.stages[0])
+                  return (
+                    <div key={group.key}>
+                      <div style={{ padding: '8px 24px 6px', background: '#f9f8f6', borderTop: '1px solid #e8e6dd',
+                                    display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: sv.dot, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                                       letterSpacing: '0.08em', color: sv.color }}>{group.label}</span>
+                        <span style={{ fontSize: 11, color: '#a3a097' }}>{items.length}</span>
                       </div>
+                      {items.map((w: WO) => (
+                        <WoRow key={w.id} w={w} onClick={() => router.push(`/portal/wo/${w.id}`)} showCost={showCost(w)} costVal={cost(w)} />
+                      ))}
                     </div>
-                    <div style={{ textAlign: 'right', fontSize: 12, color: '#6b6a63', fontFamily: 'monospace' }}>
-                      {showCost(w) && <div style={{ color: '#0f1b34', fontWeight: 600 }}>{money(cost(w))}</div>}
-                      {w.due_date && <div>{fmtDate(w.due_date)}</div>}
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
           </div>
 
