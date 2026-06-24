@@ -106,7 +106,26 @@ function GmbTab({ clientId, month }: { clientId: string; month: string }) {
       .eq('client_id', clientId)
       .eq('month', month)
       .order('calls', { ascending: false })
-      .then(({ data }) => { setLocations(data || []); setLoading(false) })
+      .then(({ data }) => {
+        // Deduplicate by address — sum metrics for rows with same address
+        const raw = data || []
+        const addrMap: Record<string, any> = {}
+        for (const l of raw) {
+          const key = (l.address || l.business_name || '').trim().toLowerCase()
+          if (!addrMap[key]) {
+            addrMap[key] = { ...l, search_mobile: 0, search_desktop: 0, maps_mobile: 0, maps_desktop: 0, calls: 0, directions: 0, website_clicks: 0 }
+          }
+          addrMap[key].search_mobile  += l.search_mobile  || 0
+          addrMap[key].search_desktop += l.search_desktop || 0
+          addrMap[key].maps_mobile    += l.maps_mobile    || 0
+          addrMap[key].maps_desktop   += l.maps_desktop   || 0
+          addrMap[key].calls          += l.calls          || 0
+          addrMap[key].directions     += l.directions     || 0
+          addrMap[key].website_clicks += l.website_clicks || 0
+        }
+        setLocations(Object.values(addrMap))
+        setLoading(false)
+      })
   }, [clientId, month])
 
   if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading GMB data…</div>
