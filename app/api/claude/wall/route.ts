@@ -37,7 +37,32 @@ export async function POST(req: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(300)
 
-  const filteredWos = level === 'team'
+  const { data: reportRows } = await supabaseAdmin
+    .from('report_data')
+    .select('client_id, month, section, platform, metric, value, clients!report_data_client_id_fkey(name)')
+    .order('month', { ascending: false })
+    .limit(1000)
+
+  const reportByClient: Record<string, Record<string, any>> = {}
+  ;(reportRows || []).forEach((r: any) => {
+    const clientName = r.clients?.name || r.client_id
+    if (!reportByClient[clientName]) reportByClient[clientName] = {}
+    reportByClient[clientName][r.month+'|'+r.section+'|'+r.platform+'|'+r.metric] = r.value
+  })
+
+  const reportSummary = Object.entries(reportByClient).slice(0, 14).map(([client, data]) => {
+    const months = [...new Set(Object.keys(data).map(k => k.split('|')[0]))].sort().reverse().slice(0, 2)
+    const lines = months.map(month => {
+      const metrics = Object.entries(data)
+        .filter(([k]) => k.startsWith(month))
+        .map(([k, v]) => { const p = k.split('|'); return p[1]+'/'+p[2]+'/'+p[3]+': '+v })
+        .slice(0, 12).join(', ')
+      return '  ' + month + ': ' + metrics
+    }).join('\n')
+    return client + ':\n' + lines
+  }).join('\n\n')
+
+    const filteredWos = level === 'team'
     ? (wos || []).filter((w: any) =>
         w.team_members?.auth_user_id === user.id ||
         (w.wo_assignees || []).some((a: any) => a.team_members?.auth_user_id === user.id)
@@ -62,10 +87,15 @@ Today is ${now}. You are talking with ${member.name} (${level} level).
 ACTIVE WORK ORDERS:
 ${woList}
 
+CLIENT REPORT DATA:
+${reportSummary}
+
 RULES:
 - Keep replies short and conversational — this is a team chat, not a report
 - Never share financial/cost data with team-level users  
-- Answer questions about WOs, clients, status, and team operations
+- Answer questions about WOs, clients, performance, and operations
+- You CAN share marketing metrics (ads, GMB, social) with all team members
+- When asked about client performance pull numbers from report data
 - Be direct and actionable
 - Channel context: ${channel}${threadContext}`
 
