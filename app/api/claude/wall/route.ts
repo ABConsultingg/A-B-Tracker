@@ -9,6 +9,132 @@ const supabaseAdmin = createAdmin(
 
 const PANCHO_AUTHOR_ID = 'a0000000-0000-0000-0000-000000000001'
 
+// ── Wall-side read-only tools ─────────────────────────────────────────────
+const WALL_TOOLS = [
+  {
+    name: 'get_wo_detail',
+    description: 'Get full details of a specific work order: tasks, messages, assignees, schedule, files.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        wo_id:    { type: 'string', description: 'Work order ID (UUID)' },
+        wo_title: { type: 'string', description: 'Work order title partial match' },
+      },
+    },
+  },
+  {
+    name: 'read_wo_files',
+    description: 'Read the files and attachments on a work order. Use when asked to summarize, review, or reference documents attached to a WO.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        wo_id:    { type: 'string', description: 'Work order ID (UUID)' },
+        wo_title: { type: 'string', description: 'Work order title (partial match ok)' },
+      },
+    },
+  },
+]
+
+async function executeWallTool(name: string, input: any): Promise<string> {
+  try {
+    if (name === 'get_wo_detail') {
+      let woId = input.wo_id
+      if (!woId && input.wo_title) {
+        const { data: found } = await supabaseAdmin
+          .from('work_orders').select('id').ilike('title', '%' + input.wo_title + '%').maybeSingle()
+        woId = found?.id
+      }
+      if (!woId) return 'Error: Could not find work order'
+      const { data: wo } = await supabaseAdmin
+        .from('work_orders')
+        .select(`id, title, stage, due_date, priority, notes,
+                 clients!work_orders_client_id_fkey(name),
+                 team_members!work_orders_owner_id_fkey(name),
+                 wo_assignees(team_members(name)),
+                 wo_tasks(title, status, priority, due_date, notes),
+                 wo_schedule(title, scheduled_date, type),
+                 wo_comments(body, created_at, internal_only)`)
+        .eq('id', woId).maybeSingle()
+      if (!wo) return 'Work order not found'
+      const w = wo as any
+      const assignees = (w.wo_assignees || []).map((a: any) => a.team_members?.name).filter(Boolean).join(', ')
+      const tasks = (w.wo_tasks || []).map((t: any) => '  [' + t.status + '] ' + t.title + (t.due_date ? ' due ' + t.due_date : '')).join('\n')
+      const schedule = (w.wo_schedule || [])
+        .sort((a: any, b: any) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
+        .map((sc: any) => '  ' + sc.scheduled_date + ' | ' + sc.type + ' | ' + sc.title).join('\n')
+      const msgs = (w.wo_comments || []).slice(-8).map((c: any) => '  ' + new Date(c.created_at).toLocaleDateString() + ': ' + c.body).join('\n')
+      return [
+        'WO: ' + w.title + ' [' + w.stage + ']',
+        'Client: ' + (w.clients?.name || '?') + ' | Owner: ' + (w.team_members?.name || 'unassigned') + (assignees ? ' | Assignees: ' + assignees : ''),
+        'Due: ' + (w.due_date || 'none') + ' | Priority: ' + (w.priority || 'medium'),
+        w.notes ? 'Notes: ' + w.notes : '',
+        tasks ? 'TASKS:\n' + tasks : 'TASKS: none',
+        schedule ? 'SCHEDULE:\n' + schedule : '',
+        msgs ? 'RECENT MESSAGES:\n' + msgs : '',
+      ].filter(Boolean).join('\n')
+    }
+
+    if (name === 'read_wo_files') {
+      let woId = input.wo_id
+      if (!woId && input.wo_title) {
+        const { data: found } = await supabaseAdmin
+          .from('work_orders').select('id').ilike('title', '%' + input.wo_title + '%').maybeSingle()
+        if (!found) return 'Could not find work order: ' + input.wo_title
+        woId = found.id
+      }
+      if (!woId) return 'Error: provide wo_id or wo_title'
+
+      const { data: files } = await supabaseAdmin
+        .from('wo_files').select('id, name, storage_path, mime_type, size_bytes')
+        .eq('work_order_id', woId).order('created_at', { ascending: false })
+      if (!files?.length) return 'No files attached to this work order.'
+
+      const results: string[] = []
+      for (const file of files.slice(0, 5)) {
+        const { data: signed } = await supabaseAdmin.storage.from('ab-files').createSignedUrl(file.storage_path, 300)
+        if (!signed?.signedUrl) { results.push('File: ' + file.name + ' (could not generate URL)'); continue }
+
+        const isText = file.mime_type?.includes('text') || file.name.endsWith('.csv') || file.name.endsWith('.txt') || file.name.endsWith('.md')
+        const isPdf = file.mime_type?.includes('pdf') || file.name.endsWith('.pdf')
+        const isDoc = file.name.endsWith('.docx') || file.name.endsWith('.doc')
+
+        if (isText) {
+          try {
+            const res = await fetch(signed.signedUrl)
+            const text = await res.text()
+            results.push('=== ' + file.name + ' ===\n' + text.substring(0, 4000) + (text.length > 4000 ? '\n...(truncated)' : ''))
+          } catch { results.push('File: ' + file.name + ' (download failed)') }
+        } else if (isPdf) {
+          try {
+            const res = await fetch(signed.signedUrl)
+            const buffer = Buffer.from(await res.arrayBuffer())
+            const pdfParse = await import('pdf-parse')
+            const parsed = await (pdfParse as any).default(buffer)
+            results.push('=== ' + file.name + ' (PDF) ===\n' + (parsed.text || '').substring(0, 4000))
+          } catch (e: any) { results.push('File: ' + file.name + ' (PDF parse failed: ' + e.message + ')') }
+        } else if (isDoc) {
+          try {
+            const res = await fetch(signed.signedUrl)
+            const buffer = Buffer.from(await res.arrayBuffer())
+            const mammoth = await import('mammoth')
+            const result = await mammoth.extractRawText({ buffer })
+            results.push('=== ' + file.name + ' (Word doc) ===\n' + (result.value || '').substring(0, 4000))
+          } catch (e: any) { results.push('File: ' + file.name + ' (DOCX parse failed: ' + e.message + ')') }
+        } else {
+          results.push('File: ' + file.name + ' (' + (file.mime_type || 'binary') + ') — cannot read this file type')
+        }
+      }
+      return 'Files on this work order:\n\n' + results.join('\n\n')
+    }
+
+    return 'Unknown tool: ' + name
+  } catch (e: any) {
+    return 'Tool error: ' + e.message
+  }
+}
+
+
+
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -108,8 +234,9 @@ RULES:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 600,
+      max_tokens: 800,
       system: systemPrompt,
+      tools: WALL_TOOLS,
       messages: [{ role: 'user', content: message }],
     }),
   })
@@ -119,8 +246,40 @@ RULES:
     return NextResponse.json({ error: 'AI error' }, { status: 500 })
   }
 
-  const aiData = await anthropicRes.json()
-  const reply = aiData.content?.[0]?.text?.trim()
+  let aiData = await anthropicRes.json()
+
+  // Handle tool_use — execute tools and follow up
+  if (aiData.stop_reason === 'tool_use') {
+    const toolUseBlocks = aiData.content.filter((b: any) => b.type === 'tool_use')
+    const toolResults: any[] = []
+    for (const block of toolUseBlocks) {
+      const result = await executeWallTool(block.name, block.input)
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result })
+    }
+    const followUpRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 800,
+        system: systemPrompt,
+        tools: WALL_TOOLS,
+        messages: [
+          { role: 'user', content: message },
+          { role: 'assistant', content: aiData.content },
+          { role: 'user', content: toolResults },
+        ],
+      }),
+    })
+    if (!followUpRes.ok) return NextResponse.json({ error: 'AI follow-up error' }, { status: 500 })
+    aiData = await followUpRes.json()
+  }
+
+  const reply = aiData.content?.find((b: any) => b.type === 'text')?.text?.trim()
   if (!reply) return NextResponse.json({ error: 'No reply' }, { status: 500 })
 
   // Insert as Pancho using service role (bypasses RLS)
