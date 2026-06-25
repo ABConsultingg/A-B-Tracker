@@ -227,7 +227,7 @@ export default function StandupClient({
       setBody(''); setPostWo(''); setMention(null)
       if (/\@pancho/i.test(txt)) {
         // Pass the post itself so Pancho has the full message + any linked WO context
-        const selfThread = [{ author: currentUserName, authorId: currentUserId, body: txt }]
+        const selfThread = [{ author: currentUserName, authorId: currentUserId ?? undefined, body: txt }]
         triggerPancho(txt, channel, res.id, selfThread, postWo || null)
       }
     }
