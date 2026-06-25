@@ -90,7 +90,7 @@ export default function WoMessagesTab({
   }, [team, wo.owner_id])
 
   const mentionMatches = useMemo(() =>
-    mentionCandidates.filter(t => t.name.toLowerCase().includes(mentionDropdown.query)).slice(0, 6),
+    mentionCandidates.filter(t => t.name.toLowerCase().includes(mentionDropdown.query)).slice(0, 20),
     [mentionCandidates, mentionDropdown.query])
 
   const currentUserName = useMemo(() => team.find(t => t.auth_user_id === currentUserId)?.name || 'Someone', [team, currentUserId])

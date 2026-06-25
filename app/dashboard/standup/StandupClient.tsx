@@ -144,7 +144,7 @@ export default function StandupClient({
   }
   const mentionMatches = useMemo(() => {
     if (!mention) return []
-    return team.filter(t => t.name.toLowerCase().includes(mention.query)).slice(0, 6)
+    return team.filter(t => t.name.toLowerCase().includes(mention.query)).slice(0, 20)
   }, [team, mention])
   function applyMention(name: string, value: string, setter: (v: string) => void) {
     if (!mention) return

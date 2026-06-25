@@ -422,7 +422,7 @@ function WoGroup({
     setMentionDropdown({ open: false, query: '', position: 0 })
   }
 
-  const mentionMatches = team.filter(t => t.name.toLowerCase().includes(mentionDropdown.query)).slice(0, 6)
+  const mentionMatches = team.filter(t => t.name.toLowerCase().includes(mentionDropdown.query)).slice(0, 20)
 
   async function postReply() {
     const text = body.trim()
