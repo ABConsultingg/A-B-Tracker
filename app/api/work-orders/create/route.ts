@@ -18,7 +18,15 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { title, client_id, notes, priority = 'medium', owner_name, assignee_name, due_date } = body
+  const { title, client_id, notes, priority = 'medium', owner_name, assignee_name, due_date, service_id } = body
+
+  // Map channel to service_id if not provided
+  const CHANNEL_SERVICE: Record<string, string> = {
+    'Google Ads': 'ab-ppc', 'Meta Ads': 'ab-ppc', 'Social': 'ab-social',
+    'Email': 'ab-email', 'Website': 'ab-website', 'GMB': 'ab-reputation',
+    'SEO': 'ab-seo', 'Video': 'ab-video', 'Design': 'ab-design',
+  }
+  const resolvedServiceId = service_id || 'ab-consulting-onetime'
 
   if (!title || !client_id) {
     return NextResponse.json({ error: 'title and client_id required' }, { status: 400 })
@@ -41,6 +49,7 @@ export async function POST(req: NextRequest) {
       title,
       client_id,
       owner_id: ownerId,
+      service_id: resolvedServiceId,
       stage: 'not-started',
       priority,
       occurrence: 'One-time',

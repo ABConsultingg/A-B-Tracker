@@ -1914,6 +1914,7 @@ function ActionPlanPanel({ clientId, clientName, clientIndustry, month, hasData,
           owner_name: woOwner || undefined,
           assignee_name: woAssignee || undefined,
           due_date: woDue || undefined,
+          channel: woModal.channel,
         }),
       })
       const resData = await res.json(); console.log('WO create response:', resData); if (res.ok) {
