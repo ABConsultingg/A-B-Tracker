@@ -174,12 +174,27 @@ export default function StandupClient({
   }
 
   // ── Pancho wall responder ──
-  async function triggerPancho(message: string, chan: string, parentId: string, threadPosts: { author: string; body: string }[]) {
+  async function triggerPancho(
+    message: string,
+    chan: string,
+    parentId: string,
+    threadPosts: { author: string; authorId?: string; body: string }[],
+    workOrderTitle?: string | null,
+  ) {
     try {
+      // Scan all thread text for a WO title hint if not explicitly provided
+      const allText = [message, ...threadPosts.map(p => p.body)].join(' ')
+      const woIdFromText = allText.match(/WO-[a-f0-9]{6,10}/i)?.[0] || null
       await fetch('/api/claude/wall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, channel: chan, parent_id: parentId, thread_posts: threadPosts }),
+        body: JSON.stringify({
+          message,
+          channel: chan,
+          parent_id: parentId,
+          thread_posts: threadPosts,
+          work_order_title: workOrderTitle || woIdFromText || null,
+        }),
       })
     } catch (e) { console.error('Pancho wall error:', e) }
   }
@@ -210,7 +225,11 @@ export default function StandupClient({
     if (res) {
       const txt = body
       setBody(''); setPostWo(''); setMention(null)
-      if (/\@pancho/i.test(txt)) triggerPancho(txt, channel, res.id, [])
+      if (/\@pancho/i.test(txt)) {
+        // Pass the post itself so Pancho has the full message + any linked WO context
+        const selfThread = [{ author: currentUserName, authorId: currentUserId, body: txt }]
+        triggerPancho(txt, channel, res.id, selfThread, postWo || null)
+      }
     }
   }
   async function onReply(parentId: string) {
@@ -222,9 +241,17 @@ export default function StandupClient({
       const txt = replyBody
       const threadPosts = posts
         .filter(p => p.id === parentId || p.parent_id === parentId)
-        .map(p => ({ author: authMap[p.author_id] || (p.author_id === PANCHO_AUTHOR_ID ? 'Pancho' : 'Someone'), body: p.body }))
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map(p => ({
+          author: authMap[p.author_id] || (p.author_id === PANCHO_AUTHOR_ID ? 'Pancho' : 'Someone'),
+          authorId: p.author_id,
+          body: p.body,
+        }))
+      // Also grab linked WO title from the parent post if available
+      const parentPost = posts.find(p => p.id === parentId)
+      const linkedWoTitle = (parentPost as any)?.work_orders?.title || (parentPost as any)?.work_order_title || null
       setReplyBody(''); setReplyWo(''); setReplyTo(null); setMention(null)
-      if (/\@pancho/i.test(txt)) triggerPancho(txt, channel, parentId, threadPosts)
+      if (/\@pancho/i.test(txt)) triggerPancho(txt, channel, parentId, threadPosts, linkedWoTitle)
     }
   }
   async function onDelete(id: string) {

@@ -140,7 +140,20 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { message, channel, parent_id, thread_posts } = await req.json()
+  const { message, channel, parent_id, thread_posts, work_order_id, work_order_title } = await req.json()
+
+  // Extract WO title from: explicit field > thread messages > message body
+  function extractWoHint(): string | null {
+    if (work_order_title) return work_order_title
+    if (work_order_id) return work_order_id
+    // Scan thread_posts for WO link text patterns
+    const allText = [message, ...(thread_posts || []).map((p: any) => p.body || '')].join(' ')
+    // Match patterns like "Apollo Supply — Some Title" or WO IDs
+    const woIdMatch = allText.match(/WO-[a-f0-9]{6,10}/i)
+    if (woIdMatch) return woIdMatch[0]
+    return null
+  }
+  const woHint = extractWoHint()
 
   const { data: member } = await supabaseAdmin
     .from('team_members')
@@ -200,8 +213,15 @@ export async function POST(req: NextRequest) {
     return `- [${w.stage}] ${w.title} | Client: ${w.clients?.name || '?'} | Due: ${w.due_date || 'none'} | Owner: ${w.team_members?.name || 'unassigned'}${assignees ? ' | Assignees: ' + assignees : ''}`
   }).join('\n')
 
-  const threadContext = (thread_posts || []).length > 0
-    ? '\n\nTHREAD CONTEXT:\n' + (thread_posts as any[]).map((p: any) => `${p.author}: ${p.body}`).join('\n')
+  const threadMessages = (thread_posts || []) as any[]
+  const threadContext = threadMessages.length > 0
+    ? '\n\nTHREAD CONTEXT (full conversation so far):\n' +
+      threadMessages.map((p: any) => `${p.author}: ${p.body}`).join('\n')
+    : ''
+  
+  // Build WO hint string for system prompt
+  const woHintLine = woHint
+    ? `\n\nIMPORTANT: This conversation references a work order. Hint: "${woHint}". Use get_wo_detail and/or read_wo_files immediately to pull its content — do NOT ask the user to tell you which WO it is.`
     : ''
 
   const now = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -223,7 +243,7 @@ RULES:
 - You CAN share marketing metrics (ads, GMB, social) with all team members
 - When asked about client performance pull numbers from report data
 - Be direct and actionable
-- Channel context: ${channel}${threadContext}`
+- Channel context: ${channel}${threadContext}${woHintLine}`
 
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -237,7 +257,32 @@ RULES:
       max_tokens: 800,
       system: systemPrompt,
       tools: WALL_TOOLS,
-      messages: [{ role: 'user', content: message }],
+      messages: (() => {
+        // Build real conversation history from thread so Claude has full context
+        if (threadMessages.length === 0) {
+          return [{ role: 'user', content: message }]
+        }
+        // Interleave thread posts as user/assistant turns
+        const history: any[] = []
+        for (const post of threadMessages) {
+          const isPancho = post.author === 'Pancho' || post.authorId === PANCHO_AUTHOR_ID
+          history.push({ role: isPancho ? 'assistant' : 'user', content: post.body })
+        }
+        // Add the current triggering message
+        history.push({ role: 'user', content: message })
+        // Claude requires alternating turns — merge consecutive same-role messages
+        const merged: any[] = []
+        for (const turn of history) {
+          if (merged.length > 0 && merged[merged.length - 1].role === turn.role) {
+            merged[merged.length - 1].content += '\n' + turn.content
+          } else {
+            merged.push({ ...turn })
+          }
+        }
+        // Must start with user
+        if (merged[0]?.role === 'assistant') merged.shift()
+        return merged.length > 0 ? merged : [{ role: 'user', content: message }]
+      })(),
     }),
   })
 
@@ -268,11 +313,26 @@ RULES:
         max_tokens: 800,
         system: systemPrompt,
         tools: WALL_TOOLS,
-        messages: [
-          { role: 'user', content: message },
-          { role: 'assistant', content: aiData.content },
-          { role: 'user', content: toolResults },
-        ],
+        messages: (() => {
+          const base: any[] = []
+          for (const post of threadMessages) {
+            const isPancho = post.author === 'Pancho' || post.authorId === PANCHO_AUTHOR_ID
+            base.push({ role: isPancho ? 'assistant' : 'user', content: post.body })
+          }
+          base.push({ role: 'user', content: message })
+          base.push({ role: 'assistant', content: aiData.content })
+          base.push({ role: 'user', content: toolResults })
+          // Merge consecutive same-role, ensure starts with user
+          const merged: any[] = []
+          for (const turn of base) {
+            if (merged.length > 0 && merged[merged.length - 1].role === turn.role) {
+              merged[merged.length - 1].content += typeof turn.content === 'string'
+                ? '\n' + turn.content : turn.content
+            } else { merged.push({ ...turn }) }
+          }
+          if (merged[0]?.role === 'assistant') merged.shift()
+          return merged
+        })(),
       }),
     })
     if (!followUpRes.ok) return NextResponse.json({ error: 'AI follow-up error' }, { status: 500 })
