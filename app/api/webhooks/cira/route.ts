@@ -133,6 +133,7 @@ export async function POST(req: NextRequest) {
     const record = {
       client_id:            CLIENT_ID,
       call_date:            callDate,
+      call_month:           callDate.slice(0, 7),
       call_time:            timeStr || null,
       caller_name:          callerName && callerName !== 'null' ? callerName : null,
       caller_phone:         callerPhone || null,
