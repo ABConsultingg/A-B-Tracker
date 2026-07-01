@@ -438,19 +438,20 @@ function NewCampaignInner() {
                 {adSets.map((set, si) => {
                   const setName = set.name as string
                   const setAds = set.ads as Record<string, unknown>[] | undefined
+                  const setAudience = set.audience ?? null
                   return (
                   <div key={si} style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', background: '#F5F5F4', borderBottom: '1px solid #E7E5E4' }}>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{setName}</span>
                     </div>
                     <div style={{ padding: 16 }}>
-                      {set.audience && (
+                      {setAudience && (
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', marginBottom: 8 }}>Audience Targeting</div>
                           <pre style={{ fontSize: 12, background: '#F5F5F4', padding: 10, borderRadius: 6, overflow: 'auto', margin: 0, color: ink }}>
-                            {JSON.stringify(set.audience, null, 2)}
+                            {JSON.stringify(setAudience, null, 2)}
                           </pre>
-                          <button onClick={() => copy(JSON.stringify(set.audience, null, 2), `aud-${si}`)}
+                          <button onClick={() => copy(JSON.stringify(setAudience, null, 2), `aud-${si}`)}
                             style={{ marginTop: 6, fontSize: 12, padding: '4px 10px', borderRadius: 4, border: '1px solid #E7E5E4', background: copiedKey === `aud-${si}` ? '#EAF3DE' : 'white', cursor: 'pointer', color: copiedKey === `aud-${si}` ? '#047857' : ink }}>
                             {copiedKey === `aud-${si}` ? '✓ Copied' : 'Copy targeting'}
                           </button>
