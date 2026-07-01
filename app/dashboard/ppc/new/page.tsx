@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -52,7 +52,11 @@ function NewCampaignInner() {
 
   const [step, setStep] = useState(1)
   const [clients, setClients] = useState<{ id: string; name: string }[]>([])
-  const [clientsLoaded, setClientsLoaded] = useState(false)
+
+  useEffect(() => {
+    supabase.from('clients').select('id, name').eq('status', 'active').order('name')
+      .then(({ data }) => setClients(data ?? []))
+  }, [])
   const [building, setBuilding] = useState(false)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState('')
@@ -71,13 +75,6 @@ function NewCampaignInner() {
     campaign_name: '',
     month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
   })
-
-  async function loadClients() {
-    if (clientsLoaded) return
-    const { data } = await supabase.from('clients').select('id, name').eq('status', 'active').order('name')
-    setClients(data ?? [])
-    setClientsLoaded(true)
-  }
 
   function set(key: string, val: string) {
     setForm(f => ({ ...f, [key]: val }))
@@ -160,7 +157,7 @@ function NewCampaignInner() {
               ))}
             </div>
 
-            <div style={{ marginBottom: 24 }} onClick={loadClients}>
+            <div style={{ marginBottom: 24 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Client</label>
               <select value={form.client_id} onChange={e => set('client_id', e.target.value)}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 6, border: '1px solid #E7E5E4', fontSize: 14, background: 'white', color: ink }}>
