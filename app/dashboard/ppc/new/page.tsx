@@ -293,7 +293,14 @@ function NewCampaignInner() {
         )}
 
         {/* STEP 4 — Results */}
-        {step === 4 && output && (
+        {step === 4 && output && (() => {
+          const campaignSummary = output.campaign_summary as string
+          const estimatedPerf = output.estimated_performance as Record<string, string> | undefined
+          const adGroups = Array.isArray(output.ad_groups) ? output.ad_groups as Record<string, unknown>[] : undefined
+          const adSets = Array.isArray(output.ad_sets) ? output.ad_sets as Record<string, unknown>[] : undefined
+          const globalNegatives = output.global_negatives as string[] | undefined
+          const optimizationTips = output.optimization_tips as string[] | undefined
+          return (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <h2 style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>Campaign built ✓</h2>
@@ -302,12 +309,12 @@ function NewCampaignInner() {
                 View Full Campaign →
               </Link>
             </div>
-            <p style={{ color: muted, fontSize: 14, marginBottom: 24 }}>{output.campaign_summary as string}</p>
+            <p style={{ color: muted, fontSize: 14, marginBottom: 24 }}>{campaignSummary}</p>
 
             {/* Estimated Performance */}
-            {output.estimated_performance && (
+            {estimatedPerf && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 28 }}>
-                {Object.entries(output.estimated_performance as Record<string, string>).map(([k, v]) => (
+                {Object.entries(estimatedPerf).map(([k, v]) => (
                   <div key={k} style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, padding: '12px 14px' }}>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: muted, marginBottom: 4 }}>{k.replace(/_/g, ' ')}</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 16, fontWeight: 700, color: '#4285F4' }}>{v}</div>
@@ -317,89 +324,105 @@ function NewCampaignInner() {
             )}
 
             {/* Keywords / Ad Groups (Google/Bing) */}
-            {output.ad_groups && Array.isArray(output.ad_groups) && (
+            {adGroups && (
               <div style={{ marginBottom: 28 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Keywords & Ad Copy</h3>
-                {(output.ad_groups as Record<string, unknown>[]).map((group, gi) => (
+                {adGroups.map((group, gi) => {
+                  const groupName = group.name as string
+                  const groupTheme = group.theme as string
+                  const groupKeywords = group.keywords as Record<string, unknown>[] | undefined
+                  const groupNegatives = group.negative_keywords as string[] | undefined
+                  const groupAds = group.ads as Record<string, unknown>[] | undefined
+                  return (
                   <div key={gi} style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', background: '#F5F5F4', borderBottom: '1px solid #E7E5E4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{group.name as string}</span>
-                        <span style={{ fontSize: 12, color: muted, marginLeft: 8 }}>{group.theme as string}</span>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{groupName}</span>
+                        <span style={{ fontSize: 12, color: muted, marginLeft: 8 }}>{groupTheme}</span>
                       </div>
                     </div>
                     <div style={{ padding: 16 }}>
-                      {/* Keywords table */}
                       <div style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', marginBottom: 8 }}>Keywords ({(group.keywords as unknown[])?.length})</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', marginBottom: 8 }}>Keywords ({groupKeywords?.length})</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {(group.keywords as Record<string, unknown>[])?.map((kw, ki) => (
+                          {groupKeywords?.map((kw, ki) => {
+                            const kwKeyword = kw.keyword as string
+                            const kwMatchType = kw.match_type as string
+                            const kwBid = kw.recommended_bid as number | undefined
+                            return (
                             <span key={ki} style={{
                               fontSize: 12, padding: '3px 8px', borderRadius: 4, fontFamily: 'monospace',
-                              background: kw.match_type === 'exact' ? '#EDF4FB' : kw.match_type === 'phrase' ? '#EAF3DE' : '#FFF7ED',
-                              color: kw.match_type === 'exact' ? '#185FA5' : kw.match_type === 'phrase' ? '#047857' : '#B45309',
+                              background: kwMatchType === 'exact' ? '#EDF4FB' : kwMatchType === 'phrase' ? '#EAF3DE' : '#FFF7ED',
+                              color: kwMatchType === 'exact' ? '#185FA5' : kwMatchType === 'phrase' ? '#047857' : '#B45309',
                             }}>
-                              {kw.match_type === 'exact' ? `[${kw.keyword}]` : kw.match_type === 'phrase' ? `"${kw.keyword}"` : kw.keyword as string}
-                              {kw.recommended_bid ? ` · $${kw.recommended_bid}` : ''}
+                              {kwMatchType === 'exact' ? `[${kwKeyword}]` : kwMatchType === 'phrase' ? `"${kwKeyword}"` : kwKeyword}
+                              {kwBid ? ` · $${kwBid}` : ''}
                             </span>
-                          ))}
+                          )})}
                         </div>
-                        {group.negative_keywords && (
+                        {groupNegatives && (
                           <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 11, color: muted, fontWeight: 600 }}>Negatives:</span>
-                            {(group.negative_keywords as string[]).map((neg, ni) => (
+                            {groupNegatives.map((neg, ni) => (
                               <span key={ni} style={{ fontSize: 12, padding: '3px 8px', borderRadius: 4, background: '#FEE2E2', color: '#b91c1c', fontFamily: 'monospace' }}>-{neg}</span>
                             ))}
                           </div>
                         )}
                       </div>
-                      {/* Ad copy */}
-                      {(group.ads as Record<string, unknown>[])?.map((ad, ai) => (
+                      {groupAds?.map((ad, ai) => {
+                        const adHeadlines = ad.headlines as string[] | undefined
+                        const adDescs = ad.descriptions as string[] | undefined
+                        const adPath1 = ad.path1 as string
+                        const adPath2 = ad.path2 as string
+                        return (
                         <div key={ai} style={{ background: '#FAFAF9', borderRadius: 6, padding: 14, border: '1px solid #E7E5E4' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase' }}>RSA Ad Copy</span>
                             <button onClick={() => copy(
-                              `HEADLINES:\n${(ad.headlines as string[]).map((h, i) => `${i+1}. ${h}`).join('\n')}\n\nDESCRIPTIONS:\n${(ad.descriptions as string[]).map((d, i) => `${i+1}. ${d}`).join('\n')}\n\nPath 1: ${ad.path1}\nPath 2: ${ad.path2}`,
+                              `HEADLINES:\n${adHeadlines?.map((h, i) => `${i+1}. ${h}`).join('\n') ?? ''}\n\nDESCRIPTIONS:\n${adDescs?.map((d, i) => `${i+1}. ${d}`).join('\n') ?? ''}\n\nPath 1: ${adPath1}\nPath 2: ${adPath2}`,
                               `ad-${gi}-${ai}`
                             )} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, border: '1px solid #E7E5E4', background: copiedKey === `ad-${gi}-${ai}` ? '#EAF3DE' : 'white', cursor: 'pointer', color: copiedKey === `ad-${gi}-${ai}` ? '#047857' : ink }}>
                               {copiedKey === `ad-${gi}-${ai}` ? '✓ Copied' : 'Copy all'}
                             </button>
                           </div>
-                          <div style={{ marginBottom: 8 }}>
-                            <div style={{ fontSize: 11, color: muted, fontWeight: 600, marginBottom: 4 }}>HEADLINES (15)</div>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(ad.headlines as string[]).map((h, hi) => (
-                                <span key={hi} style={{ fontSize: 12, padding: '2px 6px', background: 'white', border: '1px solid #E7E5E4', borderRadius: 4 }}>
-                                  <span style={{ color: muted, fontSize: 10 }}>{hi+1}. </span>{h}
-                                  <span style={{ color: h.length > 30 ? '#b91c1c' : '#A8A29E', fontSize: 10, marginLeft: 4 }}>{h.length}/30</span>
-                                </span>
+                          {adHeadlines && (
+                            <div style={{ marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, color: muted, fontWeight: 600, marginBottom: 4 }}>HEADLINES (15)</div>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {adHeadlines.map((h, hi) => (
+                                  <span key={hi} style={{ fontSize: 12, padding: '2px 6px', background: 'white', border: '1px solid #E7E5E4', borderRadius: 4 }}>
+                                    <span style={{ color: muted, fontSize: 10 }}>{hi+1}. </span>{h}
+                                    <span style={{ color: h.length > 30 ? '#b91c1c' : '#A8A29E', fontSize: 10, marginLeft: 4 }}>{h.length}/30</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {adDescs && (
+                            <div>
+                              <div style={{ fontSize: 11, color: muted, fontWeight: 600, marginBottom: 4 }}>DESCRIPTIONS (4)</div>
+                              {adDescs.map((d, di) => (
+                                <div key={di} style={{ fontSize: 13, padding: '4px 0', borderBottom: di < adDescs.length - 1 ? '1px solid #E7E5E4' : undefined }}>
+                                  <span style={{ color: muted, fontSize: 11 }}>{di+1}. </span>{d}
+                                  <span style={{ color: d.length > 90 ? '#b91c1c' : '#A8A29E', fontSize: 10, marginLeft: 6 }}>{d.length}/90</span>
+                                </div>
                               ))}
                             </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 11, color: muted, fontWeight: 600, marginBottom: 4 }}>DESCRIPTIONS (4)</div>
-                            {(ad.descriptions as string[]).map((d, di) => (
-                              <div key={di} style={{ fontSize: 13, padding: '4px 0', borderBottom: di < (ad.descriptions as string[]).length - 1 ? '1px solid #E7E5E4' : undefined }}>
-                                <span style={{ color: muted, fontSize: 11 }}>{di+1}. </span>{d}
-                                <span style={{ color: d.length > 90 ? '#b91c1c' : '#A8A29E', fontSize: 10, marginLeft: 6 }}>{d.length}/90</span>
-                              </div>
-                            ))}
-                          </div>
+                          )}
                           <div style={{ marginTop: 8, fontSize: 12, color: muted }}>
-                            Path: <span style={{ fontFamily: 'monospace', color: '#4285F4' }}>{ad.path1 as string} / {ad.path2 as string}</span>
+                            Path: <span style={{ fontFamily: 'monospace', color: '#4285F4' }}>{adPath1} / {adPath2}</span>
                           </div>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
-                ))}
+                )})}
 
-                {/* Global negatives */}
-                {output.global_negatives && (
+                {globalNegatives && (
                   <div style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, padding: 16, marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: muted, marginBottom: 8, textTransform: 'uppercase' }}>Global Negative Keywords</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {(output.global_negatives as string[]).map((neg, i) => (
+                      {globalNegatives.map((neg, i) => (
                         <span key={i} style={{ fontSize: 12, padding: '3px 8px', borderRadius: 4, background: '#FEE2E2', color: '#b91c1c', fontFamily: 'monospace' }}>-{neg}</span>
                       ))}
                     </div>
@@ -409,16 +432,18 @@ function NewCampaignInner() {
             )}
 
             {/* Meta / LinkedIn ad sets */}
-            {output.ad_sets && Array.isArray(output.ad_sets) && (
+            {adSets && (
               <div style={{ marginBottom: 28 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Ad Sets & Creative</h3>
-                {(output.ad_sets as Record<string, unknown>[]).map((set, si) => (
+                {adSets.map((set, si) => {
+                  const setName = set.name as string
+                  const setAds = set.ads as Record<string, unknown>[] | undefined
+                  return (
                   <div key={si} style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', background: '#F5F5F4', borderBottom: '1px solid #E7E5E4' }}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{set.name as string}</span>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{setName}</span>
                     </div>
                     <div style={{ padding: 16 }}>
-                      {/* Audience */}
                       {set.audience && (
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', marginBottom: 8 }}>Audience Targeting</div>
@@ -431,8 +456,14 @@ function NewCampaignInner() {
                           </button>
                         </div>
                       )}
-                      {/* Ads */}
-                      {(set.ads as Record<string, unknown>[])?.map((ad, ai) => (
+                      {setAds?.map((ad, ai) => {
+                        const adPrimaryText = ad.primary_text as string | undefined
+                        const adHeadline = ad.headline as string | undefined
+                        const adDescription = ad.description as string | undefined
+                        const adIntroText = ad.intro_text as string | undefined
+                        const adCta = ad.cta as string | undefined
+                        const adImageDir = ad.image_direction as string | undefined
+                        return (
                         <div key={ai} style={{ background: '#FAFAF9', borderRadius: 6, padding: 14, border: '1px solid #E7E5E4', marginBottom: 8 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase' }}>{ad.format as string}</span>
@@ -441,26 +472,26 @@ function NewCampaignInner() {
                               {copiedKey === `ad-${si}-${ai}` ? '✓ Copied' : 'Copy ad'}
                             </button>
                           </div>
-                          {ad.primary_text && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Primary: </span><span style={{ fontSize: 13 }}>{ad.primary_text as string}</span></div>}
-                          {ad.headline && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Headline: </span><span style={{ fontSize: 13, fontWeight: 600 }}>{ad.headline as string}</span></div>}
-                          {ad.description && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Description: </span><span style={{ fontSize: 13 }}>{ad.description as string}</span></div>}
-                          {ad.intro_text && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Intro: </span><span style={{ fontSize: 13 }}>{ad.intro_text as string}</span></div>}
-                          {ad.cta && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>CTA: </span><span style={{ fontSize: 12, padding: '2px 8px', background: '#EDF4FB', borderRadius: 4, color: '#185FA5', fontWeight: 600 }}>{ad.cta as string}</span></div>}
-                          {ad.image_direction && <div style={{ fontSize: 12, color: muted, fontStyle: 'italic', padding: '6px 8px', background: '#FFFBEB', borderRadius: 4, marginTop: 6 }}>Creative: {ad.image_direction as string}</div>}
+                          {adPrimaryText && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Primary: </span><span style={{ fontSize: 13 }}>{adPrimaryText}</span></div>}
+                          {adHeadline && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Headline: </span><span style={{ fontSize: 13, fontWeight: 600 }}>{adHeadline}</span></div>}
+                          {adDescription && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Description: </span><span style={{ fontSize: 13 }}>{adDescription}</span></div>}
+                          {adIntroText && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>Intro: </span><span style={{ fontSize: 13 }}>{adIntroText}</span></div>}
+                          {adCta && <div style={{ marginBottom: 6 }}><span style={{ fontSize: 11, color: muted }}>CTA: </span><span style={{ fontSize: 12, padding: '2px 8px', background: '#EDF4FB', borderRadius: 4, color: '#185FA5', fontWeight: 600 }}>{adCta}</span></div>}
+                          {adImageDir && <div style={{ fontSize: 12, color: muted, fontStyle: 'italic', padding: '6px 8px', background: '#FFFBEB', borderRadius: 4, marginTop: 6 }}>Creative: {adImageDir}</div>}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
 
             {/* Optimization Tips */}
-            {output.optimization_tips && (
+            {optimizationTips && (
               <div style={{ background: 'white', border: '1px solid #E7E5E4', borderRadius: 8, padding: 20, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Optimization Tips</h3>
-                {(output.optimization_tips as string[]).map((tip, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: i < (output.optimization_tips as string[]).length - 1 ? '1px solid #F5F5F4' : undefined }}>
+                {optimizationTips.map((tip, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: i < optimizationTips.length - 1 ? '1px solid #F5F5F4' : undefined }}>
                     <span style={{ color: '#4285F4', fontWeight: 700, flexShrink: 0 }}>{i+1}.</span>
                     <span style={{ fontSize: 13, color: ink }}>{tip}</span>
                   </div>
@@ -479,7 +510,8 @@ function NewCampaignInner() {
               </button>
             </div>
           </div>
-        )}
+          )
+        })()}
       </main>
     </div>
   )
