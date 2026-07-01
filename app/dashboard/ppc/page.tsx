@@ -99,37 +99,34 @@ export default function PPCHubPage() {
   const [perfLoading, setPerfLoading] = useState(false)
 
   useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    if (activeView === 'performance' && perfData.length === 0 && !perfLoading) {
+      loadPerformance('all')
+    }
+  }, [activeView])
 
   async function loadData() {
     setLoading(true)
-    setPerfLoading(true)
-    const [{ data: camps }, { data: gs }, { data: cls }, { data: metaRows }] = await Promise.all([
+    const [{ data: camps }, { data: gs }, { data: cls }] = await Promise.all([
       supabase.from('ppc_campaigns').select('*, clients(name)').order('created_at', { ascending: false }).limit(50),
       supabase.from('ppc_goals').select('*, clients(name)').eq('period', selectedPeriod).order('client_id'),
       supabase.from('clients').select('id, name').eq('status', 'active').order('name'),
-      supabase.from('report_data').select('client_id, month, metric, value').eq('section', 'meta').order('month'),
     ])
-    const clientList = cls ?? []
     setCampaigns((camps ?? []) as unknown as Campaign[])
     setGoals((gs ?? []) as unknown as Goal[])
-    setClients(clientList)
-
-    // Build perf rows from meta data
-    const metaMap: Record<string, PerfRow> = {}
-    for (const r of metaRows ?? []) {
-      const key = `${r.client_id}__${r.month}`
-      if (!metaMap[key]) {
-        const cl = clientList.find(c => c.id === r.client_id)
-        metaMap[key] = { client_id: r.client_id, client_name: cl?.name ?? r.client_id, month: r.month, platform: 'meta', spend: 0, impressions: 0, clicks: 0, video_views: 0 }
-      }
-      const v = parseFloat(r.value) || 0
-      if (r.metric === 'meta_spend')       metaMap[key].spend       += v
-      if (r.metric === 'meta_impressions') metaMap[key].impressions += v
-      if (r.metric === 'meta_clicks')      metaMap[key].clicks      += v
-      if (r.metric === 'meta_video_views') metaMap[key].video_views += v
-    }
-    setPerfData(Object.values(metaMap))
+    setClients(cls ?? [])
     setLoading(false)
+  }
+
+  async function loadPerformance(clientId: string) {
+    setPerfLoading(true)
+    try {
+      const res = await fetch(`/api/ppc/performance?clientId=${clientId}`)
+      const data = await res.json()
+      setPerfData(data.rows ?? [])
+    } catch (e) {
+      console.error('perf load error', e)
+    }
     setPerfLoading(false)
   }
 
@@ -152,7 +149,7 @@ export default function PPCHubPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}
+            <select value={selectedClient} onChange={e => { setSelectedClient(e.target.value); loadPerformance(e.target.value) }}
               style={{ fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #E7E5E4', background: 'white', color: ink }}>
               <option value="all">All Clients</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
