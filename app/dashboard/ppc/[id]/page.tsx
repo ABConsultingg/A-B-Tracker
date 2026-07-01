@@ -172,7 +172,7 @@ export default function CampaignDetailPage() {
                     return (
                       <span key={i} style={{ fontSize: 12, padding: '3px 8px', borderRadius: 4, fontFamily: 'monospace', background: style.bg, color: style.color }}>
                         {display}
-                        {kw.recommended_bid ? <span style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>${kw.recommended_bid}</span> : null}
+                        {kw.recommended_bid ? <span style={{ fontSize: 10, marginLeft: 4, opacity: 0.7 }}>${String(kw.recommended_bid)}</span> : null}
                       </span>
                     )
                   })}
