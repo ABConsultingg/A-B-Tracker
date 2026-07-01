@@ -99,43 +99,27 @@ export default function PPCHubPage() {
   const [perfLoading, setPerfLoading] = useState(false)
 
   useEffect(() => { loadData() }, [])
-  useEffect(() => { if (activeView === 'performance') loadPerformance() }, [activeView])
 
   async function loadData() {
     setLoading(true)
-    const [{ data: camps }, { data: gs }, { data: cls }] = await Promise.all([
+    setPerfLoading(true)
+    const [{ data: camps }, { data: gs }, { data: cls }, { data: metaRows }] = await Promise.all([
       supabase.from('ppc_campaigns').select('*, clients(name)').order('created_at', { ascending: false }).limit(50),
       supabase.from('ppc_goals').select('*, clients(name)').eq('period', selectedPeriod).order('client_id'),
       supabase.from('clients').select('id, name').eq('status', 'active').order('name'),
+      supabase.from('report_data').select('client_id, month, metric, value').eq('section', 'meta').order('month'),
     ])
+    const clientList = cls ?? []
     setCampaigns((camps ?? []) as unknown as Campaign[])
     setGoals((gs ?? []) as unknown as Goal[])
-    setClients(cls ?? [])
-    setLoading(false)
-  }
+    setClients(clientList)
 
-  async function loadPerformance() {
-    setPerfLoading(true)
-    // Meta data from report_data (last 6 months)
-    const sixMonthsAgo = (() => {
-      const d = new Date()
-      d.setMonth(d.getMonth() - 6)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    })()
-
-    const { data: metaRows } = await supabase
-      .from('report_data')
-      .select('client_id, month, metric, value')
-      .eq('section', 'meta')
-      .gte('month', sixMonthsAgo)
-      .order('month')
-
-    // Group meta rows by client+month
+    // Build perf rows from meta data
     const metaMap: Record<string, PerfRow> = {}
     for (const r of metaRows ?? []) {
       const key = `${r.client_id}__${r.month}`
       if (!metaMap[key]) {
-        const cl = clients.find(c => c.id === r.client_id)
+        const cl = clientList.find(c => c.id === r.client_id)
         metaMap[key] = { client_id: r.client_id, client_name: cl?.name ?? r.client_id, month: r.month, platform: 'meta', spend: 0, impressions: 0, clicks: 0, video_views: 0 }
       }
       const v = parseFloat(r.value) || 0
@@ -144,8 +128,8 @@ export default function PPCHubPage() {
       if (r.metric === 'meta_clicks')      metaMap[key].clicks      += v
       if (r.metric === 'meta_video_views') metaMap[key].video_views += v
     }
-
     setPerfData(Object.values(metaMap))
+    setLoading(false)
     setPerfLoading(false)
   }
 
