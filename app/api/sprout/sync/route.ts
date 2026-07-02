@@ -229,7 +229,9 @@ export async function POST(req: NextRequest) {
 
     for (const month of months) {
       const from = `${month}-01`
-      const to   = `${month}-31`
+      const [yr, mo] = month.split('-').map(Number)
+      const lastDay = new Date(yr, mo, 0).getDate() // actual last day of month
+      const to = `${month}-${String(lastDay).padStart(2, '0')}`
       const { data: aggRows } = await supabase
         .from('sprout_profiles')
         .select('client_name, network, impressions, engagements, posts_sent, net_follower_change, video_views, post_link_clicks')
@@ -269,7 +271,9 @@ export async function POST(req: NextRequest) {
     // ── Also aggregate video_views + post_link_clicks from sprout_posts ───────
     for (const month of months) {
       const from = `${month}-01`
-      const to   = `${month}-31`
+      const [yr2, mo2] = month.split('-').map(Number)
+      const lastDay2 = new Date(yr2, mo2, 0).getDate()
+      const to = `${month}-${String(lastDay2).padStart(2, '0')}`
       const { data: postRows } = await supabase
         .from('sprout_posts')
         .select('client_name, network, video_views, clicks')
