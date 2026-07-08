@@ -50,6 +50,7 @@ export default function DmsClient({
   const supabase = createClient()
   const [dms, setDms] = useState<Dm[]>(initialDms)
   const [activeConvo, setActiveConvo] = useState<ConvoKey | undefined>(undefined)
+  const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
   const [replyBody, setReplyBody] = useState('')
   const [sending, setSending] = useState(false)
   const [newDmTarget, setNewDmTarget] = useState('')
@@ -101,6 +102,7 @@ export default function DmsClient({
 
   async function openConvo(key: ConvoKey) {
     setActiveConvo(key)
+    setMobileView('thread')
     setReplyBody('')
     setAttachFile(null)
     setAttachPreview(null)
@@ -279,9 +281,9 @@ export default function DmsClient({
   const canReply = activeConvo !== null && activeConvo !== undefined
 
   return (
-    <div className="flex gap-3" style={{ height: 'calc(100vh - 180px)', minHeight: 500 }}>
+    <div className="flex flex-col md:flex-row gap-3" style={{ height: 'calc(100vh - 120px)', minHeight: 500 }}>
       {/* Conversation list */}
-      <div className="flex flex-col" style={{ width: 240, flexShrink: 0 }}>
+      <div className={`flex-col ${mobileView === 'thread' ? 'hidden md:flex' : 'flex'} md:w-60 w-full`} style={{ flexShrink: 0 }}>
         <div className="flex items-center justify-between mb-3">
           {totalUnread > 0 && (
             <span className="text-xs bg-blue-500 text-white rounded-full px-2 py-0.5 font-medium">{totalUnread} unread</span>
@@ -339,7 +341,7 @@ export default function DmsClient({
       </div>
 
       {/* Thread view */}
-      <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className={`flex-1 flex-col bg-white rounded-xl border border-gray-200 overflow-hidden ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
         {activeConvo === undefined ? (
           <div className="flex-1 flex items-center justify-center text-gray-400">
             <div className="text-center">
@@ -350,8 +352,13 @@ export default function DmsClient({
         ) : (
           <>
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <button
+                onClick={() => setMobileView('list')}
+                className="md:hidden flex items-center justify-center w-8 h-8 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 text-lg font-medium">
+                ←
+              </button>
               <span className="font-medium text-sm text-gray-900">{otherName}</span>
-              {!canReply && <span className="text-xs text-gray-400">— read only (Pancho messages)</span>}
+              {!canReply && <span className="text-xs text-gray-400 hidden sm:inline">— read only</span>}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
@@ -369,7 +376,7 @@ export default function DmsClient({
 
                 return (
                   <div key={dm.id} className={`flex flex-col ${isFromMe ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl text-sm ${isFromMe ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                    <div className={`max-w-[75vw] md:max-w-xs lg:max-w-md px-3 py-2 rounded-2xl text-sm ${isFromMe ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
                       {!isFromMe && (
                         <div className="text-xs font-medium mb-1 opacity-60">{fromName}</div>
                       )}
@@ -411,11 +418,11 @@ export default function DmsClient({
                       )}
 
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-400">{timeAgo(dm.created_at)}</span>
+                        <span className={`text-xs ${isFromMe ? 'text-gray-400' : 'text-gray-400'}`}>{timeAgo(dm.created_at)}</span>
                         {isFromMe && (
                           dm.read_at
-                            ? <span className="text-xs text-blue-400 flex items-center gap-0.5">✓✓ Read</span>
-                            : <span className="text-xs text-gray-300 flex items-center gap-0.5">✓ Sent</span>
+                            ? <span className="text-xs text-blue-300">✓✓ Read</span>
+                            : <span className="text-xs text-gray-500">✓ Sent</span>
                         )}
                       </div>
                     </div>
