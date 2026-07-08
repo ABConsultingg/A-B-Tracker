@@ -410,7 +410,14 @@ export default function DmsClient({
                         </a>
                       )}
 
-                      <div className={`text-xs mt-1 ${isFromMe ? 'text-gray-400' : 'text-gray-400'}`}>{timeAgo(dm.created_at)}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-400">{timeAgo(dm.created_at)}</span>
+                        {isFromMe && (
+                          dm.read_at
+                            ? <span className="text-xs text-blue-400 flex items-center gap-0.5">✓✓ Read</span>
+                            : <span className="text-xs text-gray-300 flex items-center gap-0.5">✓ Sent</span>
+                        )}
+                      </div>
                     </div>
 
                     {/* 👍 reaction */}
@@ -435,7 +442,7 @@ export default function DmsClient({
                   <div className="flex flex-wrap gap-2 mb-2">
                     {attachFile && (
                       <div className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-2 py-1">
-                        {attachFile.type.startsWith('image/') ? '🖼' : '📄'} {attachFile.name}
+                        {attachFile.type.startsWith('image/') ? '🖼' : attachFile.type === 'application/pdf' ? '📄' : '📎'} {attachFile.name}
                         <button onClick={clearAttach} className="ml-1 text-blue-400 hover:text-blue-700 font-bold">×</button>
                       </div>
                     )}
