@@ -107,6 +107,38 @@ async function sendSms(to: string, body: string) {
   }
 }
 
+async function sendWhatsApp(to: string, body: string) {
+  const sid = process.env.TWILIO_ACCOUNT_SID
+  const token = process.env.TWILIO_AUTH_TOKEN
+  const from = process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_FROM_NUMBER
+  if (!sid || !token || !from) {
+    console.error('WhatsApp not configured — missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_NUMBER')
+    return
+  }
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        To: `whatsapp:${to}`,
+        From: `whatsapp:${from}`,
+        Body: body,
+      }).toString(),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      console.error(`WhatsApp error for ${to}:`, JSON.stringify(data))
+    } else {
+      console.log(`WhatsApp sent to ${to}, sid=${data.sid}`)
+    }
+  } catch (e) {
+    console.error('WhatsApp error:', e)
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { notifications, wo_title, wo_id, sender_name } = await req.json() as {
@@ -137,15 +169,21 @@ export async function POST(req: NextRequest) {
       .map(n => (n as any).client_id as string)
     const uniqueClientIds = [...new Set(clientIds)]
 
-    // Fetch team member emails
-    const emailMap = new Map<string, { name: string; email: string; phone?: string | null }>()
+    // Fetch team member emails + WhatsApp numbers
+    const emailMap = new Map<string, { name: string; email: string; phone?: string | null; whatsapp?: string | null; notif_whatsapp?: boolean }>()
     if (uniqueTeamIds.length) {
       const { data: members } = await supabaseAdmin
         .from('team_members')
-        .select('auth_user_id, name, email, phone')
+        .select('auth_user_id, name, email, phone, whatsapp_number, notif_whatsapp')
         .in('auth_user_id', uniqueTeamIds)
       ;(members || []).forEach((m: any) => {
-        if (m.auth_user_id) emailMap.set(m.auth_user_id, { name: m.name, email: m.email, phone: m.phone || null })
+        if (m.auth_user_id) emailMap.set(m.auth_user_id, {
+          name: m.name,
+          email: m.email,
+          phone: m.phone || null,
+          whatsapp: m.whatsapp_number || m.phone || null,
+          notif_whatsapp: m.notif_whatsapp ?? false,
+        })
       })
     }
 
@@ -227,9 +265,14 @@ export async function POST(req: NextRequest) {
 
       if (res.ok) {
         sent++
-        // Also send SMS for US numbers
         const member = recipientEmail ? [...emailMap.values()].find(m => m.email === recipientEmail) : null
+        // SMS for US numbers
         if (member?.phone) await sendSms(member.phone, `A&B Tracker: ${subject}`)
+        // WhatsApp for all team members who have it enabled
+        if (member?.whatsapp && member.notif_whatsapp) {
+          const woLink = wo_id ? `\nhttps://app.abconsultingg.com/dashboard/wo/${wo_id}` : ''
+          await sendWhatsApp(member.whatsapp, `A&B Tracker: ${subject}${woLink}`)
+        }
       } else {
         const err = await res.text()
         console.error(`Resend error for ${recipientEmail}:`, err)
