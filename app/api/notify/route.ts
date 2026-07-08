@@ -107,7 +107,24 @@ async function sendSms(to: string, body: string) {
   }
 }
 
-async function sendWhatsApp(to: string, body: string) {
+// Template ContentSids — set these in Vercel env vars once Meta approves them.
+// Create templates at: console.twilio.com → Messaging → Content Template Builder
+const WA_TEMPLATES = {
+  // "You've been assigned to [WO title]. View it here: [link]"
+  assignment: process.env.TWILIO_WA_TEMPLATE_ASSIGNMENT,
+  // "[WO title] has moved to [stage]. View it here: [link]"
+  stage_change: process.env.TWILIO_WA_TEMPLATE_STAGE_CHANGE,
+  // "[Sender] mentioned you in [WO title]. View it here: [link]"
+  mention: process.env.TWILIO_WA_TEMPLATE_MENTION,
+  // "New work order: [WO title]. Review it here: [link]"
+  new_wo: process.env.TWILIO_WA_TEMPLATE_NEW_WO,
+}
+
+async function sendWhatsApp(
+  to: string,
+  fallbackBody: string,
+  template?: { type: keyof typeof WA_TEMPLATES; vars: Record<string, string> }
+) {
   const sid = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   const from = process.env.TWILIO_WHATSAPP_NUMBER || process.env.TWILIO_FROM_NUMBER
@@ -115,24 +132,37 @@ async function sendWhatsApp(to: string, body: string) {
     console.error('WhatsApp not configured — missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_NUMBER')
     return
   }
+
+  const contentSid = template ? WA_TEMPLATES[template.type] : undefined
+
   try {
+    const params: Record<string, string> = {
+      To: `whatsapp:${to}`,
+      From: `whatsapp:${from}`,
+    }
+
+    if (contentSid) {
+      // Use pre-approved WhatsApp template — works for cold outbound messages
+      params.ContentSid = contentSid
+      params.ContentVariables = JSON.stringify(template!.vars)
+    } else {
+      // Free-form fallback — only works within 24h session window
+      params.Body = fallbackBody
+    }
+
     const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
       headers: {
         'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        To: `whatsapp:${to}`,
-        From: `whatsapp:${from}`,
-        Body: body,
-      }).toString(),
+      body: new URLSearchParams(params).toString(),
     })
     const data = await res.json()
     if (!res.ok) {
-      console.error(`WhatsApp error for ${to}:`, JSON.stringify(data))
+      console.error(`WhatsApp error for ${to} (template=${contentSid ?? 'none'}):`, JSON.stringify(data))
     } else {
-      console.log(`WhatsApp sent to ${to}, sid=${data.sid}`)
+      console.log(`WhatsApp sent to ${to}, sid=${data.sid}, template=${contentSid ?? 'freeform'}`)
     }
   } catch (e) {
     console.error('WhatsApp error:', e)
@@ -209,7 +239,7 @@ export async function POST(req: NextRequest) {
       let subject: string
       let html: string
 
-      if (notif.type === 'mention' || notif.type === 'assignment') {
+      if (notif.type === 'mention' || notif.type === 'assignment' || notif.type === 'new_wo') {
         const n = notif as { user_id: string; type: string; author_name?: string; body_preview?: string }
         const recipient = emailMap.get(n.user_id)
         if (!recipient?.email) continue
@@ -217,7 +247,7 @@ export async function POST(req: NextRequest) {
         recipientName = recipient.name
 
         const isMention = notif.type === 'mention'
-        const isNewWo = (notif as any).type === 'new_wo'
+        const isNewWo = notif.type === 'new_wo'
         subject = isMention
           ? `${n.author_name || 'Someone'} mentioned you in a work order`
           : isNewWo
@@ -271,7 +301,23 @@ export async function POST(req: NextRequest) {
         // WhatsApp for all team members who have it enabled
         if (member?.whatsapp && member.notif_whatsapp) {
           const woLink = wo_id ? `\nhttps://app.abconsultingg.com/dashboard/wo/${wo_id}` : ''
-          await sendWhatsApp(member.whatsapp, `A&B Tracker: ${subject}${woLink}`)
+          const fallback = `A&B Tracker: ${subject}${woLink}`
+
+          // Determine template type from notification type
+          let tmpl: { type: keyof typeof WA_TEMPLATES; vars: Record<string, string> } | undefined
+          if (notif.type === 'assignment') {
+            tmpl = { type: 'assignment', vars: { 1: wo_title, 2: `https://app.abconsultingg.com/dashboard/wo/${wo_id}` } }
+          } else if (notif.type === 'stage_change_team') {
+            const sc = notif as { stage_label: string }
+            tmpl = { type: 'stage_change', vars: { 1: wo_title, 2: sc.stage_label, 3: `https://app.abconsultingg.com/dashboard/wo/${wo_id}` } }
+          } else if (notif.type === 'mention') {
+            const mn = notif as { author_name?: string }
+            tmpl = { type: 'mention', vars: { 1: mn.author_name || 'Someone', 2: wo_title, 3: `https://app.abconsultingg.com/dashboard/wo/${wo_id}` } }
+          } else if (notif.type === 'new_wo') {
+            tmpl = { type: 'new_wo', vars: { 1: wo_title, 2: `https://app.abconsultingg.com/dashboard/wo/${wo_id}` } }
+          }
+
+          await sendWhatsApp(member.whatsapp, fallback, tmpl)
         }
       } else {
         const err = await res.text()

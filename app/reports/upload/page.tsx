@@ -75,6 +75,7 @@ const FILE_TYPES = [
   { key: 'post_performance',    label: 'Post Performance',    icon: '📊', accept: '.csv', desc: 'Sprout Social — individual post metrics (all clients in one file)' },
   { key: 'gmb_performance',     label: 'GMB Performance',     icon: '📍', accept: '.csv', desc: 'Google Business Profile — location insights (searches, maps views, calls, directions)' },
   { key: 'paid_performance',    label: 'Paid Performance',    icon: '🎯', accept: '.csv', desc: 'Sprout Social — Meta Ads paid CSV' },
+  { key: 'calls_performance',   label: 'Calls',               icon: '📞', accept: '.csv', desc: 'Cira — call tracking CSV (one client per file)' },
 ]
 
 type ParseResult = {
@@ -466,9 +467,110 @@ export default function ReportsUploadPage() {
       if (unmatched.length > 0) {
         results.push({ clientId: 'all', clientName: `Unmatched accounts: ${unmatched.join(', ')}`, rows: 0, metrics: {} })
       }
-    }
 
+    } else if (fileType === 'calls_performance') {
+      // Cira calls CSV: Date, Time, Name, Phone, Duration, How They Heard About Us, Message/Reason, Call Summary, Address, Email
+      // File is for a single client — match by selected client or file name
+      const dateCol    = headers.indexOf('Date')
+      const timeCol    = headers.indexOf('Time')
+      const nameCol    = headers.indexOf('Name')
+      const phoneCol   = headers.indexOf('Phone')
+      const durCol     = headers.indexOf('Duration')
+      const heardCol   = headers.indexOf('How They Heard About Us')
+      const msgCol     = headers.indexOf('Message/Reason')
+      const summaryCol = headers.indexOf('Call Summary')
+      const addrCol    = headers.indexOf('Address')
+      const emailCol   = headers.indexOf('Email')
+
+      if (dateCol === -1) {
+        results.push({ clientId: 'none', clientName: 'Invalid file — expected Cira calls CSV with Date, Time, Name columns', rows: 0, metrics: {} })
+      } else {
+        // Try to match client from file name
+        const fileName = file.name.toLowerCase()
+        const matchedClient = CLIENTS.find(c => {
+          const name = c.id.toLowerCase().replace(/-/g, ' ')
+          return fileName.includes(name) || fileName.includes(c.id.toLowerCase())
+        }) || CLIENTS.find(c => fileName.includes(c.name.toLowerCase().split(' ')[0].toLowerCase()))
+
+        if (!matchedClient) {
+          results.push({ clientId: 'none', clientName: 'Could not match client from file name — rename file to include client name', rows: 0, metrics: {} })
+        } else {
+          function parseDurationSec(raw: string): number {
+            if (!raw) return 0
+            const m = raw.match(/(\d+)m\s*(\d+)s/)
+            if (m) return parseInt(m[1]) * 60 + parseInt(m[2])
+            const s = raw.match(/(\d+)s/)
+            if (s) return parseInt(s[1])
+            return 0
+          }
+
+          const callRows: any[] = []
+          let totalCalls = 0, answeredCalls = 0, totalDuration = 0
+
+          for (let i = 1; i < lines.length; i++) {
+            const cols = parseCSVLine(lines[i])
+            if (!cols[dateCol]) continue
+            const durRaw = cols[durCol]?.trim() || '0m 0s'
+            const durSec = parseDurationSec(durRaw)
+            const isAnswered = durSec > 5
+            totalCalls++
+            if (isAnswered) answeredCalls++
+            totalDuration += durSec
+
+            // Parse date MM/DD/YYYY
+            const dateParts = (cols[dateCol] || '').split('/')
+            let callDate = null
+            if (dateParts.length === 3) {
+              callDate = `${dateParts[2]}-${dateParts[0].padStart(2,'0')}-${dateParts[1].padStart(2,'0')}`
+            }
+
+            callRows.push({
+              client_id: matchedClient.id,
+              call_date: callDate,
+              call_time: cols[timeCol]?.trim() || null,
+              caller_name: cols[nameCol]?.trim() || null,
+              caller_phone: cols[phoneCol]?.trim() || null,
+              duration_raw: durRaw,
+              duration_sec: durSec,
+              how_heard: cols[heardCol]?.trim() || null,
+              message_reason: cols[msgCol]?.trim() || null,
+              call_summary: cols[summaryCol]?.trim() || null,
+              address: cols[addrCol]?.trim() || null,
+              email: cols[emailCol]?.trim() || null,
+              call_month: callDate ? callDate.slice(0, 7) : month,
+              is_spam: durSec < 5,
+            })
+          }
+
+          // Delete existing calls for this client/month then insert fresh
+          await supabase.from('cira_calls').delete().eq('client_id', matchedClient.id).eq('call_month', month)
+          if (callRows.length > 0) {
+            const BATCH = 200
+            for (let b = 0; b < callRows.length; b += BATCH) {
+              await supabase.from('cira_calls').insert(callRows.slice(b, b + BATCH))
+            }
+          }
+
+          // Also upsert summary metrics to report_data
+          const avgDuration = answeredCalls > 0 ? Math.round(totalDuration / answeredCalls) : 0
+          await supabase.from('report_data').upsert([
+            { client_id: matchedClient.id, month, section: 'calls', platform: 'cira', metric: 'total_calls', value: totalCalls },
+            { client_id: matchedClient.id, month, section: 'calls', platform: 'cira', metric: 'answered_calls', value: answeredCalls },
+            { client_id: matchedClient.id, month, section: 'calls', platform: 'cira', metric: 'avg_duration_sec', value: avgDuration },
+          ], { onConflict: 'client_id,month,section,platform,metric' })
+
+          results.push({
+            clientId: matchedClient.id,
+            clientName: matchedClient.name,
+            rows: callRows.length,
+            metrics: { total_calls: totalCalls, answered: answeredCalls, avg_duration_sec: avgDuration }
+          })
+        }
+      }
+
+    }
     // Save upload log
+
     const { data: { user } } = await supabase.auth.getUser()
     for (const result of results) {
       if (result.clientId === 'all') continue

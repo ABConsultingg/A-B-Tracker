@@ -196,7 +196,11 @@ export default function DmsClient({
         return
       }
       storagePath = json.storagePath
-      attachType = attachFile.type.startsWith('image/') ? 'image' : 'pdf'
+      attachType = attachFile.type.startsWith('image/')
+        ? 'image'
+        : attachFile.type === 'application/pdf'
+        ? 'pdf'
+        : 'doc'
 
       // Cache the signed URL for immediate display
       if (json.signedUrl) {
@@ -315,7 +319,7 @@ export default function DmsClient({
             const isActive = activeConvoStr === keyStr
             const name = memberName(convo.key)
             const preview = convo.latest.attachment_url && !convo.latest.body
-              ? (convo.latest.attachment_type === 'image' ? '🖼 Image' : '📄 PDF')
+              ? (convo.latest.attachment_type === 'image' ? '🖼 Image' : convo.latest.attachment_type === 'pdf' ? '📄 PDF' : '📎 File')
               : convo.latest.body
             return (
               <button key={keyStr} onClick={() => openConvo(convo.key)}
@@ -386,6 +390,11 @@ export default function DmsClient({
                             <a href={signedUrl} target="_blank" rel="noreferrer"
                               className={`flex items-center gap-1.5 text-xs underline ${isFromMe ? 'text-gray-300' : 'text-blue-600'}`}>
                               📄 View PDF
+                            </a>
+                          ) : dm.attachment_type === 'doc' && signedUrl ? (
+                            <a href={signedUrl} target="_blank" rel="noreferrer"
+                              className={`flex items-center gap-1.5 text-xs underline ${isFromMe ? 'text-gray-300' : 'text-blue-600'}`}>
+                              📎 {dm.attachment_url?.split('/').pop()?.replace(/^\d+-[a-z0-9]+\./, '') ?? 'Download file'}
                             </a>
                           ) : dm.attachment_url.startsWith('dms/') ? (
                             <span className="text-xs opacity-50">Loading…</span>
@@ -507,7 +516,7 @@ export default function DmsClient({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,application/pdf"
+                  accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
                   style={{ display: 'none' }}
                   onChange={onFileSelect}
                 />
