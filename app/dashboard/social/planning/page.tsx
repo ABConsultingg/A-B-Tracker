@@ -4,10 +4,35 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 
+// Anon client — used only for storage, captions, sprout_posts (no RLS on those)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
+
+// Fetch social_monthly_mix via service-role API route (bypasses RLS)
+async function fetchPlan(client_name: string, month: string) {
+  const res = await fetch(`/api/social/planning?client_name=${encodeURIComponent(client_name)}&month=${encodeURIComponent(month)}`)
+  const json = await res.json()
+  return json.data ?? []
+}
+
+async function savePlanRow(row: Record<string, unknown>, id?: string) {
+  const res = await fetch('/api/social/planning', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'upsert', row, id }),
+  })
+  return res.json()
+}
+
+async function deletePlanRow(id: string) {
+  await fetch('/api/social/planning', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', id }),
+  })
+}
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -80,9 +105,13 @@ type SlotCardProps = {
   captions: Caption[];
   saving: boolean;
   stageMap: Record<string, { key: string; label: string; owner: string; color: string; bg: string }>;
+  confirmingDelete: string | null;
+  setConfirmingDelete: (id: string | null) => void;
+  uploadAsset: (type: string, idx: number, file: File) => Promise<void>;
+  uploadingAsset: string | null;
 }
 
-function SlotCard({ slot, type, idx, editingId, setEditingId, updateSlot, removeSlot, saveSlot, linkCaption, draftCaption, draftingSlot, captions, saving, stageMap }: SlotCardProps) {
+function SlotCard({ slot, type, idx, editingId, setEditingId, updateSlot, removeSlot, saveSlot, linkCaption, draftCaption, draftingSlot, captions, saving, stageMap, confirmingDelete, setConfirmingDelete, uploadAsset, uploadingAsset }: SlotCardProps) {
   const editKey = `${type}-${idx}`
   const isEditing = editingId === editKey
   const stage = stageMap[slot.stage] ?? STAGES[0]
@@ -102,14 +131,33 @@ function SlotCard({ slot, type, idx, editingId, setEditingId, updateSlot, remove
             <span style={{ fontSize: 11, color: muted }}>{stage.owner}</span>
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
+            {!isEditing && (
+              <button onClick={() => saveSlot(slot)} disabled={saving}
+                style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #047857', background: '#EAF3DE', cursor: 'pointer', color: '#047857', fontWeight: 600 }}>
+                {saving ? '…' : 'Save'}
+              </button>
+            )}
             <button onClick={() => setEditingId(isEditing ? null : editKey)}
               style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: muted }}>
               {isEditing ? 'Close' : 'Edit'}
             </button>
-            <button onClick={() => removeSlot(type, idx)}
-              style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: '#b91c1c' }}>
-              ✕
-            </button>
+            {confirmingDelete === editKey ? (
+              <>
+                <button onClick={() => { removeSlot(type, idx); setConfirmingDelete(null) }}
+                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #b91c1c', background: '#FEE2E2', cursor: 'pointer', color: '#b91c1c', fontWeight: 600 }}>
+                  Confirm
+                </button>
+                <button onClick={() => setConfirmingDelete(null)}
+                  style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: muted }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmingDelete(editKey)}
+                style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: '#b91c1c' }}>
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -198,6 +246,56 @@ function SlotCard({ slot, type, idx, editingId, setEditingId, updateSlot, remove
                 style={{ width: '100%', marginTop: 3, padding: '6px 8px', borderRadius: 5, border: `1px solid ${rule}`, fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }} />
             </div>
 
+            {/* Asset upload */}
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 10, color: muted, fontWeight: 600, textTransform: 'uppercase' }}>Asset (Image / Video)</label>
+              <div style={{ marginTop: 6 }}>
+                {slot.asset_url ? (
+                  <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: 'hidden' }}>
+                    {slot.asset_type === 'image' ? (
+                      <img src={slot.asset_url} alt="preview"
+                        style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <div style={{ padding: '10px 12px', background: '#F5F5F4', fontSize: 12, color: muted }}>
+                        🎥 {slot.asset_filename || 'Video uploaded'}
+                      </div>
+                    )}
+                    <div style={{ padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, color: '#047857', flex: 1 }}>✓ {slot.asset_filename || 'Asset ready'}</span>
+                      <label style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: muted }}>
+                        Replace
+                        <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) uploadAsset(type, idx, f) }} />
+                      </label>
+                      <button onClick={() => updateSlot(type, idx, { asset_url: undefined, asset_type: undefined, asset_filename: undefined })}
+                        style={{ fontSize: 11, padding: '3px 10px', borderRadius: 4, border: `1px solid ${rule}`, background: 'white', cursor: 'pointer', color: '#b91c1c' }}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label style={{
+                    display: 'flex', flexDirection: 'column' as any, alignItems: 'center', justifyContent: 'center',
+                    gap: 6, padding: '20px', borderRadius: 8, border: `2px dashed ${rule}`,
+                    cursor: uploadingAsset === `${type}-${idx}` ? 'wait' : 'pointer',
+                    background: '#FAFAF9', color: muted
+                  }}>
+                    {uploadingAsset === `${type}-${idx}` ? (
+                      <span style={{ fontSize: 12 }}>Uploading…</span>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 24 }}>🖼</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>Click to upload image or video</span>
+                        <span style={{ fontSize: 11 }}>JPG, PNG, MP4, MOV</span>
+                      </>
+                    )}
+                    <input type="file" accept="image/*,video/*" style={{ display: 'none' }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadAsset(type, idx, f) }} />
+                  </label>
+                )}
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 10, color: muted, fontWeight: 600, textTransform: 'uppercase' }}>Scheduled date</label>
@@ -244,9 +342,13 @@ type ColumnProps = {
   captions: Caption[];
   saving: boolean;
   stageMap: Record<string, { key: string; label: string; owner: string; color: string; bg: string }>;
+  confirmingDelete: string | null;
+  setConfirmingDelete: (id: string | null) => void;
+  uploadAsset: (type: string, idx: number, file: File) => Promise<void>;
+  uploadingAsset: string | null;
 }
 
-function Column({ title, emoji, slots, type, addSlot, editingId, setEditingId, updateSlot, removeSlot, saveSlot, linkCaption, draftCaption, draftingSlot, captions, saving, stageMap }: ColumnProps) {
+function Column({ title, emoji, slots, type, addSlot, editingId, setEditingId, updateSlot, removeSlot, saveSlot, linkCaption, draftCaption, draftingSlot, captions, saving, stageMap, confirmingDelete, setConfirmingDelete, uploadAsset, uploadingAsset }: ColumnProps) {
   const muted = '#78716C', rule = '#E7E5E4'
   return (
     <div>
@@ -264,7 +366,9 @@ function Column({ title, emoji, slots, type, addSlot, editingId, setEditingId, u
           editingId={editingId} setEditingId={setEditingId}
           updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot}
           linkCaption={linkCaption} draftCaption={draftCaption}
-          draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} />
+          draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap}
+          confirmingDelete={confirmingDelete} setConfirmingDelete={setConfirmingDelete}
+          uploadAsset={uploadAsset} uploadingAsset={uploadingAsset} />
       ))}
     </div>
   )
@@ -290,6 +394,7 @@ export default function PlanningBoardPage() {
   const [showExport, setShowExport] = useState(false)
   const [copied, setCopied] = useState(false)
   const [draftingSlot, setDraftingSlot] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
   const [uploadingAsset, setUploadingAsset] = useState<string | null>(null)
   const [videoLinkInput, setVideoLinkInput] = useState<Record<string, string>>({})
   const [showEmail, setShowEmail] = useState(false)
@@ -349,14 +454,9 @@ export default function PlanningBoardPage() {
 
   async function loadPlan() {
     setLoading(true)
-    const { data } = await supabase
-      .from('social_monthly_mix')
-      .select('*')
-      .eq('client_name', selectedClient)
-      .eq('month', monthStr)
-      .order('slot', { ascending: true })
+    const data = await fetchPlan(selectedClient, monthStr)
 
-    if (data && data.length > 0) {
+    if (data && (data as any[]).length > 0) {
       const savedPosts = data.filter((d: any) => d.content_type === 'Post')
       const savedVideos = data.filter((d: any) => d.content_type === 'Video')
       const savedReposts = data.filter((d: any) => d.content_type === 'Re-Post')
@@ -457,11 +557,14 @@ export default function PlanningBoardPage() {
     try {
       const ext = file.name.split('.').pop()
       const path = `${selectedClient}/${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}/${type}-${idx}-${Date.now()}.${ext}`
-      const { data, error } = await supabase.storage.from('social-assets').upload(path, file, { upsert: true })
-      if (error) throw error
-      const { data: { publicUrl } } = supabase.storage.from('social-assets').getPublicUrl(path)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('path', path)
+      const res = await fetch('/api/social/upload', { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
       const assetType = file.type.startsWith('video') ? 'video' : 'image'
-      updateSlot(type, idx, { asset_url: publicUrl, asset_type: assetType, asset_filename: file.name })
+      updateSlot(type, idx, { asset_url: json.publicUrl, asset_type: assetType, asset_filename: file.name })
     } catch(e) {
       console.error('Upload failed', e)
     }
@@ -558,11 +661,11 @@ www.abconsultingg.com
       asset_filename: slot.asset_filename || null,
     }
     if (slot.id) {
-      await supabase.from('social_monthly_mix').update(row).eq('id', slot.id)
+      await savePlanRow(row, slot.id)
     } else {
-      const { data } = await supabase.from('social_monthly_mix').insert(row).select().single()
-      if (data) {
-        const id = (data as any).id
+      const result = await savePlanRow(row)
+      if (result.data) {
+        const id = result.data.id
         if (slot.content_type === 'Post') setPostSlots(prev => prev.map(s => s.slot_num === slot.slot_num ? { ...s, id } : s))
         if (slot.content_type === 'Video') setVideoSlots(prev => prev.map(s => s.slot_num === slot.slot_num ? { ...s, id } : s))
         if (slot.content_type === 'Re-Post') setRepostSlots(prev => prev.map(s => s.slot_num === slot.slot_num ? { ...s, id } : s))
@@ -610,6 +713,10 @@ www.abconsultingg.com
               style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E7E5E4', background: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               📤 Export email
             </button>
+            <a href={`/dashboard/social/review`}
+              style={{ padding: '7px 14px', borderRadius: 6, border: 'none', background: '#1C1917', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+              👁 View All Content
+            </a>
             <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}
               style={{ padding: '7px 10px', borderRadius: 6, border: `1px solid ${rule}`, fontSize: 13, background: 'white', fontWeight: 500 }}>
               {CLIENTS.map(c => <option key={c}>{c}</option>)}
@@ -730,28 +837,29 @@ www.abconsultingg.com
         </div>
 
         {/* KPI row */}
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1, background: '#D6D3D1', border: `1px solid ${rule}`, borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
-          {[
-            { label: 'Total slots', value: totalSlots.toString() },
-            { label: 'Published', value: publishedCount.toString(), color: '#1C1917' },
-            { label: 'In Sprout', value: inSproutCount.toString(), color: '#047857' },
-            { label: 'Ready', value: readyCount.toString(), color: '#185FA5' },
-            { label: 'Remaining', value: String(totalSlots - publishedCount - inSproutCount), color: totalSlots - publishedCount - inSproutCount > 8 ? '#b91c1c' : '#B45309' },
-          ].map((k, i) => (
-            <div key={i} style={{ background: 'white', padding: '14px 18px' }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: muted }}>{k.label}</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 24, fontWeight: 600, marginTop: 6, color: k.color ?? ink }}>{k.value}</div>
-            </div>
-          ))}
+        <section style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length + 1}, 1fr)`, gap: 1, background: '#D6D3D1', border: `1px solid ${rule}`, borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
+          <div style={{ background: 'white', padding: '14px 18px' }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: muted }}>Total Slots</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 24, fontWeight: 600, marginTop: 6, color: ink }}>{totalSlots}</div>
+          </div>
+          {STAGES.map(s => {
+            const count = allSlots().filter(sl => sl.stage === s.key).length
+            return (
+              <div key={s.key} style={{ background: 'white', padding: '14px 18px' }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, color: muted }}>{s.label}</div>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 24, fontWeight: 600, marginTop: 6, color: count > 0 ? s.color : muted }}>{count}</div>
+              </div>
+            )
+          })}
         </section>
 
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: muted }}>Loading…</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
-            <Column title="Posts" emoji="📸" slots={postSlots} type="Post" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} />
-            <Column title="Videos" emoji="🎥" slots={videoSlots} type="Video" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} />
-            <Column title="Re-Posts" emoji="🔗" slots={repostSlots} type="Re-Post" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} />
+            <Column title="Posts" emoji="📸" slots={postSlots} type="Post" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} confirmingDelete={confirmingDelete} setConfirmingDelete={setConfirmingDelete} uploadAsset={uploadAsset} uploadingAsset={uploadingAsset} />
+            <Column title="Videos" emoji="🎥" slots={videoSlots} type="Video" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} confirmingDelete={confirmingDelete} setConfirmingDelete={setConfirmingDelete} uploadAsset={uploadAsset} uploadingAsset={uploadingAsset} />
+            <Column title="Re-Posts" emoji="🔗" slots={repostSlots} type="Re-Post" addSlot={addSlot} editingId={editingId} setEditingId={setEditingId} updateSlot={updateSlot} removeSlot={removeSlot} saveSlot={saveSlot} linkCaption={linkCaption} draftCaption={draftCaption} draftingSlot={draftingSlot} captions={captions} saving={saving} stageMap={stageMap} confirmingDelete={confirmingDelete} setConfirmingDelete={setConfirmingDelete} uploadAsset={uploadAsset} uploadingAsset={uploadingAsset} />
           </div>
         )}
       </main>
