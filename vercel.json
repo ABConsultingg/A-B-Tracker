@@ -3,6 +3,18 @@
     {
       "path": "/api/sprout/sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/standup",
+      "schedule": "0 15 * * 1-5"
+    },
+    {
+      "path": "/api/cron/checkout-us",
+      "schedule": "30 20 * * 1-5"
+    },
+    {
+      "path": "/api/cron/checkout-mx",
+      "schedule": "30 23 * * 1-5"
     }
   ],
   "functions": {
