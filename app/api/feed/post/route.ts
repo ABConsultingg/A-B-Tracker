@@ -72,15 +72,19 @@ export async function POST(req: NextRequest) {
       })
     ));
 
+    // Mirror to wo_comments if WO attached — use service role to bypass RLS
     if (workOrderId) {
-      await sb.from('wo_comments').insert({
+      const { error: commentError } = await sb.from('wo_comments').insert({
         work_order_id: workOrderId,
         author_id: sender.auth_user_id,
-        body,
-        mentions,
+        body: `💬 [From Feed] ${body}`,
+        mentions: mentions.length ? mentions : null,
         internal_only: true,
         author_type: 'team',
       });
+      if (commentError) {
+        console.error('[feed/post] wo_comments mirror failed:', commentError.message);
+      }
     }
 
     return NextResponse.json({ post });
