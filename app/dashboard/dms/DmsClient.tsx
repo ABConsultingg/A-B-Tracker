@@ -51,6 +51,14 @@ export default function DmsClient({
   const [dms, setDms] = useState<Dm[]>(initialDms)
   const [activeConvo, setActiveConvo] = useState<ConvoKey | undefined>(undefined)
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
   const [replyBody, setReplyBody] = useState('')
   const [sending, setSending] = useState(false)
   const [newDmTarget, setNewDmTarget] = useState('')
@@ -281,9 +289,9 @@ export default function DmsClient({
   const canReply = activeConvo !== null && activeConvo !== undefined
 
   return (
-    <div className="flex flex-col md:flex-row gap-3" style={{ height: 'calc(100vh - 120px)', minHeight: 500 }}>
+    <div style={{ display: 'flex', flexDirection: isDesktop ? 'row' : 'column', gap: 12, height: 'calc(100vh - 120px)', minHeight: 500 }}>
       {/* Conversation list */}
-      <div className={`flex-col ${mobileView === 'thread' ? 'hidden md:flex' : 'flex'} md:w-60 w-full`} style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, width: isDesktop ? 240 : '100%', display: isDesktop || mobileView === 'list' ? 'flex' : 'none', flexDirection: 'column' }}>
         <div className="flex items-center justify-between mb-3">
           {totalUnread > 0 && (
             <span className="text-xs bg-blue-500 text-white rounded-full px-2 py-0.5 font-medium">{totalUnread} unread</span>
@@ -341,7 +349,8 @@ export default function DmsClient({
       </div>
 
       {/* Thread view */}
-      <div className={`flex-1 flex-col bg-white rounded-xl border border-gray-200 overflow-hidden ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
+      <div className="rounded-xl border border-gray-200 overflow-hidden"
+        style={{ flex: 1, display: isDesktop || mobileView === 'thread' ? 'flex' : 'none', flexDirection: 'column', background: 'white' }}>
         {activeConvo === undefined ? (
           <div className="flex-1 flex items-center justify-center text-gray-400">
             <div className="text-center">
