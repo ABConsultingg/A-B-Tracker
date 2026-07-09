@@ -80,6 +80,8 @@ export default function DmsClient({
 
   // Reactions: map dm_id → { count, myReaction }
   const [reactions, setReactions] = useState<Reaction[]>(initialReactions)
+  // Emoji picker open state per dm_id
+  const [openPickerDmId, setOpenPickerDmId] = useState<string | null>(null)
 
   // Signed URLs for attachments (dm_id → signedUrl)
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>(initialSignedUrls)
@@ -265,18 +267,20 @@ export default function DmsClient({
     setActiveConvo(newDmTarget)
   }
 
-  async function toggleReaction(dmId: string) {
+  const DM_EMOJIS = ['👍', '✅', '👀', '🎉', '🔥', '❤️']
+
+  async function toggleReaction(dmId: string, emoji: string) {
     if (!currentMemberId) return
     const res = await fetch('/api/dms/react', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dm_id: dmId, member_id: currentMemberId, emoji: '👍' }),
+      body: JSON.stringify({ dm_id: dmId, member_id: currentMemberId, emoji }),
     })
     const json = await res.json()
     if (json.action === 'added') {
-      setReactions(prev => [...prev, { dm_id: dmId, member_id: currentMemberId, emoji: '👍' }])
+      setReactions(prev => [...prev, { dm_id: dmId, member_id: currentMemberId, emoji }])
     } else {
-      setReactions(prev => prev.filter(r => !(r.dm_id === dmId && r.member_id === currentMemberId && r.emoji === '👍')))
+      setReactions(prev => prev.filter(r => !(r.dm_id === dmId && r.member_id === currentMemberId && r.emoji === emoji)))
     }
   }
 
@@ -374,8 +378,13 @@ export default function DmsClient({
               {threadDms.map(dm => {
                 const isFromMe = dm.from_member_id === currentMemberId
                 const fromName = dm.sent_via === 'mav' && !dm.from_member_id ? '✦ Pancho' : memberName(dm.from_member_id)
-                const dmReactions = reactions.filter(r => r.dm_id === dm.id && r.emoji === '👍')
-                const myReaction = dmReactions.some(r => r.member_id === currentMemberId)
+                // Group reactions by emoji for this message
+                const dmReactionMap: Record<string, { n: number; mine: boolean }> = {}
+                for (const r of reactions.filter(r => r.dm_id === dm.id)) {
+                  if (!dmReactionMap[r.emoji]) dmReactionMap[r.emoji] = { n: 0, mine: false }
+                  dmReactionMap[r.emoji].n++
+                  if (r.member_id === currentMemberId) dmReactionMap[r.emoji].mine = true
+                }
                 const signedUrl = signedUrls[dm.id]
 
                 // Lazily load signed URL if not yet available
@@ -436,15 +445,61 @@ export default function DmsClient({
                       </div>
                     </div>
 
-                    {/* 👍 reaction */}
-                    <button
-                      onClick={() => toggleReaction(dm.id)}
-                      className={`mt-1 flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors
-                        ${myReaction
-                          ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                          : 'border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
-                      👍 {dmReactions.length > 0 && <span>{dmReactions.length}</span>}
-                    </button>
+                    {/* Reaction bar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap', position: 'relative' }}>
+                      {/* Existing reaction pills */}
+                      {Object.entries(dmReactionMap).map(([emoji, { n, mine }]) => (
+                        <button
+                          key={emoji}
+                          onClick={() => toggleReaction(dm.id, emoji)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 3,
+                            fontSize: 12, padding: '1px 8px', borderRadius: 999,
+                            border: mine ? '1px solid #fcd34d' : '1px solid #e5e7eb',
+                            background: mine ? '#fefce8' : 'transparent',
+                            color: mine ? '#92400e' : '#9ca3af',
+                            cursor: 'pointer',
+                          }}>
+                          {emoji} <span>{n}</span>
+                        </button>
+                      ))}
+                      {/* ＋ picker button */}
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setOpenPickerDmId(openPickerDmId === dm.id ? null : dm.id)}
+                          style={{
+                            fontSize: 13, padding: '1px 8px', borderRadius: 999,
+                            border: '1px solid #e5e7eb', background: 'transparent',
+                            color: '#9ca3af', cursor: 'pointer',
+                          }}>
+                          ＋
+                        </button>
+                        {openPickerDmId === dm.id && (
+                          <div style={{
+                            position: 'absolute', bottom: '100%', left: 0,
+                            background: 'white', border: '1px solid #e5e7eb',
+                            borderRadius: 12, padding: '6px 8px',
+                            display: 'flex', gap: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                            zIndex: 50,
+                          }}>
+                            {DM_EMOJIS.map(e => (
+                              <button
+                                key={e}
+                                onClick={() => { toggleReaction(dm.id, e); setOpenPickerDmId(null) }}
+                                style={{
+                                  fontSize: 18, background: 'none', border: 'none',
+                                  cursor: 'pointer', padding: '2px 3px', borderRadius: 6,
+                                  lineHeight: 1,
+                                }}
+                                onMouseEnter={ev => (ev.currentTarget.style.background = '#f3f4f6')}
+                                onMouseLeave={ev => (ev.currentTarget.style.background = 'none')}>
+                                {e}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )
               })}
