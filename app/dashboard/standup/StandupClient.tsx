@@ -164,13 +164,20 @@ export default function StandupClient({
   async function notify(mentionIds: string[], text: string, postId: string) {
     const recipients = mentionIds.filter(uid => uid !== currentUserId)
     if (recipients.length === 0) return
-    const preview = text.length > 140 ? text.slice(0, 140) + '\u2026' : text
-    const rows = recipients.map(uid => ({
-      user_id: uid, source_type: 'standup', source_id: postId, work_order_id: null,
-      body_preview: preview, author_name: currentUserName, link_url: '/dashboard/standup',
-    }))
-    const { error } = await supabase.from('wo_notifications').insert(rows)
-    if (error) console.error('Failed to create standup notifications:', error.message)
+    // Use service-role API route so we can insert notifications for other users (bypasses RLS)
+    try {
+      const res = await fetch('/api/wall/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipients, text, postId, authorName: currentUserName,
+          linkUrl: '/dashboard/standup',
+        }),
+      })
+      if (!res.ok) console.error('Failed to create wall mention notifications:', await res.text())
+    } catch (e) {
+      console.error('wall/notify fetch error:', e)
+    }
   }
 
   // ── Pancho wall responder ──
@@ -333,11 +340,17 @@ export default function StandupClient({
     return map
   }, [reactions])
 
-  // Who's posted today (standup channel only; login-having team; Central time).
+  // Who's posted today — standup and checkout channels; Central time.
   const todayKey = useMemo(() => centralDateKey(new Date().toISOString()), [])
   const postedTodayIds = useMemo(() => {
     const s = new Set<string>()
     posts.filter(p => p.channel === 'standup' && !p.parent_id && centralDateKey(p.created_at) === todayKey)
+      .forEach(p => s.add(p.author_id))
+    return s
+  }, [posts, todayKey])
+  const checkedOutTodayIds = useMemo(() => {
+    const s = new Set<string>()
+    posts.filter(p => p.channel === 'checkout' && !p.parent_id && centralDateKey(p.created_at) === todayKey)
       .forEach(p => s.add(p.author_id))
     return s
   }, [posts, todayKey])
@@ -375,13 +388,17 @@ export default function StandupClient({
         </p>
       </div>
 
-      {/* Who's posted today — standup only */}
-      {channel === 'standup' && checkInTeam.length > 0 && (
+      {/* Who's posted today — standup or checkout */}
+      {(channel === 'standup' || channel === 'checkout') && checkInTeam.length > 0 && (
         <div className="rounded-lg border p-3 mb-4 flex items-center gap-3 flex-wrap" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
-          <span className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>Checked in today</span>
+          <span className="text-xs font-semibold uppercase" style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+            {channel === 'standup' ? 'Checked in today' : 'Checked out today'}
+          </span>
           <div className="flex gap-1.5 flex-wrap">
             {checkInTeam.map(m => {
-              const done = m.auth_user_id ? postedTodayIds.has(m.auth_user_id) : false
+              const done = m.auth_user_id
+                ? (channel === 'standup' ? postedTodayIds : checkedOutTodayIds).has(m.auth_user_id)
+                : false
               return (
                 <span key={m.id} title={`${m.name}${done ? ' — posted' : ' — not yet'}`}
                   className="rounded-full flex items-center justify-center font-bold"
@@ -396,7 +413,7 @@ export default function StandupClient({
             })}
           </div>
           <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
-            {postedTodayIds.size}/{checkInTeam.length}
+            {(channel === 'standup' ? postedTodayIds : checkedOutTodayIds).size}/{checkInTeam.length}
           </span>
         </div>
       )}
@@ -432,11 +449,11 @@ export default function StandupClient({
         </div>
       )}
 
-      {/* Composer — hidden on checkout channel */}
-      {channel !== 'checkout' && <div className="rounded-lg border p-3 mb-6 relative" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+      {/* Composer */}
+      {<div className="rounded-lg border p-3 mb-6 relative" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
         <textarea value={body}
           onChange={e => onInput('main', e.target.value, e.target.selectionStart || 0, setBody)}
-          placeholder={channel === 'standup' ? 'What are you working on today?' : 'Share an update…'}
+          placeholder={channel === 'standup' ? 'What are you working on today?' : channel === 'checkout' ? 'What did you complete today?' : 'Share an update…'}
           rows={3} className="w-full rounded border px-3 py-2 text-sm"
           style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)', resize: 'vertical' }} />
         {mention && mention.target === 'main' && mentionMatches.length > 0 && (

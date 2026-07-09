@@ -673,10 +673,12 @@ function OverviewTab({
                     {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}
                     <span style={{ color: 'var(--text-muted)' }}> at </span>
                     {d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                    {byName && (
+                    {(byName || entry.changed_by) && (
                       <>
                         <span style={{ color: 'var(--text-muted)' }}> by </span>
-                        <span style={{ fontWeight: 500 }}>{byName}</span>
+                        <span style={{ fontWeight: 500, color: byName ? 'inherit' : '#7c3aed' }}>
+                          {byName || '🧑‍💼 Client'}
+                        </span>
                       </>
                     )}
                   </div>
