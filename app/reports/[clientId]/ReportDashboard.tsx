@@ -1,5 +1,6 @@
 'use client'
 import AcquisitionTab from '@/components/reports/AcquisitionTab'
+import ChatbotTab from '@/components/reports/ChatbotTab'
 import CallsTab from '@/components/reports/CallsTab'
 import ApprovalTab from '@/components/reports/ApprovalTab'
 import React, { useState, useMemo, useEffect } from 'react'
@@ -1110,7 +1111,7 @@ function pct(n: number | null | undefined) {
   return `${n.toFixed(2)}%`
 }
 
-type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve' | 'calls' | 'acquisition'
+type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve' | 'calls' | 'acquisition' | 'chatbot'
 
 export default function ReportDashboard({
   clientId, clientName, clientInitials, clientColor, clientIndustry,
@@ -1363,6 +1364,7 @@ export default function ReportDashboard({
     { id: 'leads',    label: 'LSA Leads',  icon: '🎯' },
     { id: 'calls',    label: 'Calls',      icon: '📞' },
     { id: 'acquisition', label: 'Acquisition Cost', icon: '💰' },
+    ...(isAdmin ? [{ id: 'chatbot' as TabId, label: 'Chatbot', icon: '🤖' }] : []),
     ...(isAdmin ? [{ id: 'approve' as TabId,  label: 'Approve',    icon: '✅' }] : []),
   ]
 
@@ -1733,6 +1735,10 @@ export default function ReportDashboard({
 
         {tab === 'calls' && (
           <CallsTab clientId={clientId} month={month} />
+        )}
+
+        {tab === 'chatbot' && isAdmin && (
+          <ChatbotTab />
         )}
 
         {tab === 'acquisition' && (
