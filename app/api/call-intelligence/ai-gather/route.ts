@@ -131,6 +131,8 @@ export async function POST(req: Request) {
     intent_level: merged.intent_level ?? call.intent_level,
     is_new_customer: merged.is_new_customer ?? call.is_new_customer,
     call_reason: merged.call_reason ?? call.call_reason,
+    website: merged.website ?? (call as unknown as { website?: string }).website,
+    caller_email: merged.caller_email ?? (call as unknown as { caller_email?: string }).caller_email,
   });
 
   await appendTranscript(callSid, [{ role: "assistant", text: result.say }]);

@@ -23,6 +23,9 @@ export type IntakeFields = {
   service_type?: string;
   property_type?: "residential" | "commercial";
   is_insurance?: boolean;
+  // agency scorecard
+  website?: string;
+  caller_email?: string;
 };
 
 export type IntakeResult = {
@@ -74,14 +77,17 @@ function agencyProfile(client: CIClient): Profile {
     required: [
       "call_reason", "service_type", "property_type",
       "source", "caller_name", "callback_number",
+      "website", "caller_email",
     ],
-    persona: `You are ${client.ai_name}, the phone assistant for ${client.business_name}, a full-service digital marketing and AI business solutions agency. The agency's core differentiator is responsiveness — every client is treated like the only client. Multi-channel systems beat single-channel marketing; never promise specific pricing (programs are tailored, "starting at" framing only, Adrian covers numbers on a call).`,
+    persona: `You are ${client.ai_name}, the phone assistant for ${client.business_name}, a full-service digital marketing and AI business solutions agency. The agency's core differentiator is responsiveness — every client is treated like the only client. Multi-channel systems beat single-channel marketing; never promise specific pricing (programs are tailored, "starting at" framing only, Adrian covers numbers on a call). Your special power: you can send callers a FREE personalized marketing scorecard for their website, generated with live SEO data, delivered to their inbox minutes after this call. Offer it naturally when asking for their website — it is a gift, not a pitch. When ending a completed call, tell them their scorecard is on its way to their inbox.`,
     fieldGuide: `1. call_reason — new business inquiry, existing client, vendor/partner, or something else
 2. service_type — what they need help with, mapped to: ${services} (or "Full marketing system" if they want everything / aren't sure)
 3. property_type — REPURPOSED FIELD: store their BUSINESS NAME AND INDUSTRY here as free text (e.g. "Smith Roofing — contractor")
 4. source — how they found the agency (Google, referral, social media, saw our work, existing client, other)
 5. caller_name — first and last name
-6. callback_number — best callback number (if they say "this number", use the string "CALLER_ID")`,
+6. callback_number — best callback number (if they say "this number", use the string "CALLER_ID")
+7. website — their business website (offer the free marketing scorecard here: "I can have a free marketing scorecard for your business in your inbox before the team even calls you — what's your website?"). If they have no website, store "none" and note it is their biggest opportunity.
+8. caller_email — best email for the scorecard and follow-up. Spell it back to confirm if it sounds ambiguous.`,
     fallbackQuestions: {
       call_reason: "Are you calling about marketing help for your business, or are you an existing client?",
       service_type: "What are you looking for help with — website, ads, social media, or the whole system?",
@@ -89,6 +95,8 @@ function agencyProfile(client: CIClient): Profile {
       source: "How did you hear about us?",
       caller_name: "Can I get your name?",
       callback_number: "What's the best callback number for you?",
+      website: "I can send you a free marketing scorecard for your business — what's your website?",
+      caller_email: "And what's the best email to send your scorecard to?",
     },
   };
 }

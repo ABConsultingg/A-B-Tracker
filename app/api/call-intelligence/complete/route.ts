@@ -13,9 +13,10 @@ import {
 import { readTwilioWebhook, xml, forbidden, VOICE } from "@/lib/call-intelligence/twilio";
 import { pushToCrm } from "@/lib/call-intelligence/crm";
 import { notifyTeam } from "@/lib/call-intelligence/notify";
+import { sendPhoneScorecard } from "@/lib/call-intelligence/scorecard";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60; // scorecard generation: Semrush + Claude + Resend
 
 export async function POST(req: Request) {
   const url = new URL(req.url);
@@ -81,6 +82,19 @@ export async function POST(req: Request) {
         // Team notify on any AI lead or voicemail
         if (finalized && hasLead && (finalized.ivr_selection === "ai" || finalized.ivr_selection === "voicemail")) {
           await notifyTeam(client, finalized);
+        }
+
+        // Phone scorecard: agency-brain calls that collected website + email
+        const clientType = (client as unknown as { business_type?: string }).business_type;
+        const fc = finalized as unknown as { website?: string; caller_email?: string };
+        if (
+          finalized &&
+          clientType === "agency" &&
+          finalized.ivr_selection === "ai" &&
+          fc.website && fc.website !== "none" && fc.caller_email
+        ) {
+          const sent = await sendPhoneScorecard(client, finalized as never);
+          await updateCall(callSid, { scorecard_sent: sent });
         }
       }
     }
