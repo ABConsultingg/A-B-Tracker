@@ -11,6 +11,7 @@
     "@anthropic-ai/sdk": "^0.102.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "@vercel/functions": "^3.7.5",
     "googleapis": "^173.0.0",
     "jspdf": "^4.2.1",
     "mammoth": "^1.12.0",

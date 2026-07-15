@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   if (open) {
     const gather = response.gather({
       numDigits: 1,
-      timeout: 6,
+      timeout: 3,
       action: "/api/call-intelligence/ivr-response",
       method: "POST",
     });
@@ -57,13 +57,16 @@ export async function POST(req: Request) {
   } else {
     const gather = response.gather({
       numDigits: 1,
-      timeout: 6,
+      timeout: 3,
       action: "/api/call-intelligence/ivr-response",
       method: "POST",
     });
+    const brandIntro = client.greeting_override
+      ? client.greeting_override.split(/(?<=\.)\s/)[0] // first sentence = brand line
+      : `Thanks for calling ${name}.`;
     gather.say(
       VOICE,
-      `Thanks for calling ${name}. We're currently closed. Press 1 to leave a message for our team. Press 2 for scheduling.${aiTail}`
+      `${brandIntro} We're currently closed. Press 1 to leave a message for our team. Press 2 for scheduling.${aiTail}`
     );
   }
 

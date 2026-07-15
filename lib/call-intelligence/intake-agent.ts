@@ -65,7 +65,7 @@ function contractorProfile(client: CIClient): Profile {
       is_insurance: "Is this related to an insurance claim, or out of pocket?",
       source: "How did you hear about us?",
       caller_name: "Can I get your name?",
-      callback_number: "What's the best callback number for you?",
+      callback_number: "Is the number you're calling from the best one to reach you?",
       caller_address: "And your address or ZIP code so we can confirm your service area?",
     },
   };
@@ -94,7 +94,7 @@ function agencyProfile(client: CIClient): Profile {
       property_type: "What's your business name, and what industry are you in?",
       source: "How did you hear about us?",
       caller_name: "Can I get your name?",
-      callback_number: "What's the best callback number for you?",
+      callback_number: "Is the number you're calling from the best one to reach you?",
       website: "I can send you a free marketing scorecard for your business — what's your website?",
       caller_email: "And what's the best email to send your scorecard to?",
     },
@@ -112,8 +112,9 @@ function missingFields(profile: Profile, state: IntakeFields): string[] {
   );
 }
 
-function systemPrompt(client: CIClient, profile: Profile, state: IntakeFields, isBusinessHours: boolean): string {
+function systemPrompt(client: CIClient, profile: Profile, state: IntakeFields, isBusinessHours: boolean, callerNumber: string | null): string {
   const missing = missingFields(profile, state);
+  const lastFour = callerNumber ? callerNumber.slice(-4) : null;
   return `${profile.persona} You are on a LIVE PHONE CALL. The caller's words arrive as speech-to-text and may contain transcription errors — interpret charitably.
 
 YOUR JOB — collect these fields, in roughly this order, ONE question at a time:
@@ -124,7 +125,9 @@ FIELDS STILL MISSING: ${missing.join(", ") || "none"}
 
 RULES:
 - Extract EVERY field the caller mentions, even if you didn't ask for it yet. Never re-ask for something already collected.
-- Keep replies SHORT — one or two sentences max. This is spoken aloud; no lists, no formatting, no emojis.
+- CRITICAL for names, business names, and emails: repeat back what you heard and confirm ("Elias Construction — did I get that right?"). If it sounds unusual or the caller corrects you, ask them to spell it. Phone transcription mangles names; a confirmed name beats a fast wrong one.
+- CALLBACK NUMBER — never make them recite ten digits. ${lastFour ? `Their caller ID ends in ${lastFour}. Ask: "Is the number you're calling from, ending in ${lastFour}, the best one to reach you?" If yes, set callback_number to "CALLER_ID".` : `Ask if the number they're calling from is the best one; if yes, set callback_number to "CALLER_ID".`} Only if they want a DIFFERENT number, say they can speak it or type it on their keypad and press pound.
+- Keep replies VERY SHORT — under 20 words, one question max. This is spoken aloud on a phone call; no lists, no formatting, no emojis. Short and human beats thorough.
 - If the caller asks a question about the business, answer briefly and helpfully if you can, then steer back to the next missing field. Never invent pricing, availability, or promises.
 - If the caller is upset about existing work, be empathetic, capture name + callback number, mark call_reason accordingly — the team will call back.
 - ${isBusinessHours ? "It is business hours. Once all fields are collected, tell them the team will be with them shortly." : "It is after hours. Once all fields are collected, tell them the team will reach out first thing when they open."}
@@ -163,8 +166,8 @@ export async function runIntakeTurn(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 300,
-      system: systemPrompt(client, profile, state, isBusinessHours),
+      max_tokens: 150,
+      system: systemPrompt(client, profile, state, isBusinessHours, call.caller_number),
       messages,
     }),
   });
@@ -196,6 +199,17 @@ export async function runIntakeTurn(
     console.error("[CI] Failed to parse intake JSON:", text);
     return fallbackResult(profile, state);
   }
+}
+
+/** Speech-recognition hints — the vocabulary Twilio should listen for. Big ASR accuracy boost. */
+export function speechHintsFor(client: CIClient): string {
+  const type = (client as CIClient & { business_type?: string }).business_type;
+  const services = (client.services || []).join(",");
+  const shared = "yes,no,yeah,correct,this number,my name is,email,gmail,dot com,at";
+  if (type === "agency") {
+    return `${services},marketing,website,social media,Google ads,SEO,existing client,new business,referral,strategy call,${shared}`;
+  }
+  return `${services},new estimate,existing project,residential,commercial,insurance claim,out of pocket,Google,yard sign,referral,${shared}`;
 }
 
 /** First question Alex asks when he takes over the call. */

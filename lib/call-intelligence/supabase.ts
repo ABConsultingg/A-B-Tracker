@@ -59,7 +59,14 @@ export type CICall = {
   status: string;
 };
 
+// Warm-instance cache: client config rarely changes mid-call. 60s TTL.
+const clientCache = new Map<string, { client: CIClient; at: number }>();
+const CLIENT_TTL_MS = 60_000;
+
 export async function getClientByTwilioNumber(twilioNumber: string): Promise<CIClient | null> {
+  const cached = clientCache.get(twilioNumber);
+  if (cached && Date.now() - cached.at < CLIENT_TTL_MS) return cached.client;
+
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/call_intelligence_clients?twilio_number=eq.${encodeURIComponent(
       twilioNumber
@@ -67,7 +74,9 @@ export async function getClientByTwilioNumber(twilioNumber: string): Promise<CIC
     { headers: headers(), cache: "no-store" }
   );
   const rows = await res.json();
-  return rows?.[0] ?? null;
+  const client = rows?.[0] ?? null;
+  if (client) clientCache.set(twilioNumber, { client, at: Date.now() });
+  return client;
 }
 
 export async function createCall(record: Partial<CICall>): Promise<void> {
