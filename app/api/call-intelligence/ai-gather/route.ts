@@ -21,6 +21,7 @@ import {
 import {
   runIntakeTurn,
   mergeFields,
+  openerFor,
   type IntakeFields,
 } from "@/lib/call-intelligence/intake-agent";
 
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
       console.error("[CI] recording start failed", e);
     }
 
-    const opener = `Hi, I'm ${client.ai_name}. I can get you taken care of. Are you calling about a new estimate, an existing project, or something else?`;
+    const opener = openerFor(client);
     await appendTranscript(callSid, [{ role: "assistant", text: opener }]);
     gatherSpeech(response, opener);
     return xml(response);
