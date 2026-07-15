@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   if (open) {
     const gather = response.gather({
       numDigits: 1,
-      timeout: 3,
+      timeout: 2,
       action: "/api/call-intelligence/ivr-response",
       method: "POST",
     });
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   } else {
     const gather = response.gather({
       numDigits: 1,
-      timeout: 3,
+      timeout: 2,
       action: "/api/call-intelligence/ivr-response",
       method: "POST",
     });

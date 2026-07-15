@@ -131,6 +131,44 @@ export async function POST(req: Request) {
   const callForTurn = { ...call, transcript: transcriptWithCaller };
   const result = await runIntakeTurn(client, callForTurn, speech, !!call.is_business_hours);
 
+  // ---------- Trouble counter: bail out gracefully instead of looping ----------
+  const priorTrouble = (call.ai_state?.trouble as number) || 0;
+  const trouble = result.fallback ? priorTrouble + 1 : 0; // consecutive failures only
+  if (trouble >= 3) {
+    if (call.is_business_hours && (client.real_number || client.forward_from_number)) {
+      response.say(VOICE, "I'm sorry about that — let me get you straight to the team.");
+      const dial = response.dial({
+        action: "/api/call-intelligence/complete?leg=dial",
+        method: "POST",
+        timeout: 25,
+      });
+      dial.number(client.real_number || client.forward_from_number || "");
+      waitUntil(
+        updateCall(callSid, {
+          ivr_selection: "transfer",
+          transcript: transcriptWithCaller,
+          ai_state: { ...call.ai_state, trouble, escalated: true },
+          intent_level: call.intent_level ?? "medium",
+        })
+      );
+    } else {
+      response.say(
+        VOICE,
+        "I'm sorry about that. No problem — the team will call you right back at this number. Thanks for calling!"
+      );
+      response.hangup();
+      waitUntil(
+        updateCall(callSid, {
+          transcript: transcriptWithCaller,
+          ai_state: { ...call.ai_state, trouble, escalated: true },
+          caller_name: call.caller_name ?? "Callback requested",
+          intent_level: call.intent_level ?? "medium",
+        })
+      );
+    }
+    return xml(response);
+  }
+
   const existing = (call.ai_state?.fields as IntakeFields) || {};
   const merged = mergeFields(existing, result.fields);
 
@@ -148,7 +186,7 @@ export async function POST(req: Request) {
   waitUntil(
     updateCall(callSid, {
       transcript: [...transcriptWithCaller, { role: "assistant", text: result.say, at: now }],
-      ai_state: { ...call.ai_state, fields: merged, turns: turnCount, retries: 0 },
+      ai_state: { ...call.ai_state, fields: merged, turns: turnCount, retries: 0, trouble },
       caller_name: merged.caller_name ?? call.caller_name,
       caller_address: merged.caller_address ?? call.caller_address,
       service_type: merged.service_type ?? call.service_type,

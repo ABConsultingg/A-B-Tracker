@@ -33,6 +33,7 @@ export type IntakeResult = {
   fields: IntakeFields;
   done: boolean;
   action: "continue" | "end";
+  fallback?: boolean; // true when Claude failed and the scripted fallback answered
 };
 
 type Profile = {
@@ -244,6 +245,7 @@ function fallbackResult(profile: Profile, state: IntakeFields): IntakeResult {
     fields: {},
     done: false,
     action: "continue",
+    fallback: true,
   };
 }
 
