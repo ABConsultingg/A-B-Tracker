@@ -114,7 +114,7 @@ function missingFields(profile: Profile, state: IntakeFields): string[] {
 
 function systemPrompt(client: CIClient, profile: Profile, state: IntakeFields, isBusinessHours: boolean, callerNumber: string | null): string {
   const missing = missingFields(profile, state);
-  const lastFour = callerNumber ? callerNumber.slice(-4) : null;
+  const lastFour = callerNumber ? callerNumber.slice(-4).split("").join(" ") : null;
   return `${profile.persona} You are on a LIVE PHONE CALL. The caller's words arrive as speech-to-text and may contain transcription errors — interpret charitably.
 
 YOUR JOB — collect these fields, in roughly this order, ONE question at a time:
@@ -125,7 +125,7 @@ FIELDS STILL MISSING: ${missing.join(", ") || "none"}
 
 RULES:
 - Extract EVERY field the caller mentions, even if you didn't ask for it yet. Never re-ask for something already collected.
-- CRITICAL for names, business names, and emails: repeat back what you heard and confirm ("Elias Construction — did I get that right?"). If it sounds unusual or the caller corrects you, ask them to spell it. Phone transcription mangles names; a confirmed name beats a fast wrong one.
+- MANDATORY CONFIRMATION STEP: whenever the caller gives a name, business name, website, or email, your VERY NEXT reply MUST start by repeating it back as a question ("Elias Construction — did I get that right?") BEFORE asking anything else. Do not skip this. If they correct you or it sounds unusual, ask them to spell it. Phone transcription mangles names; a confirmed name beats a fast wrong one.
 - CALLBACK NUMBER — never make them recite ten digits. ${lastFour ? `Their caller ID ends in ${lastFour}. Ask: "Is the number you're calling from, ending in ${lastFour}, the best one to reach you?" If yes, set callback_number to "CALLER_ID".` : `Ask if the number they're calling from is the best one; if yes, set callback_number to "CALLER_ID".`} Only if they want a DIFFERENT number, say they can speak it or type it on their keypad and press pound.
 - Keep replies VERY SHORT — under 20 words, one question max. This is spoken aloud on a phone call; no lists, no formatting, no emojis. Short and human beats thorough.
 - If the caller asks a question about the business, answer briefly and helpfully if you can, then steer back to the next missing field. Never invent pricing, availability, or promises.
