@@ -599,6 +599,7 @@ export default function PlanningBoardPage() {
         out += `\n(${label.replace(/s$/, '')} ${num}) ${date}: ${s.topic}\n`
         if (s.caption_text) out += `Main Content: ${s.caption_text}\n`
         if (s.hashtags) out += `#: ${s.hashtags}\n`
+        if (s.asset_url) out += `${s.asset_type === 'video' ? 'Video' : 'Image'}: ${s.asset_url}\n`
       })
       return out
     }
@@ -616,6 +617,7 @@ Additionally, if you have any specific content requests for the following month,
 
 FINAL - ${selectedClient} (${monthName})
 Calendar: ${total} Post
+[paste calendar image here]
 
 ${posts}
 ${reposts}
@@ -629,6 +631,11 @@ AB CONSULTING
 emily@abconsultingg.com
 www.abconsultingg.com
 52 River St. Lemont, IL 60439`
+  }
+
+  function generateSubject(): string {
+    const monthName = MONTH_LABELS[selectedMonth] + ' ' + selectedYear
+    return `FINAL - ${selectedClient} (${monthName})`
   }
 
   function updateSlot(type: string, idx: number, updates: Partial<Slot>) {
@@ -887,6 +894,17 @@ www.abconsultingg.com
               <button onClick={() => setShowEmail(false)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: muted }}>✕</button>
             </div>
             <div style={{ fontSize: 12, color: muted }}>Copy this and paste into Gmail. Send to the client contact + CC Tanya.</div>
+            <div>
+              <label style={{ fontSize: 10, color: muted, fontWeight: 600, textTransform: 'uppercase' }}>Subject</label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <input readOnly value={generateSubject()}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: `1px solid ${rule}`, fontSize: 13, fontFamily: 'monospace' }} />
+                <button onClick={() => { navigator.clipboard.writeText(generateSubject()) }}
+                  style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${rule}`, background: 'white', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Copy subject
+                </button>
+              </div>
+            </div>
             <textarea readOnly value={generateEmail()}
               style={{ flex: 1, minHeight: 380, padding: '12px', borderRadius: 6, border: `1px solid ${rule}`, fontSize: 12, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }} />
             <div style={{ display: 'flex', gap: 10 }}>
