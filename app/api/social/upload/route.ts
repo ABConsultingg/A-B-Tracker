@@ -7,23 +7,15 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  const path = formData.get('path') as string | null
+  const { path } = await req.json()
 
-  if (!file || !path) {
-    return NextResponse.json({ error: 'Missing file or path' }, { status: 400 })
+  if (!path) {
+    return NextResponse.json({ error: 'Missing path' }, { status: 400 })
   }
 
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-
-  const { error } = await supabaseAdmin.storage
+  const { data, error } = await supabaseAdmin.storage
     .from('social-assets')
-    .upload(path, buffer, {
-      contentType: file.type,
-      upsert: true,
-    })
+    .createSignedUploadUrl(path, { upsert: true })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -33,5 +25,6 @@ export async function POST(req: NextRequest) {
     .from('social-assets')
     .getPublicUrl(path)
 
-  return NextResponse.json({ publicUrl })
+  // token + path are what the browser needs to upload directly; publicUrl is what gets saved on the slot
+  return NextResponse.json({ token: data.token, path: data.path, publicUrl })
 }

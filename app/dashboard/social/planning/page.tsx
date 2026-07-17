@@ -557,14 +557,28 @@ export default function PlanningBoardPage() {
     try {
       const ext = file.name.split('.').pop()
       const path = `${selectedClient}/${selectedYear}-${String(selectedMonth+1).padStart(2,'0')}/${type}-${idx}-${Date.now()}.${ext}`
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('path', path)
-      const res = await fetch('/api/social/upload', { method: 'POST', body: formData })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
+
+      // 1. Ask our API for a signed upload URL (small JSON request — no file, no 413)
+      const res = await fetch('/api/social/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`Could not get upload URL: ${res.status} ${text.slice(0, 200)}`)
+      }
+      const { token, path: signedPath, publicUrl } = await res.json()
+
+      // 2. Upload the file straight to Supabase Storage (bypasses the API body limit entirely)
+      const { error } = await supabase.storage
+        .from('social-assets')
+        .uploadToSignedUrl(signedPath, token, file)
+      if (error) throw new Error(error.message)
+
+      // 3. Save the public URL onto the slot — same shape as before
       const assetType = file.type.startsWith('video') ? 'video' : 'image'
-      updateSlot(type, idx, { asset_url: json.publicUrl, asset_type: assetType, asset_filename: file.name })
+      updateSlot(type, idx, { asset_url: publicUrl, asset_type: assetType, asset_filename: file.name })
     } catch(e) {
       console.error('Upload failed', e)
     }
