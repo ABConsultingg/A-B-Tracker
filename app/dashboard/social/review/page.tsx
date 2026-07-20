@@ -107,6 +107,20 @@ export default function ReviewPage() {
           .review-page { background: white !important; }
           body { margin: 0; }
           .page-break { page-break-before: always; }
+          /* Force images and colors to render in the PDF */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          /* Keep each content card together on one page */
+          .content-card { break-inside: avoid; page-break-inside: avoid; }
+          /* In print, drop the fixed 2-col grid so the image sizes naturally */
+          .card-body { display: block !important; }
+          .image-panel { border-left: none !important; }
+          .post-image {
+            height: auto !important;
+            max-height: 340px !important;
+            object-fit: contain !important;
+            width: auto !important;
+            max-width: 100% !important;
+          }
         }
       `}</style>
 
@@ -245,7 +259,7 @@ export default function ReviewPage() {
                         ? new Date(p.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
                         : 'Date TBD'
                       return (
-                        <div key={p.id} style={{ background: 'white', border: `1px solid ${rule}`, borderRadius: 10, overflow: 'hidden' }}>
+                        <div key={p.id} className="content-card" style={{ background: 'white', border: `1px solid ${rule}`, borderRadius: 10, overflow: 'hidden' }}>
                           {/* Card header */}
                           <div style={{ padding: '14px 20px', borderBottom: `1px solid ${rule}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAF9' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -262,7 +276,7 @@ export default function ReviewPage() {
                           </div>
 
                           {/* Card body */}
-                          <div style={{ display: 'grid', gridTemplateColumns: p.asset_url && p.asset_type === 'image' ? '1fr 280px' : '1fr', gap: 0 }}>
+                          <div className="card-body" style={{ display: 'grid', gridTemplateColumns: p.asset_url && p.asset_type === 'image' ? '1fr 280px' : '1fr', gap: 0 }}>
                             <div style={{ padding: '16px 20px' }}>
                               {p.caption_text && (
                                 <div style={{ marginBottom: 14 }}>
@@ -292,8 +306,8 @@ export default function ReviewPage() {
 
                             {/* Image panel */}
                             {p.asset_url && p.asset_type === 'image' && (
-                              <div style={{ borderLeft: `1px solid ${rule}` }}>
-                                <img src={p.asset_url} alt="post asset"
+                              <div className="image-panel" style={{ borderLeft: `1px solid ${rule}` }}>
+                                <img src={p.asset_url} alt="post asset" className="post-image"
                                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 180 }} />
                               </div>
                             )}
