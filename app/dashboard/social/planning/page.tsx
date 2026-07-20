@@ -604,7 +604,7 @@ export default function PlanningBoardPage() {
       return out
     }
 
-    const posts = formatSlots(postSlots, 'Posts')
+    const posts = formatSlots(postSlots, 'Our Posts')
     const reposts = formatSlots(repostSlots, 'Re-Posts')
     const videos = formatSlots(videoSlots, 'Videos')
     const total = allSlots().filter(s => s.topic || s.caption_text).length
@@ -636,6 +636,70 @@ www.abconsultingg.com
   function generateSubject(): string {
     const monthName = MONTH_LABELS[selectedMonth] + ' ' + selectedYear
     return `FINAL - ${selectedClient} (${monthName})`
+  }
+
+  function generateEmailHTML(): string {
+    const monthName = MONTH_LABELS[selectedMonth] + ' ' + selectedYear
+    const esc = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+    function formatSlotsHTML(slots: Slot[], label: string): string {
+      const filled = slots.filter(s => s.topic || s.caption_text)
+      if (!filled.length) return ''
+      let out = `<div style="font-size:20px;font-weight:bold;margin:18px 0 8px;">(${filled.length} ${label})</div>`
+      filled.forEach((s, i) => {
+        const num = i + 1
+        const date = s.scheduled_date ? new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : '(date TBD)'
+        out += `<div style="margin-top:14px;"><b>(${label.replace(/s$/, '')} ${num}) ${date}: ${esc(s.topic)}</b></div>`
+        if (s.caption_text) out += `<div style="margin-top:6px;">Main Content: ${esc(s.caption_text).replace(/\n/g, '<br>')}</div>`
+        if (s.hashtags) out += `<div style="margin-top:6px;">#: ${esc(s.hashtags)}</div>`
+        if (s.asset_url) {
+          if (s.asset_type === 'video') {
+            out += `<div style="margin-top:6px;">Link: <a href="${s.asset_url}">${s.asset_url}</a></div>`
+          } else {
+            out += `<div style="margin-top:6px;"><img src="${s.asset_url}" style="max-width:100%;max-height:500px;margin:5px 0;vertical-align:middle;" /></div>`
+          }
+        }
+      })
+      return out
+    }
+
+    const posts = formatSlotsHTML(postSlots, 'Our Posts')
+    const reposts = formatSlotsHTML(repostSlots, 'Re-Posts')
+    const videos = formatSlotsHTML(videoSlots, 'Videos')
+    const total = allSlots().filter(s => s.topic || s.caption_text).length
+
+    return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1C1917;line-height:1.5;">
+<p>Hello,</p>
+<p>Here are the social media posts planned for ${monthName}. Please let me know if you have any feedback or if you're happy to approve them as they are.</p>
+<p>Additionally, if you have any specific content requests for the following month, feel free to share those when you have a chance so we can plan accordingly.</p>
+<div style="font-size:22px;font-weight:bold;margin-top:16px;">FINAL - ${esc(selectedClient)} (${monthName})</div>
+<div style="font-size:22px;font-weight:bold;">Calendar: ${total} Post</div>
+<p>[paste calendar image here]</p>
+<hr style="width:100%;height:1px;border:none;border-bottom:1px solid #C1C7CD;" />
+${posts}
+${reposts}
+${videos}
+<p>--</p>
+<p>EMILY LISOWSKI<br>AB CONSULTING</p>
+<p>(708) 377 - 5727<br>emily@abconsultingg.com<br>www.abconsultingg.com<br>52 River St. Lemont, IL 60439</p>
+</div>`
+  }
+
+  async function copyEmailHTML() {
+    const html = generateEmailHTML()
+    const plain = generateEmail()
+    try {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plain], { type: 'text/plain' }),
+      })
+      await navigator.clipboard.write([item])
+    } catch {
+      // Fallback for browsers without ClipboardItem support
+      await navigator.clipboard.writeText(plain)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   function updateSlot(type: string, idx: number, updates: Partial<Slot>) {
@@ -907,10 +971,17 @@ www.abconsultingg.com
             </div>
             <textarea readOnly value={generateEmail()}
               style={{ flex: 1, minHeight: 380, padding: '12px', borderRadius: 6, border: `1px solid ${rule}`, fontSize: 12, fontFamily: 'monospace', resize: 'vertical', lineHeight: 1.6 }} />
+            <div style={{ fontSize: 12, color: muted, marginTop: -4 }}>
+              Use <b>Copy for email</b> to paste with images visible (like the old format). Paste into Gmail's compose window.
+            </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { navigator.clipboard.writeText(generateEmail()); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              <button onClick={copyEmailHTML}
                 style={{ padding: '9px 18px', borderRadius: 6, border: 'none', background: ink, color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                {copied ? '✓ Copied!' : 'Copy to clipboard'}
+                {copied ? '✓ Copied!' : '🖼 Copy for email (with images)'}
+              </button>
+              <button onClick={() => { navigator.clipboard.writeText(generateEmail()); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                style={{ padding: '9px 14px', borderRadius: 6, border: `1px solid ${rule}`, background: 'white', fontSize: 13, cursor: 'pointer' }}>
+                Copy as text
               </button>
               <button onClick={() => setShowEmail(false)}
                 style={{ padding: '9px 14px', borderRadius: 6, border: `1px solid ${rule}`, background: 'white', fontSize: 13, cursor: 'pointer' }}>
