@@ -37,7 +37,7 @@ async function deletePlanRow(id: string) {
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 const CLIENTS = [
-  'Richards Building Supply', 'Culture Construction', 'KBC Exteriors', 'KBC Restoration',
+  'Richards Building Supply', 'Richards Building Supply Branches', 'Culture Construction', 'KBC Exteriors', 'KBC Restoration',
   'MVP Chiropractic', 'Midwest Construction Experts', 'Apollo Supply', 'Midway Windows',
   'Affiliated Control Equipment', 'NICO Roofing', 'A&B Consulting Group', 'APEK Inc.',
   'RG General Roofing',
