@@ -537,26 +537,91 @@ function DetailPanel({ lead, teamMembers, onUpdate, onClose, onDelete, onConvert
         {lead.assessment_report && (
           <details style={{ marginBottom: 20 }}>
             <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', padding: '10px 0', userSelect: 'none' }}>📊 View Full Assessment Report</summary>
-            <div style={{ marginTop: 12, padding: 16, background: 'var(--bg-elevated)', borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
+            <div style={{ marginTop: 12 }}>
               {(() => {
                 const r = lead.assessment_report
                 const report = r?.report || r
+                const scores = r?.scores
                 const sections = report?.sections
-                if (!sections) return <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(report, null, 2)}</pre>
+                const SECTION_META: Record<string, { label: string; icon: string }> = {
+                  website: { label: 'Website & Technology', icon: '🌐' },
+                  seo: { label: 'SEO', icon: '🔍' },
+                  social: { label: 'Social Media', icon: '📱' },
+                  ads: { label: 'Paid Ads', icon: '📢' },
+                  reputation: { label: 'Online Reputation', icon: '⭐' },
+                  leadFollowup: { label: 'Lead Follow-Up', icon: '📋' },
+                  aiReadiness: { label: 'AI Readiness', icon: '🤖' },
+                }
+                const scoreColor = (s: number) => s >= 75 ? '#16a34a' : s >= 50 ? '#d97706' : s >= 25 ? '#dc2626' : '#7c3aed'
+                const scoreGrade = (s: number) => s >= 75 ? 'Good' : s >= 50 ? 'Needs Work' : s >= 25 ? 'At Risk' : 'Critical'
+                if (!sections) return <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 11 }}>{JSON.stringify(report, null, 2)}</pre>
                 return (
                   <div>
-                    {report.headline && <p style={{ fontWeight: 600, marginBottom: 12, fontSize: 13 }}>{report.headline}</p>}
-                    {Object.entries(sections).map(([key, val]: [string, any]) => (
-                      <div key={key} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ fontWeight: 700, textTransform: 'capitalize', marginBottom: 4 }}>{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                        {val.found && <p style={{ margin: '0 0 6px', color: 'var(--text-muted)' }}>{val.found}</p>}
-                        {val.fix && <p style={{ margin: 0, color: 'var(--brand-accent)' }}>→ {val.fix}</p>}
+                    {report.headline && (
+                      <div style={{ padding: '12px 16px', background: '#0F1C2E', borderRadius: 10, marginBottom: 12 }}>
+                        <p style={{ fontWeight: 600, margin: 0, fontSize: 13, color: 'white', lineHeight: 1.5 }}>{report.headline}</p>
                       </div>
-                    ))}
+                    )}
+                    {/* Score bar */}
+                    {scores && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, marginBottom: 12, padding: '12px 14px', background: '#080f1a', borderRadius: 10 }}>
+                        {Object.entries(SECTION_META).map(([key, meta]) => {
+                          const s = (scores as any)[key]
+                          if (!s) return null
+                          return (
+                            <div key={key} style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 15, fontWeight: 800, color: scoreColor(s) }}>{s}</div>
+                              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginTop: 2, lineHeight: 1.2 }}>{meta.label.split(' ')[0]}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {/* Section cards */}
+                    {Object.entries(sections).map(([key, val]: [string, any]) => {
+                      const meta = SECTION_META[key] || { label: key, icon: '📌' }
+                      const sectionScore = scores ? (scores as any)[key] : null
+                      const color = sectionScore ? scoreColor(sectionScore) : 'var(--text-muted)'
+                      return (
+                        <div key={key} style={{ marginBottom: 10, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                          <div style={{ background: '#0F1C2E', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 16 }}>{meta.icon}</span>
+                              <span style={{ color: 'white', fontWeight: 600, fontSize: 13 }}>{meta.label}</span>
+                            </div>
+                            {sectionScore && (
+                              <span style={{ fontSize: 12, fontWeight: 700, color, background: `${color}20`, border: `1px solid ${color}`, borderRadius: 12, padding: '2px 10px' }}>
+                                {sectionScore}/100 — {scoreGrade(sectionScore)}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ padding: '12px 14px', background: 'white' }}>
+                            {val.found && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#999', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>WHAT WE FOUND</div>
+                                <p style={{ margin: 0, fontSize: 12, color: '#333', lineHeight: 1.6 }}>{val.found}</p>
+                              </div>
+                            )}
+                            {val.fix && (
+                              <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#E8541A', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>WHAT TO FIX</div>
+                                <p style={{ margin: 0, fontSize: 12, color: '#333', lineHeight: 1.6 }}>{val.fix}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {/* Top 3 priorities */}
                     {report.top3priorities && (
-                      <div>
-                        <div style={{ fontWeight: 700, marginBottom: 6 }}>Top 3 Priorities</div>
-                        <ol style={{ margin: 0, paddingLeft: 20 }}>{report.top3priorities.map((p: string, i: number) => <li key={i} style={{ marginBottom: 4 }}>{p}</li>)}</ol>
+                      <div style={{ background: 'white', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: '#0F1C2E' }}>🎯 Top 3 Priorities</div>
+                        {report.top3priorities.map((p: string, i: number) => (
+                          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
+                            <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#E8541A', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+                            <p style={{ margin: 0, fontSize: 12, color: '#333', lineHeight: 1.6, paddingTop: 2 }}>{p}</p>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
