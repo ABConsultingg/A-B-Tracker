@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { href: '/reports',             label: 'Reports',            icon: '📈', adminOnly: true, section: 'tools' },
   { href: '/dashboard/social',    label: 'Social Hub',         icon: '📱', section: 'tools' },
   { href: '/dashboard/ppc',       label: 'PPC Hub',            icon: '🎯', adminOnly: true, section: 'tools' },
+  { href: '/dashboard/leads',     label: 'Leads',              icon: '🏆', adminOnly: true, section: 'tools' },
   { href: '/dashboard/services',  label: 'Services & Pricing', icon: '⚙️', adminOnly: true, section: 'tools' },
 ]
 
