@@ -405,9 +405,9 @@ export default function PlanningBoardPage() {
   } | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
 
-  const months3 = [-2, -1, 0].map(offset => {
-    const m = (currentMonth + offset + 12) % 12
-    return { label: MONTH_LABELS[m], value: m }
+  const months3 = [-1, 0, 1, 2].map(offset => {
+    const rawM = currentMonth + offset; const m = ((rawM % 12) + 12) % 12; const y = selectedYear + Math.floor(rawM / 12)
+    return { label: MONTH_LABELS[m], value: m, year: y }
   })
 
   const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
@@ -808,7 +808,7 @@ ${videos}
             </select>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 8, background: '#F5F5F4' }}>
               {months3.map(m => (
-                <button key={m.value} onClick={() => setSelectedMonth(m.value)} style={{
+                <button key={m.label + m.year} onClick={() => { setSelectedMonth(m.value); }} style={{
                   padding: '6px 12px', fontSize: 13, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer',
                   background: m.value === selectedMonth ? '#1C1917' : 'transparent',
                   color: m.value === selectedMonth ? '#FAFAF9' : ink,
