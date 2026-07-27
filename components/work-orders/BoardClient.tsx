@@ -294,8 +294,26 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   async function moveStage(woId: string, newStage: WoStage) {
     const prevState = workOrders
     setWorkOrders(prev => prev.map(w => w.id === woId ? { ...w, stage: newStage } : w))
-    const { data, error } = await supabase.from('work_orders').update({ stage: newStage }).eq('id', woId).select()
-    if (error) { alert('Move failed: ' + error.message); setWorkOrders(prevState) }
+    const { data, error } = await supabase.from('work_orders').update({ stage: newStage, stage_entered_at: new Date().toISOString() }).eq('id', woId).select()
+    if (error) { alert('Move failed: ' + error.message); setWorkOrders(prevState); return }
+    // Fire notifications
+    const wo = workOrders.find(w => w.id === woId)
+    if (wo) {
+      const ownerMember = team.find((t: any) => t.id === wo.owner_id)
+      const woAssignees = (assignmentsByWo ?? {})[woId] || []
+      const assigneeAuthIds = woAssignees
+        .map((id: string) => team.find((t: any) => t.id === id)?.auth_user_id)
+        .filter(Boolean) as string[]
+      notifyStageChange({
+        stage: newStage,
+        woId: wo.id,
+        woTitle: wo.title,
+        clientId: wo.client_id,
+        ownerAuthId: ownerMember?.auth_user_id || null,
+        assigneeAuthIds,
+        senderName: (currentMember as any)?.name || undefined,
+      })
+    }
   }
 
   async function updateWo(patch: Partial<WorkOrder>) {
