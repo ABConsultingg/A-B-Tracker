@@ -8,6 +8,8 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { useGadsCampaignMarkup } from '@/hooks/useGadsCampaignMarkup'
+import { CampaignMarkupCell } from '@/components/reports/CampaignMarkupCell'
 const CHART_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4']
 
 // ─── Live Data Tab ────────────────────────────────────────────────────────────
@@ -438,6 +440,8 @@ function MetaTab({ clientId, month, clientColor }: { clientId: string; month: st
   const p = (n: number | null | undefined) => n != null ? `${Number(n).toFixed(2)}%` : '—'
   const m = (n: number | null | undefined) => n != null ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
 
+  const { getMarkup: getMetaMarkup, applyMarkup: applyMetaMarkup, saveMarkup: saveMetaMarkup, clearMarkup: clearMetaMarkup, overrides: metaOverrides, saving: metaSaving } = useGadsCampaignMarkup(clientId, Number(data?.markupPct ?? 30), 'meta')
+
   if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading Meta Ads data…</div>
   if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>{msg}</div>
 
@@ -495,7 +499,7 @@ function MetaTab({ clientId, month, clientColor }: { clientId: string; month: st
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-sunken)' }}>
-                  {['Campaign', 'Spend', 'Impressions', 'Clicks', 'CTR', 'Conv.'].map(h => (
+                  {['Campaign', 'Spend', 'Markup', 'Billed', 'Impressions', 'Clicks', 'CTR', 'Conv.'].map(h => (
                     <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
@@ -505,6 +509,8 @@ function MetaTab({ clientId, month, clientColor }: { clientId: string; month: st
                   <tr key={i} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m(c.spend)}</td>
+                    <td style={{ padding: '8px 12px' }}><CampaignMarkupCell campaignId={String(c.id ?? c.campaign_id ?? i)} campaignName={c.name ?? ''} currentMarkup={getMetaMarkup(String(c.id ?? c.campaign_id ?? i))} defaultMarkup={Number(data?.markupPct ?? 30)} isOverride={String(c.id ?? c.campaign_id ?? i) in metaOverrides} isSaving={metaSaving[String(c.id ?? c.campaign_id ?? i)] ?? false} onSave={saveMetaMarkup} onClear={clearMetaMarkup} /></td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m(applyMetaMarkup(String(c.id ?? c.campaign_id ?? i), c.spend ?? 0))}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.impressions)}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.clicks)}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{c.clicks > 0 && c.impressions > 0 ? p((c.clicks/c.impressions)*100) : '—'}</td>
@@ -552,6 +558,8 @@ function GAdsTab({ clientId, month, clientColor }: { clientId: string; month: st
   const f = (n: number | null | undefined) => n != null ? n.toLocaleString('en-US') : '—'
   const p = (n: number | null | undefined) => n != null ? `${Number(n).toFixed(2)}%` : '—'
   const m = (n: number | null | undefined) => n != null ? `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+
+  const { getMarkup: getGadsMarkup, applyMarkup: applyGadsMarkup, saveMarkup: saveGadsMarkup, clearMarkup: clearGadsMarkup, overrides: gadsOverrides, saving: gadsSaving } = useGadsCampaignMarkup(clientId, Number(data?.markupPct ?? 30), 'google')
 
   if (loading) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading Google Ads data…</div>
   if (!data) return <div className="text-sm" style={{ color: 'var(--text-muted)', padding: '20px 0' }}>{msg}</div>
@@ -647,7 +655,7 @@ function GAdsTab({ clientId, month, clientColor }: { clientId: string; month: st
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'var(--bg-sunken)' }}>
-                  {['Campaign', 'Account', 'Spend', 'Clicks', 'CTR', 'Conv.'].map(h => (
+                  {['Campaign', 'Account', 'Spend', 'Markup', 'Billed', 'Clicks', 'CTR', 'Conv.'].map(h => (
                     <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
@@ -658,6 +666,8 @@ function GAdsTab({ clientId, month, clientColor }: { clientId: string; month: st
                     <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--brand-navy, #1a2744)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</td>
                     <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)' }}>{c.account}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m(c.cost)}</td>
+                    <td style={{ padding: '8px 12px' }}><CampaignMarkupCell campaignId={String(c.id ?? c.campaign_id ?? i)} campaignName={c.name ?? ''} currentMarkup={getGadsMarkup(String(c.id ?? c.campaign_id ?? i))} defaultMarkup={Number(data?.markupPct ?? 30)} isOverride={String(c.id ?? c.campaign_id ?? i) in gadsOverrides} isSaving={gadsSaving[String(c.id ?? c.campaign_id ?? i)] ?? false} onSave={saveGadsMarkup} onClear={clearGadsMarkup} /></td>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{m(applyGadsMarkup(String(c.id ?? c.campaign_id ?? i), c.cost ?? 0))}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.clicks)}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{p(c.ctr)}</td>
                     <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{f(c.conversions)}</td>
