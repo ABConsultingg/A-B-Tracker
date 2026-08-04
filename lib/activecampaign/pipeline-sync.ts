@@ -58,16 +58,17 @@ async function syncContact(lead: {
   phone?: string | null
 }): Promise<string> {
   const parts = (lead.name || '').trim().split(/\s+/).filter(Boolean)
+
+  // Only send fields we actually have. contact/sync overwrites what it is
+  // given, so sending '' would blank out names/phones already in AC.
+  const contact: Record<string, string> = { email: lead.email }
+  if (parts[0]) contact.firstName = parts[0]
+  if (parts.length > 1) contact.lastName = parts.slice(1).join(' ')
+  if (lead.phone) contact.phone = lead.phone
+
   const data = await ac('/api/3/contact/sync', {
     method: 'POST',
-    body: JSON.stringify({
-      contact: {
-        email: lead.email,
-        firstName: parts[0] || '',
-        lastName: parts.slice(1).join(' ') || '',
-        phone: lead.phone || '',
-      },
-    }),
+    body: JSON.stringify({ contact }),
   })
   const id = data?.contact?.id
   if (!id) throw new Error('AC contact/sync returned no contact id')
