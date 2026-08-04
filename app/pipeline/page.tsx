@@ -16,6 +16,14 @@ export default async function SalesPipelinePage() {
     .select('*')
     .order('created_at', { ascending: false })
 
+  // Assignee options: only people who can actually see the pipeline.
+  const { data: teamMembers } = await supabase
+    .from('team_members')
+    .select('id, name')
+    .in('role', ['owner', 'sales'])
+    .eq('active', true)
+    .order('name')
+
   // Resolved server-side so "overdue" is stable across SSR/hydration and
   // anchored to the business's timezone rather than the server's UTC clock.
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date())
@@ -23,6 +31,7 @@ export default async function SalesPipelinePage() {
   return (
     <PipelineClient
       initialLeads={leadsRaw || []}
+      teamMembers={teamMembers || []}
       today={today}
     />
   )

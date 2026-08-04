@@ -37,7 +37,36 @@ type Lead = {
   next_action_date: string | null
   lost_reason: string | null
   converted_to_client_id: string | null
+  address_street: string | null
+  address_city: string | null
+  address_state: string | null
+  address_zip: string | null
+  contact_title: string | null
+  secondary_contact_name: string | null
+  secondary_contact_email: string | null
+  secondary_contact_phone: string | null
+  referral_source_detail: string | null
+  lead_type: string | null
 }
+
+export type StageEvent = {
+  id: string
+  from_status: string | null
+  to_status: string
+  changed_at: string
+}
+
+// Mirrors the leads_lead_type_check constraint.
+const LEAD_TYPES = [
+  { id: 'website',              label: 'Website' },
+  { id: 'retainer',             label: 'Retainer' },
+  { id: 'full-service',         label: 'Full Service' },
+  { id: 'distributor-program',  label: 'Distributor Program' },
+  { id: 'contractor-program',   label: 'Contractor Program' },
+] as const
+
+const leadTypeLabel = (id: string | null) =>
+  id ? (LEAD_TYPES.find(t => t.id === id)?.label ?? id) : null
 
 const SOURCE_CONFIG: Record<string, { label: string; icon: string }> = {
   manual:           { label: 'Manual',        icon: '✏️' },
@@ -56,6 +85,10 @@ const SOURCE_CONFIG: Record<string, { label: string; icon: string }> = {
   inbound:          { label: 'Inbound',       icon: '📥' },
   other:            { label: 'Other',         icon: '📌' },
 }
+
+type TeamMember = { id: string; name: string | null }
+
+const PRIORITIES = ['low', 'medium', 'high'] as const
 
 const stageById = new Map<string, { id: Stage; label: string; color: string }>(
   STAGES.map(s => [s.id, s])
@@ -87,16 +120,26 @@ function daysUntil(iso: string, today: string) {
 
 export default function PipelineClient({
   initialLeads,
+  teamMembers,
   today,
 }: {
   initialLeads: Lead[]
+  teamMembers: TeamMember[]
   today: string
 }) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [selected, setSelected] = useState<Lead | null>(null)
+  const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lineCard, setLineCard] = useState<Lead | null>(null)
+  const [events, setEvents] = useState<StageEvent[]>([])
+  const [eventsLoading, setEventsLoading] = useState(false)
+
+  // assigned_to stores the team_members.id (e.g. 'valerie'); show the name.
+  const memberName = (id: string | null) =>
+    id ? (teamMembers.find(m => m.id === id)?.name ?? id) : null
 
   const isOpen = (l: Lead) => OPEN_STAGES.includes(l.status)
   const isOverdue = (l: Lead) =>
@@ -128,13 +171,61 @@ export default function PipelineClient({
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Save failed (${res.status})`)
       }
-      const updated = await res.json()
+      // acSync is transport-only metadata about the ActiveCampaign push; keep it
+      // out of lead state and surface any warning to the user directly.
+      const { acSync, ...updated } = await res.json()
       setLeads(prev => prev.map(l => (l.id === id ? { ...l, ...updated } : l)))
       setSelected(prev => (prev && prev.id === id ? { ...prev, ...updated } : prev))
+      if (acSync?.warning) setError(acSync.warning)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function createLead(fields: Record<string, string>) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Could not add lead (${res.status})`)
+      }
+      const created = await res.json()
+      setLeads(prev => [created, ...prev])
+      setAdding(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add lead')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Soft delete: move to 'lost' so the record and its history survive. The
+  // DELETE endpoint exists but is deliberately not used here.
+  async function removeLead(lead: Lead) {
+    if (!confirm('Are you sure you want to remove this lead?')) return
+    await patch(lead.id, { status: 'lost' })
+    setSelected(null)
+  }
+
+  async function openLineCard(lead: Lead) {
+    setLineCard(lead)
+    setEvents([])
+    setEventsLoading(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/events`)
+      setEvents(res.ok ? await res.json() : [])
+    } catch {
+      setEvents([])
+    } finally {
+      setEventsLoading(false)
     }
   }
 
@@ -149,20 +240,31 @@ export default function PipelineClient({
             {leads.length} lead{leads.length === 1 ? '' : 's'} · {kpis.activeDeals} active · {kpis.wonCount} won
           </p>
         </div>
-        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-          {(['board', 'list'] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              style={{
-                padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                background: view === v ? 'var(--brand-accent, #6366f1)' : 'transparent',
-                color: view === v ? 'white' : 'var(--text-muted)',
-              }}
-            >
-              {v === 'board' ? '⬜ Board' : '☰ List'}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            {(['board', 'list'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                style={{
+                  padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  background: view === v ? 'var(--brand-accent, #6366f1)' : 'transparent',
+                  color: view === v ? 'white' : 'var(--text-muted)',
+                }}
+              >
+                {v === 'board' ? '⬜ Board' : '☰ List'}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setAdding(true)}
+            style={{
+              padding: '8px 16px', background: 'var(--brand-accent, #6366f1)', color: 'white',
+              border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            + Add Lead
+          </button>
         </div>
       </div>
 
@@ -209,7 +311,7 @@ export default function PipelineClient({
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
                   {colLeads.map(lead => (
-                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)} onClick={() => setSelected(lead)} />
+                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)} assignedName={memberName(lead.assigned_to)} onClick={() => setSelected(lead)} />
                   ))}
                   {colLeads.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '28px 8px', color: 'var(--text-muted)', fontSize: 11 }}>No leads</div>
@@ -256,7 +358,7 @@ export default function PipelineClient({
                       {lead.next_action_date ? `${overdue ? '⚠ ' : ''}${fmtDate(lead.next_action_date)}` : '—'}
                     </td>
                     <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)' }}>{src.icon} {src.label}</td>
-                    <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{lead.assigned_to || 'Unassigned'}</td>
+                    <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)' }}>{memberName(lead.assigned_to) || 'Unassigned'}</td>
                   </tr>
                 )
               })}
@@ -273,8 +375,31 @@ export default function PipelineClient({
           lead={selected}
           today={today}
           saving={saving}
+          assignedName={memberName(selected.assigned_to)}
+          teamMembers={teamMembers}
           onPatch={patch}
+          onRemove={removeLead}
+          onLineCard={() => openLineCard(selected)}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {lineCard && (
+        <LineCard
+          lead={lineCard}
+          events={events}
+          eventsLoading={eventsLoading}
+          assignedName={memberName(lineCard.assigned_to)}
+          onClose={() => setLineCard(null)}
+        />
+      )}
+
+      {adding && (
+        <AddLeadModal
+          teamMembers={teamMembers}
+          saving={saving}
+          onCreate={createLead}
+          onClose={() => setAdding(false)}
         />
       )}
     </div>
@@ -291,7 +416,7 @@ function Kpi({ label, value, subtitle, accent }: { label: string; value: string;
   )
 }
 
-function Card({ lead, today, overdue, onClick }: { lead: Lead; today: string; overdue: boolean; onClick: () => void }) {
+function Card({ lead, today, overdue, assignedName, onClick }: { lead: Lead; today: string; overdue: boolean; assignedName: string | null; onClick: () => void }) {
   const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
   const days = lead.next_action_date ? daysUntil(lead.next_action_date, today) : null
   const dueToday = days === 0
@@ -345,33 +470,69 @@ function Card({ lead, today, overdue, onClick }: { lead: Lead; today: string; ov
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 10, color: 'var(--text-muted)' }}>
         <span title={`Source: ${src.label}`}>{src.icon} {src.label}</span>
         <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '55%' }}>
-          {lead.assigned_to || 'Unassigned'}
+          {assignedName || 'Unassigned'}
         </span>
       </div>
     </div>
   )
 }
 
-function DetailModal({
-  lead, today, saving, onPatch, onClose,
+const BLANK_LEAD = {
+  // Business Info
+  business_name: '', website: '', industry: '', location: '', estimated_value: '',
+  // Primary Contact
+  name: '', contact_title: '', email: '', phone: '',
+  // Secondary Contact
+  secondary_contact_name: '', secondary_contact_email: '', secondary_contact_phone: '',
+  // Address
+  address_street: '', address_city: '', address_state: '', address_zip: '',
+  // Lead Details
+  source: 'manual', referral_source_detail: '', lead_type: '', priority: 'medium',
+  assigned_to: '', next_action: '', next_action_date: '', notes: '',
+}
+
+// Section heading shared by the add + detail modals.
+function GroupHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+      color: 'var(--brand-accent, #6366f1)', marginTop: 4, marginBottom: -2,
+      paddingBottom: 4, borderBottom: '1px solid var(--border)',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+const FIELD_INPUT: React.CSSProperties = {
+  width: '100%', padding: '7px 10px', border: '1px solid var(--border)',
+  borderRadius: 6, fontSize: 13, fontFamily: 'inherit',
+  background: 'var(--bg-sunken)', color: 'var(--text)',
+}
+const FIELD_LABEL: React.CSSProperties = {
+  fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+  letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4, display: 'block',
+}
+
+// Defined at module scope on purpose: a component declared inside the modal's
+// render body would be a new type every render, remounting each input and
+// dropping focus after every keystroke.
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label style={FIELD_LABEL}>{label}</label>{children}</div>
+}
+
+function AddLeadModal({
+  teamMembers, saving, onCreate, onClose,
 }: {
-  lead: Lead
-  today: string
+  teamMembers: TeamMember[]
   saving: boolean
-  onPatch: (id: string, updates: Partial<Lead>) => Promise<void>
+  onCreate: (fields: Record<string, string>) => Promise<void>
   onClose: () => void
 }) {
-  const [nextAction, setNextAction] = useState(lead.next_action ?? '')
-  const [dueDate, setDueDate] = useState(lead.next_action_date ?? '')
-  const [notes, setNotes] = useState(lead.notes ?? '')
-
-  // Re-seed the draft when a different lead is opened, or when a save returns
-  // server-normalized values.
-  useEffect(() => {
-    setNextAction(lead.next_action ?? '')
-    setDueDate(lead.next_action_date ?? '')
-    setNotes(lead.notes ?? '')
-  }, [lead.id, lead.next_action, lead.next_action_date, lead.notes])
+  const [f, setF] = useState({ ...BLANK_LEAD })
+  const set = (k: keyof typeof BLANK_LEAD) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => setF(prev => ({ ...prev, [k]: e.target.value }))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -379,34 +540,8 @@ function DetailModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const dirty =
-    nextAction !== (lead.next_action ?? '') ||
-    dueDate !== (lead.next_action_date ?? '') ||
-    notes !== (lead.notes ?? '')
-
-  const stage = stageById.get(lead.status)
-  const overdue = !!lead.next_action_date && OPEN_STAGES.includes(lead.status) && daysUntil(lead.next_action_date, today) < 0
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '7px 10px', border: '1px solid var(--border)',
-    borderRadius: 6, fontSize: 13, fontFamily: 'inherit',
-    background: 'var(--bg-sunken)', color: 'var(--text)',
-  }
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-    letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4, display: 'block',
-  }
-
-  function save() {
-    onPatch(lead.id, {
-      next_action: nextAction.trim() || null,
-      next_action_date: dueDate || null,
-      notes: notes.trim() || null,
-    })
-  }
-
-  const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
-  const assignedName = lead.assigned_to || 'Unassigned'
+  const valid = f.business_name.trim().length > 0
+  const inputStyle = FIELD_INPUT
 
   return (
     <div
@@ -420,7 +555,272 @@ function DetailModal({
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14,
-          width: '100%', maxWidth: 520, maxHeight: '88vh', overflowY: 'auto',
+          width: '100%', maxWidth: 580, maxHeight: '88vh', overflowY: 'auto',
+          padding: 20, color: 'var(--text)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0, flex: 1 }}>Add Lead</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+
+          <GroupHeading>Business Info</GroupHeading>
+          <Field label="Business Name *">
+            <input type="text" value={f.business_name} onChange={set('business_name')} placeholder="Required" autoFocus style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Website">
+              <input type="text" value={f.website} onChange={set('website')} placeholder="example.com" style={inputStyle} />
+            </Field>
+            <Field label="Industry">
+              <input type="text" value={f.industry} onChange={set('industry')} style={inputStyle} />
+            </Field>
+            <Field label="Location">
+              <input type="text" value={f.location} onChange={set('location')} placeholder="Region or market" style={inputStyle} />
+            </Field>
+            <Field label="Estimated Value ($/mo)">
+              <input type="number" min={0} step={100} value={f.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Primary Contact</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Contact Name">
+              <input type="text" value={f.name} onChange={set('name')} style={inputStyle} />
+            </Field>
+            <Field label="Title / Role">
+              <input type="text" value={f.contact_title} onChange={set('contact_title')} placeholder="Owner, Marketing Director…" style={inputStyle} />
+            </Field>
+            <Field label="Email">
+              <input type="email" value={f.email} onChange={set('email')} style={inputStyle} />
+            </Field>
+            <Field label="Phone">
+              <input type="tel" value={f.phone} onChange={set('phone')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Secondary Contact</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Name">
+              <input type="text" value={f.secondary_contact_name} onChange={set('secondary_contact_name')} style={inputStyle} />
+            </Field>
+            <Field label="Email">
+              <input type="email" value={f.secondary_contact_email} onChange={set('secondary_contact_email')} style={inputStyle} />
+            </Field>
+            <Field label="Phone">
+              <input type="tel" value={f.secondary_contact_phone} onChange={set('secondary_contact_phone')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Address</GroupHeading>
+          <Field label="Street">
+            <input type="text" value={f.address_street} onChange={set('address_street')} style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+            <Field label="City">
+              <input type="text" value={f.address_city} onChange={set('address_city')} style={inputStyle} />
+            </Field>
+            <Field label="State">
+              <input type="text" value={f.address_state} onChange={set('address_state')} placeholder="IL" style={inputStyle} />
+            </Field>
+            <Field label="ZIP">
+              <input type="text" value={f.address_zip} onChange={set('address_zip')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Lead Details</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Source">
+              <select value={f.source} onChange={set('source')} style={inputStyle}>
+                {Object.entries(SOURCE_CONFIG).map(([id, cfg]) => (
+                  <option key={id} value={id}>{cfg.icon} {cfg.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Lead Type">
+              <select value={f.lead_type} onChange={set('lead_type')} style={inputStyle}>
+                <option value="">Not set</option>
+                {LEAD_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Referral Detail">
+            <input type="text" value={f.referral_source_detail} onChange={set('referral_source_detail')} placeholder="e.g. Clint Klepp at RBS" style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Priority">
+              <select value={f.priority} onChange={set('priority')} style={inputStyle}>
+                {PRIORITIES.map(p => (
+                  <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Assigned To">
+              <select value={f.assigned_to} onChange={set('assigned_to')} style={inputStyle}>
+                <option value="">Unassigned</option>
+                {teamMembers.map(m => (
+                  <option key={m.id} value={m.id}>{m.name ?? m.id}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Next Action">
+              <input type="text" value={f.next_action} onChange={set('next_action')} placeholder="e.g. Intro call…" style={inputStyle} />
+            </Field>
+            <Field label="Next Action Date">
+              <input type="date" value={f.next_action_date} onChange={set('next_action_date')} style={inputStyle} />
+            </Field>
+          </div>
+          <Field label="Notes">
+            <textarea value={f.notes} onChange={set('notes')} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+          </Field>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, padding: '9px 16px', background: 'transparent', color: 'var(--text-muted)',
+              border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onCreate(f)}
+            disabled={!valid || saving}
+            style={{
+              flex: 2, padding: '9px 16px',
+              background: valid && !saving ? 'var(--brand-accent, #6366f1)' : 'var(--bg-sunken)',
+              color: valid && !saving ? 'white' : 'var(--text-muted)',
+              border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: valid && !saving ? 'pointer' : 'default',
+            }}
+          >
+            {saving ? 'Adding…' : 'Add Lead'}
+          </button>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
+          New leads start in the New stage.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Editable projection of a lead. Empty string means "cleared" and is converted
+// back to NULL on save.
+function draftFrom(l: Lead) {
+  return {
+    business_name: l.business_name ?? '',
+    website: l.website ?? '',
+    industry: l.industry ?? '',
+    location: l.location ?? '',
+    estimated_value: l.estimated_value != null ? String(l.estimated_value) : '',
+    name: l.name ?? '',
+    contact_title: l.contact_title ?? '',
+    email: l.email ?? '',
+    phone: l.phone ?? '',
+    secondary_contact_name: l.secondary_contact_name ?? '',
+    secondary_contact_email: l.secondary_contact_email ?? '',
+    secondary_contact_phone: l.secondary_contact_phone ?? '',
+    address_street: l.address_street ?? '',
+    address_city: l.address_city ?? '',
+    address_state: l.address_state ?? '',
+    address_zip: l.address_zip ?? '',
+    source: l.source ?? 'manual',
+    lead_type: l.lead_type ?? '',
+    referral_source_detail: l.referral_source_detail ?? '',
+    priority: l.priority ?? 'medium',
+    assigned_to: l.assigned_to ?? '',
+    next_action: l.next_action ?? '',
+    next_action_date: l.next_action_date ?? '',
+    notes: l.notes ?? '',
+  }
+}
+
+function DetailModal({
+  lead, today, saving, assignedName, teamMembers, onPatch, onRemove, onLineCard, onClose,
+}: {
+  lead: Lead
+  today: string
+  saving: boolean
+  assignedName: string | null
+  teamMembers: TeamMember[]
+  onPatch: (id: string, updates: Partial<Lead>) => Promise<void>
+  onRemove: (lead: Lead) => Promise<void>
+  onLineCard: () => void
+  onClose: () => void
+}) {
+  const [d, setD] = useState(() => draftFrom(lead))
+  const set = (k: keyof ReturnType<typeof draftFrom>) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => setD(prev => ({ ...prev, [k]: e.target.value }))
+
+  // Re-seed when a different lead is opened, or when a save returns
+  // server-normalized values (e.g. an appended AC warning note).
+  const serverDraft = JSON.stringify(draftFrom(lead))
+  useEffect(() => { setD(draftFrom(lead)) }, [serverDraft])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const dirty = JSON.stringify(d) !== serverDraft
+  const stage = stageById.get(lead.status)
+  const overdue = !!lead.next_action_date && OPEN_STAGES.includes(lead.status) && daysUntil(lead.next_action_date, today) < 0
+
+  const inputStyle = FIELD_INPUT
+  const labelStyle = FIELD_LABEL
+
+  function save() {
+    const t = (v: string) => (v.trim() ? v.trim() : null)
+    onPatch(lead.id, {
+      business_name: d.business_name.trim() || lead.business_name, // NOT NULL in DB
+      website: t(d.website),
+      industry: t(d.industry),
+      location: t(d.location),
+      estimated_value: d.estimated_value.trim() ? Number(d.estimated_value) : null,
+      name: t(d.name),
+      contact_title: t(d.contact_title),
+      email: t(d.email),
+      phone: t(d.phone),
+      secondary_contact_name: t(d.secondary_contact_name),
+      secondary_contact_email: t(d.secondary_contact_email),
+      secondary_contact_phone: t(d.secondary_contact_phone),
+      address_street: t(d.address_street),
+      address_city: t(d.address_city),
+      address_state: t(d.address_state),
+      address_zip: t(d.address_zip),
+      source: d.source || 'manual',
+      lead_type: d.lead_type || null,
+      referral_source_detail: t(d.referral_source_detail),
+      priority: (d.priority || 'medium') as Lead['priority'],
+      assigned_to: d.assigned_to || null,
+      next_action: t(d.next_action),
+      next_action_date: d.next_action_date || null,
+      notes: t(d.notes),
+    })
+  }
+
+  const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 50,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 14,
+          width: '100%', maxWidth: 580, maxHeight: '88vh', overflowY: 'auto',
           padding: 20, color: 'var(--text)',
         }}
       >
@@ -432,56 +832,151 @@ function DetailModal({
               <span style={{ color: stage?.color, fontWeight: 600 }}>{stage?.label ?? lead.status}</span>
               {' · '}{src.icon} {src.label}
               {val(lead) > 0 && ` · ${money(val(lead))}/mo`}
+              {lead.lead_type && ` · ${leadTypeLabel(lead.lead_type)}`}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+              Assigned to <strong style={{ color: 'var(--text)' }}>{assignedName || 'Unassigned'}</strong>
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Contact */}
-        {(lead.name || lead.email || lead.phone) && (
-          <div style={{ marginTop: 12, padding: '9px 11px', background: 'var(--bg-sunken)', borderRadius: 8, fontSize: 12 }}>
-            {lead.name && <div style={{ fontWeight: 600 }}>{lead.name}</div>}
-            {lead.email && <div><a href={`mailto:${lead.email}`} style={{ color: 'var(--brand-accent, #6366f1)' }}>{lead.email}</a></div>}
-            {lead.phone && <div style={{ color: 'var(--text-muted)' }}>{lead.phone}</div>}
-          </div>
-        )}
-
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>
-          Assigned to <strong style={{ color: 'var(--text)' }}>{assignedName}</strong>
-        </div>
+        <button
+          onClick={onLineCard}
+          style={{
+            marginTop: 12, width: '100%', padding: '8px 16px', background: 'transparent',
+            color: 'var(--brand-accent, #6366f1)', border: '1px solid var(--brand-accent, #6366f1)',
+            borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          🖨 View Line Card
+        </button>
 
         {/* Editable fields */}
-        <div style={{ marginTop: 16 }}>
-          <label style={labelStyle}>Next Action</label>
-          <input
-            type="text"
-            value={nextAction}
-            onChange={e => setNextAction(e.target.value)}
-            placeholder="e.g. Send proposal, Schedule discovery call…"
-            style={inputStyle}
-          />
-        </div>
+        <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
 
-        <div style={{ marginTop: 12 }}>
-          <label style={labelStyle}>Due Date</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={inputStyle} />
-          {overdue && (
-            <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4, fontWeight: 600 }}>
-              ⚠ Overdue by {Math.abs(daysUntil(lead.next_action_date as string, today))} day(s)
+          <GroupHeading>Business Info</GroupHeading>
+          <Field label="Business Name">
+            <input type="text" value={d.business_name} onChange={set('business_name')} style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Website">
+              <input type="text" value={d.website} onChange={set('website')} style={inputStyle} />
+            </Field>
+            <Field label="Industry">
+              <input type="text" value={d.industry} onChange={set('industry')} style={inputStyle} />
+            </Field>
+            <Field label="Location">
+              <input type="text" value={d.location} onChange={set('location')} style={inputStyle} />
+            </Field>
+            <Field label="Estimated Value ($/mo)">
+              <input type="number" min={0} step={100} value={d.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Primary Contact</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Contact Name">
+              <input type="text" value={d.name} onChange={set('name')} style={inputStyle} />
+            </Field>
+            <Field label="Title / Role">
+              <input type="text" value={d.contact_title} onChange={set('contact_title')} placeholder="Owner, Marketing Director…" style={inputStyle} />
+            </Field>
+            <Field label="Email">
+              <input type="email" value={d.email} onChange={set('email')} style={inputStyle} />
+            </Field>
+            <Field label="Phone">
+              <input type="tel" value={d.phone} onChange={set('phone')} style={inputStyle} />
+            </Field>
+          </div>
+          {!d.email.trim() && (
+            <div style={{ fontSize: 10, color: '#d97706' }}>
+              No email — stage changes will not sync to ActiveCampaign.
             </div>
           )}
-        </div>
 
-        <div style={{ marginTop: 12 }}>
-          <label style={labelStyle}>Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
+          <GroupHeading>Secondary Contact</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Name">
+              <input type="text" value={d.secondary_contact_name} onChange={set('secondary_contact_name')} style={inputStyle} />
+            </Field>
+            <Field label="Email">
+              <input type="email" value={d.secondary_contact_email} onChange={set('secondary_contact_email')} style={inputStyle} />
+            </Field>
+            <Field label="Phone">
+              <input type="tel" value={d.secondary_contact_phone} onChange={set('secondary_contact_phone')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Address</GroupHeading>
+          <Field label="Street">
+            <input type="text" value={d.address_street} onChange={set('address_street')} style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+            <Field label="City">
+              <input type="text" value={d.address_city} onChange={set('address_city')} style={inputStyle} />
+            </Field>
+            <Field label="State">
+              <input type="text" value={d.address_state} onChange={set('address_state')} style={inputStyle} />
+            </Field>
+            <Field label="ZIP">
+              <input type="text" value={d.address_zip} onChange={set('address_zip')} style={inputStyle} />
+            </Field>
+          </div>
+
+          <GroupHeading>Lead Details</GroupHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Source">
+              <select value={d.source} onChange={set('source')} style={inputStyle}>
+                {Object.entries(SOURCE_CONFIG).map(([id, cfg]) => (
+                  <option key={id} value={id}>{cfg.icon} {cfg.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Lead Type">
+              <select value={d.lead_type} onChange={set('lead_type')} style={inputStyle}>
+                <option value="">Not set</option>
+                {LEAD_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Referral Detail">
+            <input type="text" value={d.referral_source_detail} onChange={set('referral_source_detail')} placeholder="e.g. Clint Klepp at RBS" style={inputStyle} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Priority">
+              <select value={d.priority} onChange={set('priority')} style={inputStyle}>
+                {PRIORITIES.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+              </select>
+            </Field>
+            <Field label="Assigned To">
+              <select value={d.assigned_to} onChange={set('assigned_to')} style={inputStyle}>
+                <option value="">Unassigned</option>
+                {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name ?? m.id}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Next Action">
+            <input type="text" value={d.next_action} onChange={set('next_action')} placeholder="e.g. Send proposal…" style={inputStyle} />
+          </Field>
+          <Field label="Next Action Date">
+            <input type="date" value={d.next_action_date} onChange={set('next_action_date')} style={inputStyle} />
+            {overdue && (
+              <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4, fontWeight: 600 }}>
+                ⚠ Overdue by {Math.abs(daysUntil(lead.next_action_date as string, today))} day(s)
+              </div>
+            )}
+          </Field>
+          <Field label="Notes">
+            <textarea value={d.notes} onChange={set('notes')} rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
+          </Field>
         </div>
 
         <button
           onClick={save}
           disabled={!dirty || saving}
           style={{
-            marginTop: 12, width: '100%', padding: '9px 16px',
+            marginTop: 14, width: '100%', padding: '9px 16px',
             background: dirty && !saving ? 'var(--brand-accent, #6366f1)' : 'var(--bg-sunken)',
             color: dirty && !saving ? 'white' : 'var(--text-muted)',
             border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
@@ -523,6 +1018,256 @@ function DetailModal({
             <strong>Lost reason:</strong> {lead.lost_reason}
           </div>
         )}
+
+        {/* Remove — soft delete to 'lost'; the record is kept. */}
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          {lead.status === 'lost' ? (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              This lead is already marked lost. Move it to another stage above to bring it back.
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => onRemove(lead)}
+                disabled={saving}
+                style={{
+                  width: '100%', padding: '8px 16px', background: 'transparent',
+                  color: '#dc2626', border: '1px solid #dc262650', borderRadius: 8,
+                  fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer',
+                  opacity: saving ? 0.6 : 1,
+                }}
+              >
+                Remove Lead
+              </button>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5, textAlign: 'center' }}>
+                Moves to Lost — the record is kept, not deleted.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Prospect line card ──────────────────────────────────────────────────────
+// One-page summary intended to be printed or saved to PDF. The print rules hide
+// the rest of the app rather than re-laying it out, so what prints is exactly
+// this sheet.
+const LINE_CARD_PRINT_CSS = `
+@media print {
+  body * { visibility: hidden !important; }
+  .ab-linecard, .ab-linecard * { visibility: visible !important; }
+  .ab-linecard {
+    position: absolute !important;
+    inset: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .ab-linecard a { color: #000 !important; text-decoration: none !important; }
+  .ab-linecard-noprint { display: none !important; }
+  .ab-linecard-section { break-inside: avoid; page-break-inside: avoid; }
+  @page { margin: 14mm; }
+}
+`
+
+function LcRow({ label, value }: { label: string; value: React.ReactNode }) {
+  if (value === null || value === undefined || value === '') return null
+  return (
+    <div style={{ display: 'flex', gap: 8, fontSize: 12, padding: '2px 0' }}>
+      <span style={{ minWidth: 116, color: '#666', flexShrink: 0 }}>{label}</span>
+      <span style={{ fontWeight: 500 }}>{value}</span>
+    </div>
+  )
+}
+
+function LcSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="ab-linecard-section" style={{ marginTop: 14 }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+        borderBottom: '1px solid #ccc', paddingBottom: 3, marginBottom: 6, color: '#333',
+      }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function LineCard({
+  lead, events, eventsLoading, assignedName, onClose,
+}: {
+  lead: Lead
+  events: StageEvent[]
+  eventsLoading: boolean
+  assignedName: string | null
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const stage = stageById.get(lead.status)
+  const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
+
+  const cityLine = [lead.address_city, lead.address_state].filter(Boolean).join(', ')
+  const addressLines = [lead.address_street, [cityLine, lead.address_zip].filter(Boolean).join(' ')]
+    .filter(Boolean)
+
+  const fmtStamp = (iso: string) =>
+    new Date(iso).toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    })
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: 20, zIndex: 60, overflowY: 'auto',
+      }}
+    >
+      <style>{LINE_CARD_PRINT_CSS}</style>
+      <div
+        className="ab-linecard"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', color: '#111', borderRadius: 10,
+          width: '100%', maxWidth: 780, padding: '28px 32px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+        }}
+      >
+        {/* Toolbar — excluded from print */}
+        <div className="ab-linecard-noprint" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button
+            onClick={() => window.print()}
+            style={{
+              padding: '7px 16px', background: '#111', color: '#fff', border: 'none',
+              borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            🖨 Print
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '7px 16px', background: 'transparent', color: '#555',
+              border: '1px solid #ccc', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        </div>
+
+        {/* Masthead */}
+        <div style={{ borderBottom: '2px solid #111', paddingBottom: 10 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', color: '#666' }}>
+            A&amp;B Consulting Group · Prospect Line Card
+          </div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: '6px 0 0' }}>{lead.business_name}</h1>
+          <div style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
+            <strong>{stage?.label ?? lead.status}</strong>
+            {lead.lead_type && <> · {leadTypeLabel(lead.lead_type)}</>}
+            {val(lead) > 0 && <> · {money(val(lead))}/mo estimated</>}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px' }}>
+          <div>
+            <LcSection title="Business Info">
+              <LcRow label="Business" value={lead.business_name} />
+              <LcRow label="Website" value={lead.website} />
+              <LcRow label="Industry" value={lead.industry} />
+              <LcRow label="Location" value={lead.location} />
+              <LcRow label="Estimated Value" value={val(lead) > 0 ? `${money(val(lead))}/mo` : null} />
+            </LcSection>
+
+            <LcSection title="Address">
+              {addressLines.length > 0
+                ? addressLines.map((line, i) => (
+                    <div key={i} style={{ fontSize: 12, fontWeight: 500 }}>{line}</div>
+                  ))
+                : <div style={{ fontSize: 12, color: '#888' }}>No address on file</div>}
+            </LcSection>
+
+            <LcSection title="Lead Details">
+              <LcRow label="Pipeline Stage" value={stage?.label ?? lead.status} />
+              <LcRow label="Lead Type" value={leadTypeLabel(lead.lead_type)} />
+              <LcRow label="Source" value={`${src.icon} ${src.label}`} />
+              <LcRow label="Referred By" value={lead.referral_source_detail} />
+              <LcRow label="Priority" value={lead.priority} />
+              <LcRow label="Assigned To" value={assignedName || 'Unassigned'} />
+              <LcRow label="Next Action" value={lead.next_action} />
+              <LcRow label="Next Action Due" value={lead.next_action_date ? fmtDate(lead.next_action_date) : null} />
+            </LcSection>
+          </div>
+
+          <div>
+            <LcSection title="Primary Contact">
+              {lead.name || lead.email || lead.phone ? (
+                <>
+                  <LcRow label="Name" value={lead.name} />
+                  <LcRow label="Title" value={lead.contact_title} />
+                  <LcRow label="Email" value={lead.email ? <a href={`mailto:${lead.email}`}>{lead.email}</a> : null} />
+                  <LcRow label="Phone" value={lead.phone} />
+                </>
+              ) : <div style={{ fontSize: 12, color: '#888' }}>No primary contact on file</div>}
+            </LcSection>
+
+            <LcSection title="Secondary Contact">
+              {lead.secondary_contact_name || lead.secondary_contact_email || lead.secondary_contact_phone ? (
+                <>
+                  <LcRow label="Name" value={lead.secondary_contact_name} />
+                  <LcRow label="Email" value={lead.secondary_contact_email ? <a href={`mailto:${lead.secondary_contact_email}`}>{lead.secondary_contact_email}</a> : null} />
+                  <LcRow label="Phone" value={lead.secondary_contact_phone} />
+                </>
+              ) : <div style={{ fontSize: 12, color: '#888' }}>None</div>}
+            </LcSection>
+
+            <LcSection title="Stage Timeline">
+              {eventsLoading && <div style={{ fontSize: 12, color: '#888' }}>Loading…</div>}
+              {!eventsLoading && events.length === 0 && (
+                <div style={{ fontSize: 12, color: '#888' }}>No stage changes recorded.</div>
+              )}
+              {!eventsLoading && events.map(ev => (
+                <div key={ev.id} style={{ fontSize: 12, padding: '3px 0', borderBottom: '1px dotted #ddd' }}>
+                  <div style={{ fontWeight: 600 }}>
+                    {ev.from_status
+                      ? `${stageById.get(ev.from_status)?.label ?? ev.from_status} → ${stageById.get(ev.to_status)?.label ?? ev.to_status}`
+                      : `Created as ${stageById.get(ev.to_status)?.label ?? ev.to_status}`}
+                  </div>
+                  <div style={{ color: '#777', fontSize: 11 }}>{fmtStamp(ev.changed_at)}</div>
+                </div>
+              ))}
+            </LcSection>
+          </div>
+        </div>
+
+        <LcSection title="Notes">
+          {lead.notes
+            ? <div style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{lead.notes}</div>
+            : <div style={{ fontSize: 12, color: '#888' }}>No notes.</div>}
+          {lead.status === 'lost' && lead.lost_reason && (
+            <div style={{ fontSize: 12, marginTop: 6 }}><strong>Lost reason:</strong> {lead.lost_reason}</div>
+          )}
+        </LcSection>
+
+        <div style={{ marginTop: 18, paddingTop: 8, borderTop: '1px solid #ccc', fontSize: 10, color: '#888' }}>
+          A&amp;B Consulting Group · Burr Ridge, IL · abconsultingg.com
+        </div>
       </div>
     </div>
   )
