@@ -55,14 +55,27 @@ export async function GET() {
 
   try {
     const autos = await get('/api/3/automations?limit=100')
-    const names: string[] = (autos?.automations || []).map((a: { name?: string }) => a.name || '')
     out.authOk = true
-    out.automationCount = names.length
-    out.automationNames = names
-    out.wanted = WANTED.map(w => ({
-      name: w,
-      found: names.some(n => n.toLowerCase() === w.toLowerCase()),
-    }))
+    // meta.total is the real count; the array above is capped by limit.
+    out.automationTotal = autos?.meta?.total ?? null
+    out.automationSampleSize = (autos?.automations || []).length
+
+    // Resolve each wanted automation the same way syncLeadStage does — a
+    // server-side filtered lookup, so the 100-item page cap cannot hide it.
+    out.wanted = await Promise.all(
+      WANTED.map(async w => {
+        const r = await get(`/api/3/automations?filters[name]=${encodeURIComponent(w)}&limit=100`)
+        const list: { name?: string; id?: string }[] = r?.automations || []
+        const exact = list.find(a => a.name?.toLowerCase() === w.toLowerCase())
+        return {
+          name: w,
+          found: Boolean(exact),
+          resolvedId: exact?.id ?? null,
+          // What the sync would fall back to if there is no exact match.
+          filterMatches: list.map(a => a.name).slice(0, 10),
+        }
+      })
+    )
 
     const tags = await get('/api/3/tags?search=pipeline&limit=100')
     out.existingPipelineTags = (tags?.tags || [])
