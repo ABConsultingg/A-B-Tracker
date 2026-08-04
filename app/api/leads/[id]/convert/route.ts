@@ -1,9 +1,14 @@
 // app/api/leads/[id]/convert/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { checkSalesAccess } from '@/lib/auth/sales'
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createClient()
+  const { supabase, allowed, reason } = await checkSalesAccess()
+  if (!allowed) {
+    return reason === 'unauthenticated'
+      ? NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      : NextResponse.json({ error: 'Requires owner or sales role' }, { status: 403 })
+  }
 
   // Get the lead
   const { data: lead, error: leadError } = await supabase

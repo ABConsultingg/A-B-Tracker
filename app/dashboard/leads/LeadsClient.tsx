@@ -12,7 +12,7 @@ type Lead = {
   website: string | null
   industry: string | null
   location: string | null
-  status: 'new' | 'contacted' | 'proposal' | 'won' | 'lost'
+  status: 'new' | 'contacted' | 'discovery' | 'proposal' | 'contract-sent' | 'won' | 'lost'
   priority: 'low' | 'medium' | 'high'
   assigned_to: string | null
   source: string
@@ -30,12 +30,16 @@ type Lead = {
 
 type TeamMember = { id: string; name: string }
 
+// Must cover every value allowed by the leads_status_check constraint — this
+// map is indexed unguarded, so a missing stage crashes the page.
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  new:       { label: 'New',           color: '#6366f1', bg: '#6366f115', dot: '#6366f1' },
-  contacted: { label: 'Contacted',     color: '#d97706', bg: '#d9770615', dot: '#d97706' },
-  proposal:  { label: 'Proposal Sent', color: '#0ea5e9', bg: '#0ea5e915', dot: '#0ea5e9' },
-  won:       { label: 'Won',           color: '#16a34a', bg: '#16a34a15', dot: '#16a34a' },
-  lost:      { label: 'Lost',          color: '#dc2626', bg: '#dc262615', dot: '#dc2626' },
+  new:             { label: 'New',           color: '#6366f1', bg: '#6366f115', dot: '#6366f1' },
+  contacted:       { label: 'Contacted',     color: '#d97706', bg: '#d9770615', dot: '#d97706' },
+  discovery:       { label: 'Discovery',     color: '#8b5cf6', bg: '#8b5cf615', dot: '#8b5cf6' },
+  proposal:        { label: 'Proposal Sent', color: '#0ea5e9', bg: '#0ea5e915', dot: '#0ea5e9' },
+  'contract-sent': { label: 'Contract Sent', color: '#14b8a6', bg: '#14b8a615', dot: '#14b8a6' },
+  won:             { label: 'Won',           color: '#16a34a', bg: '#16a34a15', dot: '#16a34a' },
+  lost:            { label: 'Lost',          color: '#dc2626', bg: '#dc262615', dot: '#dc2626' },
 }
 
 const SOURCE_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -57,7 +61,7 @@ const PRIORITY_COLOR: Record<string, string> = {
   high: '#dc2626', medium: '#d97706', low: '#6b7280',
 }
 
-const STATUSES = ['new', 'contacted', 'proposal', 'won', 'lost'] as const
+const STATUSES = ['new', 'contacted', 'discovery', 'proposal', 'contract-sent', 'won', 'lost'] as const
 
 export default function LeadsClient({
   initialLeads,
@@ -435,10 +439,12 @@ function DetailPanel({ lead, teamMembers, onUpdate, onClose, onDelete, onConvert
   converting: boolean
   inputStyle: React.CSSProperties
 }) {
-  const STATUSES = ['new', 'contacted', 'proposal', 'won', 'lost'] as const
+  const STATUSES = ['new', 'contacted', 'discovery', 'proposal', 'contract-sent', 'won', 'lost'] as const
   const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     new: { label: 'New', color: '#6366f1' }, contacted: { label: 'Contacted', color: '#d97706' },
-    proposal: { label: 'Proposal Sent', color: '#0ea5e9' }, won: { label: 'Won', color: '#16a34a' }, lost: { label: 'Lost', color: '#dc2626' },
+    discovery: { label: 'Discovery', color: '#8b5cf6' },
+    proposal: { label: 'Proposal Sent', color: '#0ea5e9' }, 'contract-sent': { label: 'Contract Sent', color: '#14b8a6' },
+    won: { label: 'Won', color: '#16a34a' }, lost: { label: 'Lost', color: '#dc2626' },
   }
   const GRADE_COLOR: Record<string, string> = { Good: '#16a34a', 'Needs Work': '#d97706', 'At Risk': '#dc2626', Critical: '#7c3aed' }
 

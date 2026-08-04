@@ -11,6 +11,9 @@ type NavItem = {
   icon: string
   adminOnly?: boolean
   ownerOnly?: boolean
+  // Visible only to owner/sales roles — gated on role alone, not view mode,
+  // since sales users have no admin/team toggle.
+  salesOnly?: boolean
   countKey?: keyof SidebarCounts
   section: 'views' | 'tools'
 }
@@ -27,6 +30,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/social',    label: 'Social Hub',         icon: '📱', section: 'tools' },
   { href: '/dashboard/ppc',       label: 'PPC Hub',            icon: '🎯', adminOnly: true, section: 'tools' },
   { href: '/dashboard/leads',     label: 'Leads',              icon: '🏆', adminOnly: true, section: 'tools' },
+  { href: '/pipeline',            label: 'Sales Pipeline',     icon: '🎺', salesOnly: true, section: 'tools' },
   { href: '/dashboard/services',  label: 'Services & Pricing', icon: '⚙️', adminOnly: true, section: 'tools' },
 ]
 
@@ -180,9 +184,11 @@ export default function Sidebar({ member, counts = {}, clientBadges = [], teamMe
   )
   const isAdmin = member?.role === 'admin' || member?.role === 'owner'
   const isOwner = member?.role === 'owner'
+  const isSales = member?.role === 'owner' || member?.role === 'sales'
   const [viewMode, setViewMode] = useViewMode(isAdmin)
 
   const items = NAV.filter(n => {
+    if (n.salesOnly) return isSales
     if (n.ownerOnly) return isOwner && viewMode === 'admin'
     if (!n.adminOnly) return true
     if (!isAdmin) return false

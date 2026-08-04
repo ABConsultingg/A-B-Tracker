@@ -1,9 +1,17 @@
 // app/api/leads/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { checkSalesAccess } from '@/lib/auth/sales'
+
+function deny(reason: 'unauthenticated' | 'forbidden' | null) {
+  return reason === 'unauthenticated'
+    ? NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    : NextResponse.json({ error: 'Requires owner or sales role' }, { status: 403 })
+}
 
 export async function GET() {
-  const supabase = createClient()
+  const { supabase, allowed, reason } = await checkSalesAccess()
+  if (!allowed) return deny(reason)
+
   const { data, error } = await supabase
     .from('leads')
     .select('*')
@@ -13,7 +21,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient()
+  const { supabase, allowed, reason } = await checkSalesAccess()
+  if (!allowed) return deny(reason)
+
   const body = await req.json()
 
   const { data, error } = await supabase
