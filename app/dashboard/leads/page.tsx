@@ -1,10 +1,15 @@
-import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { checkSalesAccess } from '@/lib/auth/sales'
 import LeadsClient from './LeadsClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function LeadsPage() {
-  const supabase = createClient()
+  // Leads are owner/sales only, matching the RLS policy on public.leads.
+  // Without this, other roles could still reach the URL directly and would
+  // land on a board that RLS renders empty.
+  const { supabase, allowed, reason } = await checkSalesAccess()
+  if (!allowed) redirect(reason === 'unauthenticated' ? '/login' : '/dashboard')
 
   const { data: leadsRaw } = await supabase
     .from('leads')
