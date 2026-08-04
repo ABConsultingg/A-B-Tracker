@@ -126,6 +126,19 @@ export async function syncLeadStage(
 ): Promise<AcSyncResult> {
   const steps: string[] = []
 
+  // Disqualified means the lead never belonged in the pipeline — often spam or
+  // a wrong number. Pushing those into ActiveCampaign would pollute the CRM
+  // (and bill for the contact), so they are not synced. Remove this branch if
+  // you do want a 'pipeline-disqualified' tag in AC.
+  if (newStatus === 'disqualified') {
+    return {
+      ok: true,
+      skipped: true,
+      warning: null,
+      steps: ['skipped: disqualified leads are not pushed to ActiveCampaign'],
+    }
+  }
+
   if (!lead.email) {
     return {
       ok: false,

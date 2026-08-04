@@ -10,7 +10,23 @@ const STAGES = [
   { id: 'contract-sent', label: 'Contract Sent', color: '#14b8a6' },
   { id: 'won',           label: 'Won',           color: '#16a34a' },
   { id: 'lost',          label: 'Lost',          color: '#dc2626' },
+  { id: 'disqualified',  label: 'Disqualified',  color: '#64748b' },
 ] as const
+
+// Reasons stored in lost_reason when a lead is disqualified.
+const DISQUALIFY_REASONS = [
+  { id: 'wrong-number',         label: 'Wrong Number' },
+  { id: 'spam',                 label: 'Spam' },
+  { id: 'not-qualified',        label: 'Not Qualified' },
+  { id: 'outside-service-area', label: 'Outside Service Area' },
+  { id: 'no-budget',            label: 'No Budget' },
+  { id: 'competitor',           label: 'Competitor' },
+  { id: 'duplicate',            label: 'Duplicate' },
+  { id: 'other',                label: 'Other' },
+] as const
+
+const disqualifyReasonLabel = (id: string | null) =>
+  id ? (DISQUALIFY_REASONS.find(r => r.id === id)?.label ?? id) : null
 
 type Stage = typeof STAGES[number]['id']
 
@@ -215,6 +231,13 @@ export default function PipelineClient({
     setSelected(null)
   }
 
+  // Disqualified = never belonged in the pipeline. Distinct from Lost, which
+  // is a real deal that didn't close. The reason lands in lost_reason.
+  async function disqualifyLead(lead: Lead, reason: string) {
+    await patch(lead.id, { status: 'disqualified', lost_reason: reason })
+    setSelected(null)
+  }
+
   async function openLineCard(lead: Lead) {
     setLineCard(lead)
     setEvents([])
@@ -379,6 +402,7 @@ export default function PipelineClient({
           teamMembers={teamMembers}
           onPatch={patch}
           onRemove={removeLead}
+          onDisqualify={disqualifyLead}
           onLineCard={() => openLineCard(selected)}
           onClose={() => setSelected(null)}
         />
@@ -741,7 +765,7 @@ function draftFrom(l: Lead) {
 }
 
 function DetailModal({
-  lead, today, saving, assignedName, teamMembers, onPatch, onRemove, onLineCard, onClose,
+  lead, today, saving, assignedName, teamMembers, onPatch, onRemove, onDisqualify, onLineCard, onClose,
 }: {
   lead: Lead
   today: string
@@ -750,10 +774,13 @@ function DetailModal({
   teamMembers: TeamMember[]
   onPatch: (id: string, updates: Partial<Lead>) => Promise<void>
   onRemove: (lead: Lead) => Promise<void>
+  onDisqualify: (lead: Lead, reason: string) => Promise<void>
   onLineCard: () => void
   onClose: () => void
 }) {
   const [d, setD] = useState(() => draftFrom(lead))
+  const [dqOpen, setDqOpen] = useState(false)
+  const [dqReason, setDqReason] = useState<string>(DISQUALIFY_REASONS[0].id)
   const set = (k: keyof ReturnType<typeof draftFrom>) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => setD(prev => ({ ...prev, [k]: e.target.value }))
@@ -990,7 +1017,9 @@ function DetailModal({
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
           <label style={labelStyle}>Move to Stage</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {STAGES.map(s => {
+            {/* Disqualified is omitted here on purpose — it requires a reason,
+                so it is set through the Disqualify action below. */}
+            {STAGES.filter(s => s.id !== 'disqualified').map(s => {
               const current = s.id === lead.status
               return (
                 <button
@@ -1013,34 +1042,80 @@ function DetailModal({
           </div>
         </div>
 
-        {lead.status === 'lost' && lead.lost_reason && (
+        {(lead.status === 'lost' || lead.status === 'disqualified') && lead.lost_reason && (
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            <strong>Lost reason:</strong> {lead.lost_reason}
+            <strong>{lead.status === 'disqualified' ? 'Disqualified' : 'Lost'} reason:</strong>{' '}
+            {disqualifyReasonLabel(lead.lost_reason)}
           </div>
         )}
 
-        {/* Remove — soft delete to 'lost'; the record is kept. */}
+        {/* Close-out actions — both soft: the record is always kept.
+            Lost = a real deal that didn't close. Disqualified = never belonged
+            in the pipeline, and carries a reason for source-quality tracking. */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          {lead.status === 'lost' ? (
+          {lead.status === 'lost' || lead.status === 'disqualified' ? (
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              This lead is already marked lost. Move it to another stage above to bring it back.
+              This lead is already marked {lead.status === 'lost' ? 'lost' : 'disqualified'}.
+              Move it to another stage above to bring it back.
             </div>
           ) : (
             <>
-              <button
-                onClick={() => onRemove(lead)}
-                disabled={saving}
-                style={{
-                  width: '100%', padding: '8px 16px', background: 'transparent',
-                  color: '#dc2626', border: '1px solid #dc262650', borderRadius: 8,
-                  fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer',
-                  opacity: saving ? 0.6 : 1,
-                }}
-              >
-                Remove Lead
-              </button>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5, textAlign: 'center' }}>
-                Moves to Lost — the record is kept, not deleted.
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => onRemove(lead)}
+                  disabled={saving}
+                  style={{
+                    flex: 1, padding: '8px 12px', background: 'transparent',
+                    color: '#dc2626', border: '1px solid #dc262650', borderRadius: 8,
+                    fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer',
+                    opacity: saving ? 0.6 : 1,
+                  }}
+                >
+                  Mark Lost
+                </button>
+                <button
+                  onClick={() => setDqOpen(v => !v)}
+                  disabled={saving}
+                  style={{
+                    flex: 1, padding: '8px 12px', background: dqOpen ? '#64748b' : 'transparent',
+                    color: dqOpen ? 'white' : '#64748b', border: '1px solid #64748b70', borderRadius: 8,
+                    fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer',
+                    opacity: saving ? 0.6 : 1,
+                  }}
+                >
+                  Disqualify
+                </button>
+              </div>
+
+              {dqOpen && (
+                <div style={{
+                  marginTop: 10, padding: 12, borderRadius: 8,
+                  background: 'var(--bg-sunken)', border: '1px solid var(--border)',
+                }}>
+                  <label style={labelStyle}>Disqualify Reason</label>
+                  <select value={dqReason} onChange={e => setDqReason(e.target.value)} style={inputStyle}>
+                    {DISQUALIFY_REASONS.map(r => (
+                      <option key={r.id} value={r.id}>{r.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => onDisqualify(lead, dqReason)}
+                    disabled={saving}
+                    style={{
+                      marginTop: 10, width: '100%', padding: '8px 16px', background: '#64748b',
+                      color: 'white', border: 'none', borderRadius: 8,
+                      fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer',
+                      opacity: saving ? 0.6 : 1,
+                    }}
+                  >
+                    {saving ? 'Saving…' : 'Confirm Disqualify'}
+                  </button>
+                </div>
+              )}
+
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
+                Lost = real deal that didn&apos;t close. Disqualified = never belonged in the pipeline.
+                Neither deletes the record.
               </div>
             </>
           )}
@@ -1260,8 +1335,11 @@ function LineCard({
           {lead.notes
             ? <div style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{lead.notes}</div>
             : <div style={{ fontSize: 12, color: '#888' }}>No notes.</div>}
-          {lead.status === 'lost' && lead.lost_reason && (
-            <div style={{ fontSize: 12, marginTop: 6 }}><strong>Lost reason:</strong> {lead.lost_reason}</div>
+          {(lead.status === 'lost' || lead.status === 'disqualified') && lead.lost_reason && (
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              <strong>{lead.status === 'disqualified' ? 'Disqualified' : 'Lost'} reason:</strong>{' '}
+              {disqualifyReasonLabel(lead.lost_reason)}
+            </div>
           )}
         </LcSection>
 
