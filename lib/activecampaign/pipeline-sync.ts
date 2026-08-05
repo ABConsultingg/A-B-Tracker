@@ -107,6 +107,58 @@ async function addTag(contactId: string, tagId: string) {
   })
 }
 
+/** Look up a contact id by email. Null when AC has no such contact. */
+async function findContactId(email: string): Promise<string | null> {
+  const d = await ac(`/api/3/contacts?email=${encodeURIComponent(email)}`)
+  const id = (d?.contacts || [])[0]?.id
+  return id ? String(id) : null
+}
+
+/**
+ * Add or remove a single tag on a contact, by email. Used by the staleness job.
+ * Never throws.
+ */
+export async function setContactTag(
+  email: string | null,
+  tag: string,
+  mode: 'add' | 'remove'
+): Promise<AcSyncResult> {
+  if (!email) {
+    return { ok: false, skipped: true, warning: `Cannot ${mode} tag "${tag}" — lead has no email.`, steps: [] }
+  }
+  if (!configured()) {
+    return { ok: false, skipped: true, warning: `Cannot ${mode} tag "${tag}" — ActiveCampaign not configured.`, steps: [] }
+  }
+
+  try {
+    if (mode === 'add') {
+      const contactId = await syncContact({ email })
+      const tagId = await ensureTag(tag)
+      await addTag(contactId, tagId)
+      return { ok: true, skipped: false, warning: null, steps: [`tagged ${tag}`] }
+    }
+
+    // Removal needs the contactTag join row id, not the tag id.
+    const contactId = await findContactId(email)
+    if (!contactId) {
+      return { ok: true, skipped: true, warning: null, steps: [`no AC contact for ${email}; nothing to remove`] }
+    }
+    const joins = await ac(`/api/3/contacts/${contactId}/contactTags`)
+    const rows: { id?: string; tag?: string }[] = joins?.contactTags || []
+    const tagId = await ensureTag(tag)
+    const match = rows.find(r => String(r.tag) === String(tagId))
+    if (!match?.id) {
+      return { ok: true, skipped: true, warning: null, steps: [`${tag} not present on contact`] }
+    }
+    await ac(`/api/3/contactTags/${match.id}`, { method: 'DELETE' })
+    return { ok: true, skipped: false, warning: null, steps: [`removed ${tag}`] }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[ac-set-tag]', msg)
+    return { ok: false, skipped: false, warning: `Tag ${mode} failed for "${tag}": ${msg}`, steps: [] }
+  }
+}
+
 /**
  * Sync one stage transition. Never throws.
  * A lead with no email is skipped with a warning for the caller to record.

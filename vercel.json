@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/checkout-mx",
       "schedule": "30 23 * * 1-5"
+    },
+    {
+      "path": "/api/cron/stale-leads",
+      "schedule": "0 * * * *"
     }
   ],
   "functions": {

@@ -63,7 +63,35 @@ type Lead = {
   secondary_contact_phone: string | null
   referral_source_detail: string | null
   lead_type: string | null
+  last_activity_at: string | null
+  is_stale: boolean | null
+  stale_since: string | null
+  stale_tag: string | null
 }
+
+export type Activity = {
+  id: string
+  activity_type: string
+  summary: string | null
+  contact_method: string | null
+  created_by: string | null
+  created_at: string
+}
+
+// Mirrors lead_activities_type_check.
+const ACTIVITY_TYPES = [
+  { id: 'call',             label: 'Call',            icon: '📞' },
+  { id: 'text',             label: 'Text',            icon: '💬' },
+  { id: 'email',            label: 'Email',           icon: '✉️' },
+  { id: 'meeting',          label: 'Meeting',         icon: '🤝' },
+  { id: 'note',             label: 'Note',            icon: '📝' },
+  { id: 'voicemail',        label: 'Voicemail',       icon: '📼' },
+  { id: 'form-submission',  label: 'Form Submission', icon: '📄' },
+  { id: 'contract-viewed',  label: 'Contract Viewed', icon: '👀' },
+] as const
+
+const activityMeta = (id: string) =>
+  ACTIVITY_TYPES.find(a => a.id === id) ?? { id, label: id, icon: '•' }
 
 export type StageEvent = {
   id: string
@@ -152,6 +180,22 @@ export default function PipelineClient({
   const [lineCard, setLineCard] = useState<Lead | null>(null)
   const [events, setEvents] = useState<StageEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [activitiesLoading, setActivitiesLoading] = useState(false)
+
+  // Load the activity feed whenever a different lead is opened.
+  const selectedId = selected?.id
+  useEffect(() => {
+    if (!selectedId) { setActivities([]); return }
+    let cancelled = false
+    setActivitiesLoading(true)
+    fetch(`/api/leads/${selectedId}/activities`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(d => { if (!cancelled) setActivities(Array.isArray(d) ? d : []) })
+      .catch(() => { if (!cancelled) setActivities([]) })
+      .finally(() => { if (!cancelled) setActivitiesLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedId])
 
   // assigned_to stores the team_members.id (e.g. 'valerie'); show the name.
   const memberName = (id: string | null) =>
@@ -170,6 +214,7 @@ export default function PipelineClient({
       overdue: leads.filter(isOverdue).length,
       noAction: open.filter(l => !l.next_action_date).length,
       wonCount: leads.filter(l => l.status === 'won').length,
+      stale: open.filter(l => l.is_stale === true).length,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads, today])
@@ -237,6 +282,40 @@ export default function PipelineClient({
   async function disqualifyLead(lead: Lead, reason: string) {
     await patch(lead.id, { status: 'disqualified', lost_reason: reason })
     setSelected(null)
+  }
+
+  // Logging an activity is what marks a lead as touched: the DB trigger updates
+  // last_activity_at and clears the stale flag, and the route drops the stale
+  // tag in ActiveCampaign.
+  async function addActivity(leadId: string, activityType: string, summary: string, method: string) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/leads/${leadId}/activities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activity_type: activityType,
+          summary,
+          contact_method: method || null,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Could not log activity (${res.status})`)
+      }
+      const { activity, lead, acSync } = await res.json()
+      setActivities(prev => [activity, ...prev])
+      if (lead) {
+        setLeads(prev => prev.map(l => (l.id === leadId ? { ...l, ...lead } : l)))
+        setSelected(prev => (prev && prev.id === leadId ? { ...prev, ...lead } : prev))
+      }
+      if (acSync?.warning) setError(acSync.warning)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not log activity')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function openLineCard(lead: Lead) {
@@ -308,6 +387,12 @@ export default function PipelineClient({
           value={String(kpis.overdue)}
           subtitle={kpis.overdue > 0 ? 'needs follow-up today' : 'nothing overdue'}
           accent={kpis.overdue > 0 ? '#dc2626' : undefined}
+        />
+        <Kpi
+          label="Stale Deals"
+          value={String(kpis.stale)}
+          subtitle={kpis.stale > 0 ? 'no activity logged in time' : 'all recently touched'}
+          accent={kpis.stale > 0 ? '#dc2626' : undefined}
         />
       </div>
 
@@ -401,6 +486,10 @@ export default function PipelineClient({
           saving={saving}
           assignedName={memberName(selected.assigned_to)}
           teamMembers={teamMembers}
+          activities={activities}
+          activitiesLoading={activitiesLoading}
+          memberName={memberName}
+          onAddActivity={addActivity}
           onPatch={patch}
           onRemove={removeLead}
           onDisqualify={disqualifyLead}
@@ -445,13 +534,17 @@ function Card({ lead, today, overdue, assignedName, onClick }: { lead: Lead; tod
   const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
   const days = lead.next_action_date ? daysUntil(lead.next_action_date, today) : null
   const dueToday = days === 0
+  const stale = lead.is_stale === true
+  // Stale (nobody has touched it) and overdue (a dated action slipped) are
+  // different failures; stale takes the border since it is the louder signal.
+  const flagged = stale || overdue
 
   return (
     <div
       onClick={onClick}
       style={{
-        border: `1px solid ${overdue ? '#dc262650' : 'var(--border)'}`,
-        borderLeft: overdue ? '3px solid #dc2626' : '1px solid var(--border)',
+        border: `1px solid ${flagged ? '#dc262650' : 'var(--border)'}`,
+        borderLeft: flagged ? '3px solid #dc2626' : '1px solid var(--border)',
         borderRadius: 8,
         padding: '9px 10px',
         marginBottom: 8,
@@ -460,8 +553,18 @@ function Card({ lead, today, overdue, assignedName, onClick }: { lead: Lead; tod
         fontSize: 12,
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {lead.business_name}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+        {stale && (
+          <span
+            title={`Stale — no activity logged since ${lead.last_activity_at ? new Date(lead.last_activity_at).toLocaleDateString('en-US') : 'unknown'}`}
+            style={{ flexShrink: 0, fontSize: 11 }}
+          >
+            🕒
+          </span>
+        )}
+        <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {lead.business_name}
+        </span>
       </div>
 
       {lead.name && (
@@ -766,13 +869,18 @@ function draftFrom(l: Lead) {
 }
 
 function DetailModal({
-  lead, today, saving, assignedName, teamMembers, onPatch, onRemove, onDisqualify, onLineCard, onClose,
+  lead, today, saving, assignedName, teamMembers, activities, activitiesLoading,
+  memberName, onAddActivity, onPatch, onRemove, onDisqualify, onLineCard, onClose,
 }: {
   lead: Lead
   today: string
   saving: boolean
   assignedName: string | null
   teamMembers: TeamMember[]
+  activities: Activity[]
+  activitiesLoading: boolean
+  memberName: (id: string | null) => string | null
+  onAddActivity: (leadId: string, type: string, summary: string, method: string) => Promise<void>
   onPatch: (id: string, updates: Partial<Lead>) => Promise<void>
   onRemove: (lead: Lead) => Promise<void>
   onDisqualify: (lead: Lead, reason: string) => Promise<void>
@@ -999,6 +1107,15 @@ function DetailModal({
             <textarea value={d.notes} onChange={set('notes')} rows={4} style={{ ...inputStyle, resize: 'vertical' }} />
           </Field>
         </div>
+
+        <ActivityTimeline
+          lead={lead}
+          activities={activities}
+          loading={activitiesLoading}
+          saving={saving}
+          memberName={memberName}
+          onAdd={onAddActivity}
+        />
 
         <button
           onClick={save}
@@ -1347,6 +1464,139 @@ function LineCard({
         <div style={{ marginTop: 18, paddingTop: 8, borderTop: '1px solid #ccc', fontSize: 10, color: '#888' }}>
           A&amp;B Consulting Group · Burr Ridge, IL · abconsultingg.com
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Activity timeline ───────────────────────────────────────────────────────
+// The activity log is the source of truth for when a lead was last touched:
+// each insert updates leads.last_activity_at and clears the stale flag.
+function ActivityTimeline({
+  lead, activities, loading, saving, memberName, onAdd,
+}: {
+  lead: Lead
+  activities: Activity[]
+  loading: boolean
+  saving: boolean
+  memberName: (id: string | null) => string | null
+  onAdd: (leadId: string, type: string, summary: string, method: string) => Promise<void>
+}) {
+  const [type, setType] = useState<string>('call')
+  const [summary, setSummary] = useState('')
+  const [method, setMethod] = useState<string>('outbound')
+
+  const canAdd = summary.trim().length > 0 && !saving
+
+  async function submit() {
+    if (!canAdd) return
+    await onAdd(lead.id, type, summary.trim(), method)
+    setSummary('')
+  }
+
+  const fmtWhen = (iso: string) =>
+    new Date(iso).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    })
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <label style={FIELD_LABEL}>Activity Log</label>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>
+          {lead.last_activity_at
+            ? `last touched ${fmtWhen(lead.last_activity_at)}`
+            : 'no activity logged'}
+        </span>
+      </div>
+
+      {lead.is_stale && (
+        <div style={{
+          fontSize: 11, color: '#dc2626', fontWeight: 600, marginBottom: 8,
+          padding: '6px 9px', background: '#dc262610', border: '1px solid #dc262640', borderRadius: 6,
+        }}>
+          🕒 Stale — logging any activity below clears this and removes the
+          {lead.stale_tag ? ` "${lead.stale_tag}"` : ''} tag in ActiveCampaign.
+        </div>
+      )}
+
+      {/* Quick-add bar */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+        <select
+          value={type}
+          onChange={e => setType(e.target.value)}
+          style={{ ...FIELD_INPUT, width: 'auto', flexShrink: 0 }}
+        >
+          {ACTIVITY_TYPES.map(a => (
+            <option key={a.id} value={a.id}>{a.icon} {a.label}</option>
+          ))}
+        </select>
+        <select
+          value={method}
+          onChange={e => setMethod(e.target.value)}
+          title="Direction"
+          style={{ ...FIELD_INPUT, width: 'auto', flexShrink: 0 }}
+        >
+          <option value="outbound">Outbound</option>
+          <option value="inbound">Inbound</option>
+          <option value="">—</option>
+        </select>
+        <input
+          type="text"
+          value={summary}
+          onChange={e => setSummary(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit() } }}
+          placeholder="What happened? e.g. Left voicemail, will try again Thursday"
+          style={{ ...FIELD_INPUT, flex: 1 }}
+        />
+        <button
+          onClick={submit}
+          disabled={!canAdd}
+          style={{
+            flexShrink: 0, padding: '7px 14px',
+            background: canAdd ? 'var(--brand-accent, #6366f1)' : 'var(--bg-sunken)',
+            color: canAdd ? 'white' : 'var(--text-muted)',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600,
+            cursor: canAdd ? 'pointer' : 'default',
+          }}
+        >
+          {saving ? '…' : 'Add'}
+        </button>
+      </div>
+
+      {/* Feed, newest first */}
+      <div style={{ marginTop: 10 }}>
+        {loading && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading activity…</div>}
+        {!loading && activities.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Nothing logged yet. Add the first entry above.
+          </div>
+        )}
+        {!loading && activities.map(a => {
+          const meta = activityMeta(a.activity_type)
+          return (
+            <div
+              key={a.id}
+              style={{
+                display: 'flex', gap: 9, padding: '8px 0',
+                borderTop: '1px solid var(--border)', fontSize: 12,
+              }}
+            >
+              <span title={meta.label} style={{ flexShrink: 0, fontSize: 14, lineHeight: '18px' }}>
+                {meta.icon}
+              </span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{a.summary}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {meta.label}
+                  {a.contact_method ? ` · ${a.contact_method}` : ''}
+                  {' · '}{fmtWhen(a.created_at)}
+                  {' · '}{memberName(a.created_by) || a.created_by || 'unknown'}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
