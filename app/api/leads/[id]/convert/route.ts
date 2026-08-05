@@ -3,6 +3,7 @@
 // the slugified id, the lead is linked to it rather than duplicated.
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
+import { createServiceClient } from '@/lib/supabase/service'
 
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -49,7 +50,12 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   let created = false
   if (!existing) {
-    const { error: clientError } = await supabase
+    // RLS on clients restricts INSERT to is_admin(), which is strictly
+    // role = 'admin' — it excludes both owner and sales. Rather than widen that
+    // policy for every client write, escalate just this one operation, which is
+    // already gated above by checkSalesAccess.
+    const admin = createServiceClient()
+    const { error: clientError } = await admin
       .from('clients')
       .insert({
         id: clientId,
