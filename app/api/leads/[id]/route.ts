@@ -1,7 +1,7 @@
 // app/api/leads/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
-import { syncLeadStage } from '@/lib/activecampaign/pipeline-sync'
+import { syncLeadStage, setContactTag } from '@/lib/activecampaign/pipeline-sync'
 
 function deny(reason: 'unauthenticated' | 'forbidden' | null) {
   return reason === 'unauthenticated'
@@ -20,10 +20,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await req.json()
 
-  // Read the prior status so we only sync genuine transitions.
+  // Read prior state so we only sync genuine transitions, and so we know which
+  // stale tag to remove if this change clears staleness.
   const { data: before } = await supabase
     .from('leads')
-    .select('status')
+    .select('status, is_stale, stale_tag')
     .eq('id', params.id)
     .maybeSingle()
 
@@ -40,6 +41,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // committed; a sync failure is reported, never fatal.
   let acSync = null
   if (before && data.status !== before.status) {
+    // The trigger already cleared the stale flag for this stage change; drop the
+    // matching AC tag too, since Postgres cannot make HTTP calls.
+    if (before.is_stale && before.stale_tag) {
+      await setContactTag(data.email, before.stale_tag, 'remove')
+    }
+
     acSync = await syncLeadStage(
       { email: data.email, name: data.name, phone: data.phone, business_name: data.business_name },
       data.status

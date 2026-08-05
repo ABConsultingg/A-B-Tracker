@@ -27,22 +27,9 @@ export async function GET() {
       : NextResponse.json({ error: 'Requires owner or sales role' }, { status: 403 })
   }
 
-  const raw = process.env.ACTIVECAMPAIGN_API_KEY
   const out: Record<string, unknown> = {
     urlConfigured: Boolean(AC_URL),
     keyConfigured: Boolean(AC_KEY),
-    urlHostSuffix: AC_URL ? AC_URL.replace(/^https?:\/\/[^.]+/, '<subdomain>') : null,
-    // Diagnostics only — no secret values, just shape.
-    diag: {
-      keyType: typeof raw,
-      keyLength: typeof raw === 'string' ? raw.length : null,
-      keyTrimmedLength: typeof raw === 'string' ? raw.trim().length : null,
-      urlLength: AC_URL.length,
-      matchingEnvNames: Object.keys(process.env)
-        .filter(k => /ACTIVE|^AC_/i.test(k))
-        .map(k => `${k}(len=${(process.env[k] || '').length})`)
-        .sort(),
-    },
   }
 
   if (!AC_URL || !AC_KEY) {

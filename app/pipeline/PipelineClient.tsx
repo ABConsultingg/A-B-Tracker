@@ -177,6 +177,7 @@ export default function PipelineClient({
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [lineCard, setLineCard] = useState<Lead | null>(null)
   const [events, setEvents] = useState<StageEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
@@ -205,19 +206,44 @@ export default function PipelineClient({
   const isOverdue = (l: Lead) =>
     !!l.next_action_date && isOpen(l) && daysUntil(l.next_action_date, today) < 0
 
+  // Filters drive the whole page: board columns, list rows, and every KPI.
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all')
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
+
+  const visible = useMemo(
+    () => leads.filter(l =>
+      (assigneeFilter === 'all' || l.assigned_to === assigneeFilter) &&
+      (sourceFilter === 'all' || l.source === sourceFilter)
+    ),
+    [leads, assigneeFilter, sourceFilter]
+  )
+
+  // The listed sources, plus any others actually present so no lead is
+  // impossible to filter to.
+  const sourceOptions = useMemo(() => {
+    const preferred = [
+      'rbs-referral', 'client-referral', 'existing-client',
+      'inbound', 'cira', 'assessment', 'manual',
+    ]
+    const present = Array.from(new Set(leads.map(l => l.source).filter(Boolean)))
+    return [...preferred, ...present.filter(s => !preferred.includes(s))]
+  }, [leads])
+
+  const filtering = assigneeFilter !== 'all' || sourceFilter !== 'all'
+
   const kpis = useMemo(() => {
-    const open = leads.filter(isOpen)
+    const open = visible.filter(isOpen)
     return {
       pipelineValue: open.reduce((s, l) => s + val(l), 0),
-      wonValue: leads.filter(l => l.status === 'won').reduce((s, l) => s + val(l), 0),
+      wonValue: visible.filter(l => l.status === 'won').reduce((s, l) => s + val(l), 0),
       activeDeals: open.length,
-      overdue: leads.filter(isOverdue).length,
+      overdue: visible.filter(isOverdue).length,
       noAction: open.filter(l => !l.next_action_date).length,
-      wonCount: leads.filter(l => l.status === 'won').length,
+      wonCount: visible.filter(l => l.status === 'won').length,
       stale: open.filter(l => l.is_stale === true).length,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leads, today])
+  }, [visible, today])
 
   async function patch(id: string, updates: Partial<Lead>) {
     setSaving(true)
@@ -318,6 +344,31 @@ export default function PipelineClient({
     }
   }
 
+  async function convertToClient(lead: Lead) {
+    setSaving(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/convert`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.error || `Convert failed (${res.status})`)
+
+      if (body.lead) {
+        setLeads(prev => prev.map(l => (l.id === lead.id ? { ...l, ...body.lead } : l)))
+        setSelected(prev => (prev && prev.id === lead.id ? { ...prev, ...body.lead } : prev))
+      }
+      setNotice(
+        body.linked_existing
+          ? `Linked to existing client "${body.client_id}" — no duplicate created.`
+          : `Client "${body.client_id}" created and linked.`
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Convert failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function openLineCard(lead: Lead) {
     setLineCard(lead)
     setEvents([])
@@ -340,7 +391,8 @@ export default function PipelineClient({
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Sales Pipeline</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-            {leads.length} lead{leads.length === 1 ? '' : 's'} · {kpis.activeDeals} active · {kpis.wonCount} won
+            {visible.length} lead{visible.length === 1 ? '' : 's'}
+            {filtering && ` of ${leads.length}`} · {kpis.activeDeals} active · {kpis.wonCount} won
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -377,6 +429,15 @@ export default function PipelineClient({
         </div>
       )}
 
+      {notice && (
+        <div
+          onClick={() => setNotice(null)}
+          style={{ padding: '8px 24px', background: '#16a34a15', color: '#16a34a', fontSize: 12, flexShrink: 0, cursor: 'pointer' }}
+        >
+          ✓ {notice}
+        </div>
+      )}
+
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '16px 24px', flexShrink: 0 }}>
         <Kpi label="Pipeline Value" value={`${money(kpis.pipelineValue)}/mo`} subtitle={`${kpis.activeDeals} open deal${kpis.activeDeals === 1 ? '' : 's'}`} />
@@ -396,11 +457,68 @@ export default function PipelineClient({
         />
       </div>
 
+      {/* Filter bar — applies to the board, the list, and every KPI above. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '0 24px 14px', flexShrink: 0,
+      }}>
+        <span style={{ ...FIELD_LABEL, marginBottom: 0 }}>Assignee</span>
+        <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          {[{ id: 'all', name: 'All' }, ...teamMembers].map(m => {
+            const active = assigneeFilter === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setAssigneeFilter(m.id)}
+                style={{
+                  padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  background: active ? 'var(--brand-accent, #6366f1)' : 'transparent',
+                  color: active ? 'white' : 'var(--text-muted)',
+                }}
+              >
+                {m.name ?? m.id}
+              </button>
+            )
+          })}
+        </div>
+
+        <span style={{ ...FIELD_LABEL, marginBottom: 0 }}>Source</span>
+        <select
+          value={sourceFilter}
+          onChange={e => setSourceFilter(e.target.value)}
+          style={{ ...FIELD_INPUT, width: 'auto' }}
+        >
+          <option value="all">All Sources</option>
+          {sourceOptions.map(s => {
+            const cfg = SOURCE_CONFIG[s] ?? { label: s, icon: '📌' }
+            return <option key={s} value={s}>{cfg.icon} {cfg.label}</option>
+          })}
+        </select>
+
+        {filtering && (
+          <button
+            onClick={() => { setAssigneeFilter('all'); setSourceFilter('all') }}
+            style={{
+              padding: '5px 10px', background: 'transparent', color: 'var(--text-muted)',
+              border: '1px solid var(--border)', borderRadius: 8, fontSize: 11, cursor: 'pointer',
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+
+        {filtering && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {visible.length} of {leads.length} leads
+          </span>
+        )}
+      </div>
+
       {/* Board */}
       {view === 'board' && (
         <div style={{ flex: 1, display: 'flex', minHeight: 0, borderTop: '1px solid var(--border)' }}>
           {STAGES.map(stage => {
-            const colLeads = leads.filter(l => l.status === stage.id)
+            const colLeads = visible.filter(l => l.status === stage.id)
             const colValue = colLeads.reduce((s, l) => s + val(l), 0)
             return (
               <div key={stage.id} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -444,7 +562,7 @@ export default function PipelineClient({
               </tr>
             </thead>
             <tbody>
-              {leads.map(lead => {
+              {visible.map(lead => {
                 const stage = stageById.get(lead.status)
                 const overdue = isOverdue(lead)
                 const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
@@ -471,8 +589,10 @@ export default function PipelineClient({
                   </tr>
                 )
               })}
-              {leads.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>No leads yet.</td></tr>
+              {visible.length === 0 && (
+                <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+                  {filtering ? 'No leads match these filters.' : 'No leads yet.'}
+                </td></tr>
               )}
             </tbody>
           </table>
@@ -490,6 +610,7 @@ export default function PipelineClient({
           activitiesLoading={activitiesLoading}
           memberName={memberName}
           onAddActivity={addActivity}
+          onConvert={convertToClient}
           onPatch={patch}
           onRemove={removeLead}
           onDisqualify={disqualifyLead}
@@ -870,7 +991,7 @@ function draftFrom(l: Lead) {
 
 function DetailModal({
   lead, today, saving, assignedName, teamMembers, activities, activitiesLoading,
-  memberName, onAddActivity, onPatch, onRemove, onDisqualify, onLineCard, onClose,
+  memberName, onAddActivity, onConvert, onPatch, onRemove, onDisqualify, onLineCard, onClose,
 }: {
   lead: Lead
   today: string
@@ -881,6 +1002,7 @@ function DetailModal({
   activitiesLoading: boolean
   memberName: (id: string | null) => string | null
   onAddActivity: (leadId: string, type: string, summary: string, method: string) => Promise<void>
+  onConvert: (lead: Lead) => Promise<void>
   onPatch: (id: string, updates: Partial<Lead>) => Promise<void>
   onRemove: (lead: Lead) => Promise<void>
   onDisqualify: (lead: Lead, reason: string) => Promise<void>
@@ -977,16 +1099,46 @@ function DetailModal({
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
         </div>
 
-        <button
-          onClick={onLineCard}
-          style={{
-            marginTop: 12, width: '100%', padding: '8px 16px', background: 'transparent',
-            color: 'var(--brand-accent, #6366f1)', border: '1px solid var(--brand-accent, #6366f1)',
-            borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          🖨 View Line Card
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button
+            onClick={onLineCard}
+            style={{
+              flex: 1, padding: '8px 16px', background: 'transparent',
+              color: 'var(--brand-accent, #6366f1)', border: '1px solid var(--brand-accent, #6366f1)',
+              borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            🖨 View Line Card
+          </button>
+
+          {/* Conversion is only meaningful once the deal is won. */}
+          {lead.status === 'won' && (
+            lead.converted_to_client_id ? (
+              <a
+                href={`/reports/${lead.converted_to_client_id}`}
+                style={{
+                  flex: 1, padding: '8px 16px', background: '#16a34a15', color: '#16a34a',
+                  border: '1px solid #16a34a50', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  textAlign: 'center', textDecoration: 'none',
+                }}
+              >
+                ✓ Client: {lead.converted_to_client_id}
+              </a>
+            ) : (
+              <button
+                onClick={() => onConvert(lead)}
+                disabled={saving}
+                style={{
+                  flex: 1, padding: '8px 16px', background: '#16a34a', color: 'white',
+                  border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1,
+                }}
+              >
+                {saving ? 'Converting…' : '→ Convert to Client'}
+              </button>
+            )
+          )}
+        </div>
 
         {/* Editable fields */}
         <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
