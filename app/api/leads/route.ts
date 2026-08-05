@@ -1,6 +1,7 @@
 // app/api/leads/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
+import { syncLeadStage, warningNote } from '@/lib/activecampaign/pipeline-sync'
 
 function deny(reason: 'unauthenticated' | 'forbidden' | null) {
   return reason === 'unauthenticated'
@@ -59,5 +60,27 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // New leads are created at status 'new', which is never a transition, so the
+  // PATCH-based sync would never fire for them. Send pipeline-new here — it is
+  // the trigger for the "New Lead Introduction" automation.
+  const acSync = await syncLeadStage(
+    { email: data.email, name: data.name, phone: data.phone, business_name: data.business_name },
+    'new'
+  )
+
+  if (acSync.warning) {
+    const merged = data.notes
+      ? `${data.notes}\n${warningNote(acSync.warning)}`
+      : warningNote(acSync.warning)
+    const { data: withNote } = await supabase
+      .from('leads')
+      .update({ notes: merged })
+      .eq('id', data.id)
+      .select()
+      .single()
+    if (withNote) return NextResponse.json({ ...withNote, acSync })
+  }
+
+  return NextResponse.json({ ...data, acSync })
 }

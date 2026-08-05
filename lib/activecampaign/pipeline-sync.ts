@@ -13,12 +13,14 @@
 const AC_URL = process.env.ACTIVECAMPAIGN_API_URL || process.env.ACTIVECAMPAIGN_URL || ''
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || ''
 
-// Stages that enroll the contact in an automation, by automation name.
-// IDs can be pinned via env to skip the name lookup.
-const STAGE_AUTOMATIONS: Record<string, { name: string; envId?: string }> = {
-  won:  { name: 'New Client Onboarding', envId: process.env.AC_AUTOMATION_WON_ID },
-  lost: { name: 'Lost Lead Nurture',     envId: process.env.AC_AUTOMATION_LOST_ID },
-}
+// Every stage sends `pipeline-<status>`. Three of those tags are automation
+// triggers on the ActiveCampaign side — the tag is what starts the sequence,
+// so nothing here enrolls contacts directly:
+//   pipeline-new  -> "New Lead Introduction"
+//   pipeline-won  -> "New Client Onboarding"
+//   pipeline-lost -> "Lost Lead Nurture"
+// The rest (contacted, discovery, proposal, contract-sent, disqualified) are
+// tags only, for segmentation and reporting.
 
 export type AcSyncResult = {
   ok: boolean
@@ -29,6 +31,12 @@ export type AcSyncResult = {
 
 export function stageTagName(stage: string) {
   return `pipeline-${stage}`
+}
+
+/** Dated note line used when a sync is skipped or fails. */
+export function warningNote(warning: string) {
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date())
+  return `[${day}] ⚠ ${warning}`
 }
 
 function configured() {
@@ -99,23 +107,6 @@ async function addTag(contactId: string, tagId: string) {
   })
 }
 
-/** Resolve an automation id by name. Returns null when no automation matches. */
-async function findAutomationId(name: string): Promise<string | null> {
-  const data = await ac(`/api/3/automations?filters[name]=${encodeURIComponent(name)}&limit=100`)
-  const list = data?.automations || []
-  const exact = list.find(
-    (a: { name?: string; id?: string }) => a.name?.toLowerCase() === name.toLowerCase()
-  )
-  return exact?.id ? String(exact.id) : (list[0]?.id ? String(list[0].id) : null)
-}
-
-async function addToAutomation(contactId: string, automationId: string) {
-  await ac('/api/3/contactAutomations', {
-    method: 'POST',
-    body: JSON.stringify({ contactAutomation: { contact: contactId, automation: automationId } }),
-  })
-}
-
 /**
  * Sync one stage transition. Never throws.
  * A lead with no email is skipped with a warning for the caller to record.
@@ -125,19 +116,6 @@ export async function syncLeadStage(
   newStatus: string
 ): Promise<AcSyncResult> {
   const steps: string[] = []
-
-  // Disqualified means the lead never belonged in the pipeline — often spam or
-  // a wrong number. Pushing those into ActiveCampaign would pollute the CRM
-  // (and bill for the contact), so they are not synced. Remove this branch if
-  // you do want a 'pipeline-disqualified' tag in AC.
-  if (newStatus === 'disqualified') {
-    return {
-      ok: true,
-      skipped: true,
-      warning: null,
-      steps: ['skipped: disqualified leads are not pushed to ActiveCampaign'],
-    }
-  }
 
   if (!lead.email) {
     return {
@@ -166,22 +144,10 @@ export async function syncLeadStage(
     await addTag(contactId, tagId)
     steps.push(`tagged ${tagName}`)
 
-    const automation = STAGE_AUTOMATIONS[newStatus]
-    if (automation) {
-      const automationId = automation.envId || (await findAutomationId(automation.name))
-      if (automationId) {
-        await addToAutomation(contactId, automationId)
-        steps.push(`enrolled in "${automation.name}"`)
-      } else {
-        return {
-          ok: true,
-          skipped: false,
-          warning: `Tagged ${tagName}, but no ActiveCampaign automation named "${automation.name}" was found — enrollment skipped.`,
-          steps,
-        }
-      }
-    }
-
+    // No explicit automation enrollment: the automations in AC are triggered
+    // by these tags, so adding the tag is what starts them. Calling
+    // contactAutomations as well would enroll the contact twice and can send
+    // duplicate emails.
     return { ok: true, skipped: false, warning: null, steps }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

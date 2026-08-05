@@ -213,9 +213,10 @@ export default function PipelineClient({
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Could not add lead (${res.status})`)
       }
-      const created = await res.json()
+      const { acSync, ...created } = await res.json()
       setLeads(prev => [created, ...prev])
       setAdding(false)
+      if (acSync?.warning) setError(acSync.warning)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add lead')
     } finally {

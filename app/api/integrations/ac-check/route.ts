@@ -10,7 +10,14 @@ import { checkSalesAccess } from '@/lib/auth/sales'
 const AC_URL = process.env.ACTIVECAMPAIGN_API_URL || process.env.ACTIVECAMPAIGN_URL || ''
 const AC_KEY = process.env.ACTIVECAMPAIGN_API_KEY || ''
 
-const WANTED = ['New Client Onboarding', 'Lost Lead Nurture']
+// Automations triggered by the tags the pipeline sends.
+const WANTED = ['New Lead Introduction', 'New Client Onboarding', 'Lost Lead Nurture']
+
+// Every tag the sync can send, so the preflight can report which already exist.
+const EXPECTED_TAGS = [
+  'pipeline-new', 'pipeline-contacted', 'pipeline-discovery', 'pipeline-proposal',
+  'pipeline-contract-sent', 'pipeline-won', 'pipeline-lost', 'pipeline-disqualified',
+]
 
 export async function GET() {
   const { allowed, reason } = await checkSalesAccess()
@@ -78,9 +85,12 @@ export async function GET() {
     )
 
     const tags = await get('/api/3/tags?search=pipeline&limit=100')
-    out.existingPipelineTags = (tags?.tags || [])
+    const existing: string[] = (tags?.tags || [])
       .map((t: { tag?: string }) => t.tag)
       .filter((t: string) => t?.startsWith('pipeline-'))
+    out.existingPipelineTags = existing
+    // Absent tags are not a problem — ensureTag creates them on first use.
+    out.expectedTags = EXPECTED_TAGS.map(t => ({ tag: t, exists: existing.includes(t) }))
 
     out.ok = (out.wanted as { found: boolean }[]).every(w => w.found)
     return NextResponse.json(out)
