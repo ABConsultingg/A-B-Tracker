@@ -55,14 +55,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (acSync.warning) {
       const note = stamp(acSync.warning)
       const merged = data.notes ? `${data.notes}\n${note}` : note
-      const { data: withNote } = await supabase
-        .from('leads')
-        .update({ notes: merged })
-        .eq('id', params.id)
-        .select()
-        .single()
-      if (withNote) return NextResponse.json({ ...withNote, acSync })
+      await supabase.from('leads').update({ notes: merged }).eq('id', params.id)
     }
+
+    // Re-read after a stage change. log_lead_stage_change is an AFTER trigger,
+    // so the row returned by the UPDATE above still holds the pre-trigger
+    // last_activity_at / is_stale — returning it would leave a just-cleared
+    // stale badge showing in the UI until a refresh.
+    const { data: fresh } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+    if (fresh) return NextResponse.json({ ...fresh, acSync })
   }
 
   return NextResponse.json(acSync ? { ...data, acSync } : data)
