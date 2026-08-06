@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
 import { syncLeadStage, setContactTag } from '@/lib/activecampaign/pipeline-sync'
+import { notifyLeadStageChanged } from '@/lib/lead-notify'
 
 function deny(reason: 'unauthenticated' | 'forbidden' | null) {
   return reason === 'unauthenticated'
@@ -51,6 +52,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       { email: data.email, name: data.name, phone: data.phone, business_name: data.business_name },
       data.status
     )
+
+    // Notify the pipeline watchers of the move. Best-effort.
+    try {
+      await notifyLeadStageChanged(
+        { id: data.id, business_name: data.business_name },
+        before.status,
+        data.status
+      )
+    } catch (e) {
+      console.error('[leads PATCH] stage notification failed', e)
+    }
 
     if (acSync.warning) {
       const note = stamp(acSync.warning)

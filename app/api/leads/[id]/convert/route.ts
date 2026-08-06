@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
 import { createServiceClient } from '@/lib/supabase/service'
+import { notifyLeadConverted } from '@/lib/lead-notify'
 
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -89,6 +90,18 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     .single()
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  // Only announce a genuine conversion, not a repeat link of an existing client.
+  if (created) {
+    try {
+      await notifyLeadConverted(
+        { id: lead.id, business_name: lead.business_name },
+        clientId
+      )
+    } catch (e) {
+      console.error('[leads convert] notification failed', e)
+    }
+  }
 
   return NextResponse.json({
     client_id: clientId,

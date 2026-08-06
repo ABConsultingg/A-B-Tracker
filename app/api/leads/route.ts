@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
 import { syncLeadStage, warningNote } from '@/lib/activecampaign/pipeline-sync'
+import { notifyLeadCreated } from '@/lib/lead-notify'
 
 function deny(reason: 'unauthenticated' | 'forbidden' | null) {
   return reason === 'unauthenticated'
@@ -68,6 +69,18 @@ export async function POST(req: NextRequest) {
     { email: data.email, name: data.name, phone: data.phone, business_name: data.business_name },
     'new'
   )
+
+  // Alert the pipeline watchers. Best-effort: the lead is already created.
+  try {
+    await notifyLeadCreated({
+      id: data.id,
+      business_name: data.business_name,
+      source: data.source,
+      assessment_score: data.assessment_score,
+    })
+  } catch (e) {
+    console.error('[leads POST] lead notification failed', e)
+  }
 
   if (acSync.warning) {
     const merged = data.notes

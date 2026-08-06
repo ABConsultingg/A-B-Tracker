@@ -13,7 +13,9 @@ const FROM_WA = 'whatsapp:+17084126025';
 export type NotifSourceType =
   | 'dm' | 'mention' | 'broadcast' | 'client_message'
   | 'wo_created' | 'wo_assigned' | 'wo_stage'
-  | 'comment' | 'standup' | 'social_content';
+  | 'comment' | 'standup' | 'social_content'
+  // Sales pipeline events (wo_notifications.source_type is unconstrained text).
+  | 'lead_created' | 'lead_stage' | 'lead_converted';
 
 export interface NotifPayload {
   recipientMemberId: string;
