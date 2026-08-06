@@ -104,19 +104,18 @@ function AssigneesEditor({ woId, woTitle, initialAssignees, team, isAdmin }: {
     const { error } = await supabase.from('wo_assignees').insert({ work_order_id: woId, team_member_id: memberId })
     if (!error) {
       setAssignees(prev => [...prev, { id: m.id, name: m.name }])
-      // Notify the assignee via SMS/WhatsApp
-      if (m.auth_user_id) {
-        fetch('/api/notify/team', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            member_ids: [m.auth_user_id],
-            message: `📋 You've been assigned to a work order: ${woTitle}`,
-            wo_id: woId,
-            wo_title: woTitle,
-          }),
-        }).catch(() => {})
-      }
+      // Notify the assignee. Goes through the work-order dispatcher so the
+      // approved ASSIGNED_ASSIGNEE template is used — a freeform WhatsApp body
+      // is rejected outside the 24h window (Twilio 63016).
+      fetch('/api/notifications/wo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'wo_assigned',
+          woId,
+          addedAssignees: [m.id],
+        }),
+      }).catch(() => {})
     }
   }
   async function remove(memberId: string) {

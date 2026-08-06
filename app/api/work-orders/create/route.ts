@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { notifyWoCreated } from '@/lib/work-order-notify'
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -74,5 +75,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, wo: data })
+  // Notify after the assignee row exists, so the owner and the assignee both get
+  // picked up. Best-effort: the work order is already created and must not be
+  // reported as failed because a message could not be delivered.
+  let notifications: unknown = null
+  if (data) {
+    try {
+      notifications = await notifyWoCreated(data.id)
+    } catch (e) {
+      console.error('[work-orders/create] notification failure', e)
+      notifications = { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  return NextResponse.json({ ok: true, wo: data, notifications })
 }

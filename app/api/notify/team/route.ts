@@ -1,62 +1,92 @@
+// app/api/notify/team/route.ts
+// Notify team members by team_members.id.
+//
+// Two things were wrong before:
+//   1. It matched member_ids against auth_user_id, so passing team_members.id
+//      found nobody, sent nothing, and still returned 200 {ok:true} — a silent
+//      no-op. It now matches on id, and reports per-recipient outcomes.
+//   2. It sent a freeform WhatsApp Body, which WhatsApp rejects outside the
+//      24-hour window (Twilio 63016). Delivery now goes through
+//      sendNotification(), which records the in-app notification and sends
+//      WhatsApp only via an approved content template.
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createAdmin } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import { sendNotification } from '@/lib/notifications'
 
-const supabaseAdmin = createAdmin(
+const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
-  const { member_ids, message, wo_id, wo_title } = await req.json()
-  if (!message || !member_ids?.length) return NextResponse.json({ error: 'member_ids and message required' }, { status: 400 })
+const TEMPLATES: Record<string, string | undefined> = {
+  new_submitted:     process.env.TWILIO_TEMPLATE_NEW_SUBMITTED,
+  assigned_owner:    process.env.TWILIO_TEMPLATE_ASSIGNED_OWNER,
+  assigned_assignee: process.env.TWILIO_TEMPLATE_ASSIGNED_ASSIGNEE,
+  deliverables_done: process.env.TWILIO_TEMPLATE_DELIVERABLES_DONE,
+  client_approved:   process.env.TWILIO_TEMPLATE_CLIENT_APPROVED,
+  client_revision:   process.env.TWILIO_TEMPLATE_CLIENT_REVISION,
+  ready_to_bill:     process.env.TWILIO_TEMPLATE_READY_TO_BILL,
+  stage_changed:     process.env.TWILIO_TEMPLATE_STAGE_CHANGED,
+}
 
+export async function POST(req: NextRequest) {
+  const { member_ids, message, wo_id, wo_title, template, variables } = await req.json()
+
+  if (!message || !Array.isArray(member_ids) || member_ids.length === 0) {
+    return NextResponse.json({ error: 'member_ids and message required' }, { status: 400 })
+  }
+
+  // Match on team_members.id (e.g. 'valerie'), not auth_user_id.
   const { data: members } = await supabaseAdmin
     .from('team_members')
-    .select('id, name, phone, whatsapp_number, notif_whatsapp, auth_user_id')
-    .in('auth_user_id', member_ids)
+    .select('id, name, whatsapp_number, notif_whatsapp, active')
+    .in('id', member_ids)
+
+  const found = members ?? []
+  const missing = member_ids.filter((id: string) => !found.some(m => m.id === id))
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.abconsultingg.com'
-  const woLink = wo_id ? `\n\n${appUrl}/dashboard/wo/${wo_id}` : ''
-  const fullMessage = message + woLink
+  const linkUrl = wo_id ? `${appUrl}/dashboard/wo/${wo_id}` : appUrl
+  const contentSid = template ? TEMPLATES[template] : undefined
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  const from = process.env.TWILIO_WHATSAPP_NUMBER || '+17084126025'
+  const results: Array<Record<string, unknown>> = []
 
-  if (!accountSid || !authToken) {
-    console.error('Twilio not configured')
-    return NextResponse.json({ error: 'Twilio not configured' }, { status: 500 })
-  }
-
-  const results: any[] = []
-
-  for (const member of (members || [])) {
-    // Use whatsapp_number if set, otherwise fall back to phone
-    const waTo = member.whatsapp_number || member.phone
-    if (!waTo) { results.push({ member: member.name, ok: false, reason: 'no number' }); continue }
-
-    try {
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-      const body = new URLSearchParams({
-        To: `whatsapp:${waTo}`,
-        From: `whatsapp:${from}`,
-        Body: fullMessage,
-      })
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: body.toString(),
-      })
-      const data = await res.json()
-      if (!res.ok) console.error('Twilio WA error for', member.name, data)
-      results.push({ member: member.name, ok: res.ok, sid: data.sid, error: data.message })
-    } catch (e) {
-      results.push({ member: member.name, ok: false, error: String(e) })
+  for (const m of found) {
+    if (!m.active) {
+      results.push({ member: m.id, inApp: false, whatsapp: 'skipped: inactive' })
+      continue
     }
+
+    await sendNotification({
+      recipientMemberId: m.id,
+      sourceType: 'wo_assigned',
+      workOrderId: wo_id ?? undefined,
+      bodyPreview: message,
+      authorName: 'System',
+      linkUrl,
+      templateSid: contentSid,
+      templateVars: contentSid
+        ? (variables ?? { '1': wo_title ?? message, '2': '', '3': linkUrl })
+        : undefined,
+    })
+
+    // Explain precisely why WhatsApp did or did not go out, instead of a blanket ok.
+    const whatsapp = !m.notif_whatsapp
+      ? 'skipped: notif_whatsapp off'
+      : !m.whatsapp_number
+        ? 'skipped: no whatsapp_number'
+        : !contentSid
+          ? 'skipped: no approved template supplied (freeform is rejected by WhatsApp)'
+          : 'sent'
+
+    results.push({ member: m.id, inApp: true, whatsapp })
   }
 
-  return NextResponse.json({ ok: true, results })
+  return NextResponse.json({
+    ok: true,
+    requested: member_ids.length,
+    delivered_in_app: results.filter(r => r.inApp).length,
+    unknown_member_ids: missing,
+    results,
+  })
 }
