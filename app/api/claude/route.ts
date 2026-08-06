@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createSessionClient } from '@/lib/supabase/server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,7 +101,10 @@ async function buildContext(level: 'owner' | 'admin' | 'team', authUserId: strin
 
   let context = 'You are the A&B Consulting Group internal AI assistant. IMPORTANT: Never share cost, pricing, invoice amounts, or financial data in any message that will be sent to a client or visible in client-facing communications. Cost data is internal only. Today is ' + now + '.\n' +
     'You help the team manage work orders, clients, schedules, and operations.\n' +
-    'The person talking to you is ' + memberName + ' (' + level + ' level).\n\n' +
+    'Your own name is Pancho. The person you are talking to is ' + memberName +
+    ' (' + level + ' level) — always address them as ' + memberName +
+    ', and never refer to them as Pancho. When you write something on their behalf, ' +
+    'such as a standup, put their name on it, not yours.\n\n' +
     'WORK ORDER SUMMARY (' + filteredWos.length + ' active WOs):\n' +
     'Stages: ' + JSON.stringify(stageCounts) + '\n' +
     'Top clients: ' + topClients + '\n\n' +
@@ -900,9 +904,31 @@ async function executeTool(name: string, input: any, level: string, authUserId: 
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, authUserId, role, memberName } = await req.json()
+    // Identity is resolved from the session, never from the request body.
+    // Previously authUserId, role and memberName were read from JSON sent by the
+    // browser, which meant (a) the assistant was told whatever name the client
+    // claimed — the cause of it addressing people as "Pancho" and writing
+    // "Pancho's Standup" — and (b) a crafted request could pass role: 'owner'
+    // to unlock the action tools and the financial context below.
+    const session = createSessionClient()
+    const { data: { user } } = await session.auth.getUser()
+    if (!user) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
-    const level = getUserLevel(authUserId, role)
+    const { data: me } = await supabaseAdmin
+      .from('team_members')
+      .select('id, name, role, active')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+
+    if (!me?.active) {
+      return NextResponse.json({ ok: false, error: 'Active team member required' }, { status: 403 })
+    }
+
+    const { messages } = await req.json()
+
+    const authUserId = user.id
+    const memberName = me.name || 'Teammate'
+    const level = getUserLevel(authUserId, me.role)
     const systemPrompt = await buildContext(level, authUserId, memberName)
 
     const apiKey = process.env.ANTHROPIC_API_KEY

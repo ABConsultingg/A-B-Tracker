@@ -166,10 +166,18 @@ export default function PipelineClient({
   initialLeads,
   teamMembers,
   today,
+  canSeeFinancials,
 }: {
   initialLeads: Lead[]
   teamMembers: TeamMember[]
   today: string
+  /**
+   * From team_members.sales_access. When false, every dollar figure is hidden —
+   * card values, the Pipeline/Won KPI tiles, per-column $/mo, the list Value
+   * column, and the estimated-value inputs. The board, names, stages, and
+   * activity stay fully visible.
+   */
+  canSeeFinancials: boolean
 }) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [view, setView] = useState<'board' | 'list'>('board')
@@ -440,8 +448,14 @@ export default function PipelineClient({
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '16px 24px', flexShrink: 0 }}>
-        <Kpi label="Pipeline Value" value={`${money(kpis.pipelineValue)}/mo`} subtitle={`${kpis.activeDeals} open deal${kpis.activeDeals === 1 ? '' : 's'}`} />
-        <Kpi label="Won Value" value={`${money(kpis.wonValue)}/mo`} subtitle={`${kpis.wonCount} closed won`} accent="#16a34a" />
+        {/* Money tiles are omitted entirely without sales_access — not blanked
+            out, so there is no shape of a number to infer. */}
+        {canSeeFinancials && (
+          <>
+            <Kpi label="Pipeline Value" value={`${money(kpis.pipelineValue)}/mo`} subtitle={`${kpis.activeDeals} open deal${kpis.activeDeals === 1 ? '' : 's'}`} />
+            <Kpi label="Won Value" value={`${money(kpis.wonValue)}/mo`} subtitle={`${kpis.wonCount} closed won`} accent="#16a34a" />
+          </>
+        )}
         <Kpi label="Active Deals" value={String(kpis.activeDeals)} subtitle={kpis.noAction > 0 ? `${kpis.noAction} with no next action` : 'all have next actions'} />
         <Kpi
           label="Overdue Actions"
@@ -532,13 +546,13 @@ export default function PipelineClient({
                       {colLeads.length}
                     </span>
                   </div>
-                  {colValue > 0 && (
+                  {canSeeFinancials && colValue > 0 && (
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{money(colValue)}/mo</div>
                   )}
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
                   {colLeads.map(lead => (
-                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)} assignedName={memberName(lead.assigned_to)} onClick={() => setSelected(lead)} />
+                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)} assignedName={memberName(lead.assigned_to)} canSeeFinancials={canSeeFinancials} onClick={() => setSelected(lead)} />
                   ))}
                   {colLeads.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '28px 8px', color: 'var(--text-muted)', fontSize: 11 }}>No leads</div>
@@ -556,7 +570,7 @@ export default function PipelineClient({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--bg-sunken)', position: 'sticky', top: 0 }}>
-                {['Business', 'Contact', 'Stage', 'Value', 'Next Action', 'Due', 'Source', 'Assigned'].map(h => (
+                {['Business', 'Contact', 'Stage', ...(canSeeFinancials ? ['Value'] : []), 'Next Action', 'Due', 'Source', 'Assigned'].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
@@ -579,7 +593,9 @@ export default function PipelineClient({
                         {stage?.label ?? lead.status}
                       </span>
                     </td>
-                    <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{val(lead) ? `${money(val(lead))}/mo` : '—'}</td>
+                    {canSeeFinancials && (
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{val(lead) ? `${money(val(lead))}/mo` : '—'}</td>
+                    )}
                     <td style={{ padding: '8px 12px', color: lead.next_action ? undefined : 'var(--text-muted)' }}>{lead.next_action || '—'}</td>
                     <td style={{ padding: '8px 12px', color: overdue ? '#dc2626' : 'var(--text-muted)', fontWeight: overdue ? 600 : 400 }}>
                       {lead.next_action_date ? `${overdue ? '⚠ ' : ''}${fmtDate(lead.next_action_date)}` : '—'}
@@ -590,7 +606,7 @@ export default function PipelineClient({
                 )
               })}
               {visible.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
+                <tr><td colSpan={canSeeFinancials ? 8 : 7} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
                   {filtering ? 'No leads match these filters.' : 'No leads yet.'}
                 </td></tr>
               )}
@@ -609,6 +625,7 @@ export default function PipelineClient({
           activities={activities}
           activitiesLoading={activitiesLoading}
           memberName={memberName}
+          canSeeFinancials={canSeeFinancials}
           onAddActivity={addActivity}
           onConvert={convertToClient}
           onPatch={patch}
@@ -625,6 +642,7 @@ export default function PipelineClient({
           events={events}
           eventsLoading={eventsLoading}
           assignedName={memberName(lineCard.assigned_to)}
+          canSeeFinancials={canSeeFinancials}
           onClose={() => setLineCard(null)}
         />
       )}
@@ -633,6 +651,7 @@ export default function PipelineClient({
         <AddLeadModal
           teamMembers={teamMembers}
           saving={saving}
+          canSeeFinancials={canSeeFinancials}
           onCreate={createLead}
           onClose={() => setAdding(false)}
         />
@@ -651,7 +670,7 @@ function Kpi({ label, value, subtitle, accent }: { label: string; value: string;
   )
 }
 
-function Card({ lead, today, overdue, assignedName, onClick }: { lead: Lead; today: string; overdue: boolean; assignedName: string | null; onClick: () => void }) {
+function Card({ lead, today, overdue, assignedName, canSeeFinancials, onClick }: { lead: Lead; today: string; overdue: boolean; assignedName: string | null; canSeeFinancials: boolean; onClick: () => void }) {
   const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
   const days = lead.next_action_date ? daysUntil(lead.next_action_date, today) : null
   const dueToday = days === 0
@@ -694,7 +713,7 @@ function Card({ lead, today, overdue, assignedName, onClick }: { lead: Lead; tod
         </div>
       )}
 
-      {val(lead) > 0 && (
+      {canSeeFinancials && val(lead) > 0 && (
         <div style={{ fontSize: 12, fontWeight: 600, fontFamily: 'monospace', marginTop: 4 }}>
           {money(val(lead))}/mo
         </div>
@@ -771,10 +790,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function AddLeadModal({
-  teamMembers, saving, onCreate, onClose,
+  teamMembers, saving, canSeeFinancials, onCreate, onClose,
 }: {
   teamMembers: TeamMember[]
   saving: boolean
+  canSeeFinancials: boolean
   onCreate: (fields: Record<string, string>) => Promise<void>
   onClose: () => void
 }) {
@@ -829,9 +849,11 @@ function AddLeadModal({
             <Field label="Location">
               <input type="text" value={f.location} onChange={set('location')} placeholder="Region or market" style={inputStyle} />
             </Field>
-            <Field label="Estimated Value ($/mo)">
-              <input type="number" min={0} step={100} value={f.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
-            </Field>
+            {canSeeFinancials && (
+              <Field label="Estimated Value ($/mo)">
+                <input type="number" min={0} step={100} value={f.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
+              </Field>
+            )}
           </div>
 
           <GroupHeading>Primary Contact</GroupHeading>
@@ -991,11 +1013,12 @@ function draftFrom(l: Lead) {
 
 function DetailModal({
   lead, today, saving, assignedName, teamMembers, activities, activitiesLoading,
-  memberName, onAddActivity, onConvert, onPatch, onRemove, onDisqualify, onLineCard, onClose,
+  memberName, canSeeFinancials, onAddActivity, onConvert, onPatch, onRemove, onDisqualify, onLineCard, onClose,
 }: {
   lead: Lead
   today: string
   saving: boolean
+  canSeeFinancials: boolean
   assignedName: string | null
   teamMembers: TeamMember[]
   activities: Activity[]
@@ -1089,7 +1112,7 @@ function DetailModal({
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
               <span style={{ color: stage?.color, fontWeight: 600 }}>{stage?.label ?? lead.status}</span>
               {' · '}{src.icon} {src.label}
-              {val(lead) > 0 && ` · ${money(val(lead))}/mo`}
+              {canSeeFinancials && val(lead) > 0 && ` · ${money(val(lead))}/mo`}
               {lead.lead_type && ` · ${leadTypeLabel(lead.lead_type)}`}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
@@ -1157,9 +1180,11 @@ function DetailModal({
             <Field label="Location">
               <input type="text" value={d.location} onChange={set('location')} style={inputStyle} />
             </Field>
-            <Field label="Estimated Value ($/mo)">
-              <input type="number" min={0} step={100} value={d.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
-            </Field>
+            {canSeeFinancials && (
+              <Field label="Estimated Value ($/mo)">
+                <input type="number" min={0} step={100} value={d.estimated_value} onChange={set('estimated_value')} style={inputStyle} />
+              </Field>
+            )}
           </div>
 
           <GroupHeading>Primary Contact</GroupHeading>
@@ -1450,12 +1475,13 @@ function LcSection({ title, children }: { title: string; children: React.ReactNo
 }
 
 function LineCard({
-  lead, events, eventsLoading, assignedName, onClose,
+  lead, events, eventsLoading, assignedName, canSeeFinancials, onClose,
 }: {
   lead: Lead
   events: StageEvent[]
   eventsLoading: boolean
   assignedName: string | null
+  canSeeFinancials: boolean
   onClose: () => void
 }) {
   useEffect(() => {
@@ -1526,7 +1552,7 @@ function LineCard({
           <div style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
             <strong>{stage?.label ?? lead.status}</strong>
             {lead.lead_type && <> · {leadTypeLabel(lead.lead_type)}</>}
-            {val(lead) > 0 && <> · {money(val(lead))}/mo estimated</>}
+            {canSeeFinancials && val(lead) > 0 && <> · {money(val(lead))}/mo estimated</>}
           </div>
         </div>
 
@@ -1537,7 +1563,7 @@ function LineCard({
               <LcRow label="Website" value={lead.website} />
               <LcRow label="Industry" value={lead.industry} />
               <LcRow label="Location" value={lead.location} />
-              <LcRow label="Estimated Value" value={val(lead) > 0 ? `${money(val(lead))}/mo` : null} />
+              {canSeeFinancials && <LcRow label="Estimated Value" value={val(lead) > 0 ? `${money(val(lead))}/mo` : null} />}
             </LcSection>
 
             <LcSection title="Address">

@@ -8,7 +8,7 @@ export default async function SalesPipelinePage() {
   // This route sits outside /dashboard, so it inherits neither the middleware
   // matcher nor the dashboard layout's guard — gate it here. Sales data is
   // restricted to owner/sales, matching the RLS policy on public.leads.
-  const { supabase, allowed, reason } = await checkSalesAccess()
+  const { supabase, allowed, canSeeFinancials, reason } = await checkSalesAccess()
   if (!allowed) redirect(reason === 'unauthenticated' ? '/login' : '/dashboard')
 
   const { data: leadsRaw } = await supabase
@@ -33,6 +33,7 @@ export default async function SalesPipelinePage() {
       initialLeads={leadsRaw || []}
       teamMembers={teamMembers || []}
       today={today}
+      canSeeFinancials={canSeeFinancials}
     />
   )
 }
