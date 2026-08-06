@@ -54,6 +54,36 @@ type Member = {
   active: boolean | null
 }
 
+/** WhatsApp through the business number, using an approved content template. */
+async function sendWhatsApp(to: string, contentSid: string, vars: Record<string, string>) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const from = process.env.TWILIO_WHATSAPP_NUMBER || '+17084126025'
+  if (!accountSid || !authToken) return { ok: false, detail: 'Twilio not configured' }
+
+  const form = new URLSearchParams({
+    To: to.startsWith('whatsapp:') ? to : `whatsapp:${to}`,
+    From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
+    ContentSid: contentSid,
+    ContentVariables: JSON.stringify(vars),
+  })
+  const res = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    { method: 'POST',
+      headers: {
+        Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: form.toString() }
+  )
+  const data = await res.json()
+  if (!res.ok) {
+    console.error('[lead-notify] WhatsApp failed', data.code, data.message)
+    return { ok: false, detail: `${data.code}: ${data.message}` }
+  }
+  return { ok: true, sid: data.sid }
+}
+
 /** SMS through the messaging service, using the same content template. */
 async function sendSms(to: string, contentSid: string, vars: Record<string, string>) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
@@ -147,24 +177,56 @@ async function fanOut(
   return { ok: true, recipients: results }
 }
 
-export async function notifyLeadCreated(lead: {
-  id: string
+/**
+ * WhatsApp/SMS only — no in-app row.
+ *
+ * Used by the outbox worker for lead_created, because
+ * trg_notify_on_lead_insert has already written the in-app notification
+ * inside the database. Writing it again here would double it in the bell.
+ */
+export async function sendLeadCreatedChannels(payload: {
   business_name: string
-  source?: string | null
-  assessment_score?: number | null
+  source: string
+  score: string
 }) {
-  return fanOut(
-    T.LEAD_CREATED,
-    {
-      '1': lead.business_name || 'Unnamed business',
-      '2': lead.source || 'unknown',
-      '3': lead.assessment_score != null ? String(lead.assessment_score) : 'n/a',
-      '4': PIPELINE_URL,
-    },
-    `New lead: ${lead.business_name}`,
-    'lead_created',
-    lead.id
-  )
+  const templateSid = T.LEAD_CREATED
+  const vars = {
+    '1': payload.business_name || 'Unnamed business',
+    '2': payload.source || 'unknown',
+    '3': payload.score || 'n/a',
+    '4': PIPELINE_URL,
+  }
+
+  const { data } = await sb
+    .from('team_members')
+    .select('id, name, phone, whatsapp_number, notif_whatsapp, notif_sms, active')
+    .in('id', RECIPIENTS)
+
+  const results: Array<Record<string, unknown>> = []
+  for (const m of (data ?? []) as Member[]) {
+    if (!m.active) { results.push({ member: m.id, skipped: 'inactive' }); continue }
+
+    let whatsapp = 'skipped'
+    if (!m.notif_whatsapp) whatsapp = 'skipped: notif_whatsapp off'
+    else if (!m.whatsapp_number) whatsapp = 'skipped: no whatsapp_number'
+    else if (!templateSid) whatsapp = 'skipped: template not configured'
+    else {
+      const r = await sendWhatsApp(m.whatsapp_number, templateSid, vars)
+      whatsapp = r.ok ? `queued ${r.sid}` : `failed ${r.detail}`
+    }
+
+    let sms = 'skipped'
+    if (!m.notif_sms) sms = 'skipped: notif_sms off'
+    else if (!m.phone) sms = 'skipped: no phone'
+    else if (!templateSid) sms = 'skipped: template not configured'
+    else {
+      const r = await sendSms(m.phone, templateSid, vars)
+      sms = r.ok ? `queued ${r.sid}` : `failed ${r.detail}`
+    }
+
+    results.push({ member: m.id, whatsapp, sms })
+  }
+  return { ok: true, recipients: results }
 }
 
 export async function notifyLeadStageChanged(

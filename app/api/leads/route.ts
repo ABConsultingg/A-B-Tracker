@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkSalesAccess } from '@/lib/auth/sales'
 import { syncLeadStage, warningNote } from '@/lib/activecampaign/pipeline-sync'
-import { notifyLeadCreated } from '@/lib/lead-notify'
+
 
 function deny(reason: 'unauthenticated' | 'forbidden' | null) {
   return reason === 'unauthenticated'
@@ -70,17 +70,10 @@ export async function POST(req: NextRequest) {
     'new'
   )
 
-  // Alert the pipeline watchers. Best-effort: the lead is already created.
-  try {
-    await notifyLeadCreated({
-      id: data.id,
-      business_name: data.business_name,
-      source: data.source,
-      assessment_score: data.assessment_score,
-    })
-  } catch (e) {
-    console.error('[leads POST] lead notification failed', e)
-  }
+  // No lead-created notification here on purpose. trg_notify_on_lead_insert
+  // fires for every insert into leads, so notifying here as well would send
+  // twice for leads added through this route. The trigger writes the in-app
+  // notification immediately and queues WhatsApp/SMS for the outbox worker.
 
   if (acSync.warning) {
     const merged = data.notes
