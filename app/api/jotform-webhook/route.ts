@@ -23,6 +23,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 const FORM_RBS_MARKETING_WO = '243245428504050'
 const FORM_RBS_PRODUCT_PURCHASE = '222854697649879'
 const FORM_RBS_EVENT_FLYER = '220905170640851'
+const FORM_RBS_LINECARD_ORDERS = '230264553360854'
 
 // ============================================================
 // Type of Project → service_id mapping (Form 1)
@@ -108,6 +109,10 @@ export async function POST(req: NextRequest) {
       parsedWoId = result.woId
     } else if (formID === FORM_RBS_EVENT_FLYER) {
       const result = await handleEventFlyer(supabase, rawRequest, submissionID)
+      status = 'success'
+      parsedWoId = result.woId
+    } else if (formID === FORM_RBS_LINECARD_ORDERS) {
+      const result = await handleLinecardOrder(supabase, rawRequest, submissionID)
       status = 'success'
       parsedWoId = result.woId
     } else {
@@ -548,6 +553,126 @@ async function handleEventFlyer(
   if (error) {
     throw new Error(`work_orders insert failed: ${error.message}`)
   }
+
+  return { woId }
+}
+
+
+// ============================================================
+// Form 4 mapping: RBS Linecard Orders → work_orders
+// ============================================================
+// Fields: Name, Email, My Products (product name + quantity), Submission Date.
+// A linecard order is a print job, so it lands as a single work order with the
+// products summarised in notes. Line items are deliberately not written — see
+// wo_line_items in handlePerformancePlus if per-quantity reporting is wanted
+// later.
+async function handleLinecardOrder(
+  supabase: ReturnType<typeof createServiceClient>,
+  raw: Record<string, any>,
+  submissionID: string
+): Promise<{ woId: string }> {
+  // Idempotency: a Jotform retry must not create a second work order.
+  if (submissionID) {
+    const { data: existing } = await supabase
+      .from('work_orders')
+      .select('id')
+      .eq('jotform_submission_id', submissionID)
+      .maybeSingle()
+    if (existing?.id) return { woId: existing.id }
+  }
+
+  // Jotform keys arrive as q{N}_label{N} — strip both so lookups are stable.
+  const normKey = (k: string): string =>
+    String(k).toLowerCase().replace(/^q\d+_/, '').replace(/\d+$/, '').replace(/[_\s]+/g, '').trim()
+
+  const get = (label: string): string => {
+    const target = label.toLowerCase().replace(/[_\s]+/g, '').trim()
+    for (const [k, v] of Object.entries(raw)) {
+      if (normKey(k) === target) {
+        if (typeof v === 'string' && v.trim()) return v.trim()
+        if (v && typeof v === 'object') return JSON.stringify(v)
+      }
+    }
+    return ''
+  }
+
+  // Name may be a plain string or Jotform's {first, last} object.
+  const parseName = (): string => {
+    for (const [k, v] of Object.entries(raw)) {
+      if (normKey(k) !== 'name') continue
+      if (typeof v === 'string' && v.trim()) return v.trim()
+      if (v && typeof v === 'object') {
+        const combined = [String((v as any).first || ''), String((v as any).last || '')]
+          .map(s => s.trim()).filter(Boolean).join(' ')
+        if (combined) return combined
+      }
+    }
+    return ''
+  }
+
+  // "My Products" is a structured control: { products: [ { productName, quantity, ... } ] }.
+  // Fall back to any raw string value so an unexpected shape still gets recorded
+  // rather than silently dropped.
+  const productsField = (): { list: Array<any>; rawText: string } => {
+    for (const [k, v] of Object.entries(raw)) {
+      if (!normKey(k).includes('myproducts')) continue
+      if (v && typeof v === 'object') {
+        const products = (v as any).products
+        if (Array.isArray(products)) return { list: products, rawText: '' }
+        return { list: [], rawText: JSON.stringify(v) }
+      }
+      if (typeof v === 'string' && v.trim()) return { list: [], rawText: v.trim() }
+    }
+    return { list: [], rawText: '' }
+  }
+
+  const name = parseName()
+  const email = get('email') || get('eMail')
+  const submissionDate = get('submissionDate') || get('date')
+  const { list: products, rawText: productsRaw } = productsField()
+
+  const title = `${name || 'Unknown'} - Linecard Order`
+
+  const notesParts: string[] = []
+  if (name) notesParts.push(`Ordered by: ${name}`)
+  if (email) notesParts.push(`Email: ${email}`)
+  if (submissionDate) notesParts.push(`Submitted: ${submissionDate}`)
+
+  if (products.length > 0) {
+    const lines = products.map((p) => {
+      const pname = String(p?.productName ?? p?.name ?? 'Item').trim() || 'Item'
+      const qty = Number(p?.quantity) || 1
+      return `- ${pname} x${qty}`
+    })
+    notesParts.push(`Products (${products.length}):\n${lines.join('\n')}`)
+  } else if (productsRaw) {
+    notesParts.push(`Products (unparsed):\n${productsRaw}`)
+  } else {
+    notesParts.push('Products: none listed on the submission')
+  }
+
+  notesParts.push(`(Imported from Jotform RBS Linecard Orders submission ${submissionID})`)
+
+  const woId = 'WO-' + crypto.randomUUID().slice(0, 8)
+
+  const { error } = await supabase.from('work_orders').insert({
+    id: woId,
+    client_id: 'rbs',
+    title,
+    service_id: 'ab-print',
+    notes: notesParts.join('\n\n'),
+    submitted_via: 'jotform',
+    submitted_by_email: email || null,
+    submitted_by_name: name || null,
+    jotform_submission_id: submissionID || null,
+    owner_id: 'tanya',
+    stage: 'submitted',
+    priority: 'medium',
+    occurrence: 'One-time',
+    submitted_at: new Date().toISOString(),
+  })
+
+  if (error) throw new Error(`work_orders insert failed: ${error.message}`)
 
   return { woId }
 }
