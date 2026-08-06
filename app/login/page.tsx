@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic'
 
 import LoginForm from './LoginForm'
+import PublicFooter from '@/components/layout/PublicFooter'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4"
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
          style={{ background: 'linear-gradient(135deg, #1a2b4a 0%, #2d4a7c 100%)' }}>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         <div className="flex items-center gap-3 mb-8">
@@ -17,6 +18,7 @@ export default function LoginPage() {
         </div>
         <LoginForm />
       </div>
+      <PublicFooter tone="dark" />
     </div>
   )
 }
