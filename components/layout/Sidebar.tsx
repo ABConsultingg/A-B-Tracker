@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/clients',   label: 'Clients',            icon: '🏢', adminOrSales: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/all',       label: 'All Work Orders',    icon: '☰',  countKey: 'allWos', section: 'views' },
   { href: '/dashboard/tasks',     label: 'Tasks',              icon: '✓',  countKey: 'myTasks', section: 'views' },
-  { href: '/reports',             label: 'Reports',            icon: '📈', adminOnly: true, section: 'tools' },
+  { href: '/reports',             label: 'Reports',            icon: '📈', adminOrSales: true, section: 'tools' },
   { href: '/dashboard/social',    label: 'Social Hub',         icon: '📱', section: 'tools' },
   { href: '/dashboard/ppc',       label: 'PPC Hub',            icon: '🎯', adminOnly: true, section: 'tools' },
   { href: '/pipeline',            label: 'Sales Pipeline',     icon: '🏆', salesOnly: true, section: 'tools' },
