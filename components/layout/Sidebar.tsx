@@ -14,6 +14,8 @@ type NavItem = {
   // Visible only to owner/sales roles — gated on role alone, not view mode,
   // since sales users have no admin/team toggle.
   salesOnly?: boolean
+  // Visible to admin, owner and sales (client management).
+  adminOrSales?: boolean
   countKey?: keyof SidebarCounts
   section: 'views' | 'tools'
 }
@@ -23,7 +25,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/pipeline',  label: 'Pipeline Health',    icon: '📊', section: 'views' },
   { href: '/dashboard/schedule',  label: 'Execution Schedule', icon: '📅', countKey: 'schedule', section: 'views' },
   { href: '/dashboard/finance',   label: 'Finance',            icon: '💰', ownerOnly: true, section: 'views' },
-  { href: '/dashboard/clients',   label: 'Clients',            icon: '🏢', adminOnly: true, countKey: 'clients', section: 'views' },
+  { href: '/dashboard/clients',   label: 'Clients',            icon: '🏢', adminOrSales: true, countKey: 'clients', section: 'views' },
   { href: '/dashboard/all',       label: 'All Work Orders',    icon: '☰',  countKey: 'allWos', section: 'views' },
   { href: '/dashboard/tasks',     label: 'Tasks',              icon: '✓',  countKey: 'myTasks', section: 'views' },
   { href: '/reports',             label: 'Reports',            icon: '📈', adminOnly: true, section: 'tools' },
@@ -188,6 +190,9 @@ export default function Sidebar({ member, counts = {}, clientBadges = [], teamMe
 
   const items = NAV.filter(n => {
     if (n.salesOnly) return isSales
+    // Sales has no admin/team toggle, so it must not be gated on viewMode;
+    // admins keep the existing behaviour of hiding in team view.
+    if (n.adminOrSales) return member?.role === 'sales' || (isAdmin && viewMode === 'admin')
     if (n.ownerOnly) return isOwner && viewMode === 'admin'
     if (!n.adminOnly) return true
     if (!isAdmin) return false

@@ -187,7 +187,13 @@ export default function ClientsClient({
   portalUsers: PortalUser[]
   recurringServices?: { client_id: string; amount: number; active: boolean }[]
 }) {
-  const isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner'
+  // Client management is open to admin, owner and sales. The clients table's
+  // admin_sales insert/update policies are the real enforcement; this just
+  // decides what the page offers.
+  const isAdmin =
+    currentMember?.role === 'admin' ||
+    currentMember?.role === 'owner' ||
+    currentMember?.role === 'sales'
   const portalByClient = useMemo(() => {
     const m: Record<string, PortalUser[]> = {}
     portalUsers.forEach(p => { if (!m[p.client_id]) m[p.client_id] = []; m[p.client_id].push(p) })

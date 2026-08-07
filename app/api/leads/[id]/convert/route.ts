@@ -51,10 +51,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
 
   let created = false
   if (!existing) {
-    // RLS on clients restricts INSERT to is_admin(), which is strictly
-    // role = 'admin' — it excludes both owner and sales. Rather than widen that
-    // policy for every client write, escalate just this one operation, which is
-    // already gated above by checkSalesAccess.
+    // The clients insert policy (admin_sales) now covers admin and sales, but
+    // is_admin() is strictly role = 'admin', so it still excludes OWNER. Using
+    // the user-scoped client here would therefore break conversions for Adrian.
+    // Service role keeps this one operation working for every role that
+    // checkSalesAccess already admitted above.
     const admin = createServiceClient()
     const { error: clientError } = await admin
       .from('clients')
