@@ -18,6 +18,7 @@ const ALLOWED_HOSTS = new Set([
   "richardsbuildingsupply.com",
   "kbcexteriors.com",
   "nicoroofingexteriors.com",
+  "midwestconstructionexperts.com",
 ]);
 
 const RATE_LIMIT_MAX = 100;
