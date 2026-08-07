@@ -11,6 +11,11 @@
 // point of view — nothing belonging to RBS may appear.
 import { buildPortalContext } from './portal-context.ts'
 
+// social_monthly_mix.month is stored as a first-of-month DATE string
+// ('2026-08-01'), not 'YYYY-MM' — see app/dashboard/social/planning.
+// These fixtures must mirror the real storage format: querying 'YYYY-MM'
+// matched zero rows and silently emptied the whole social section, and an
+// earlier version of this file hid that by using the wrong format here too.
 const DB: Record<string, any[]> = {
   clients: [
     { id: 'culture', name: 'Culture Construction', company: 'Culture Construction', status: 'active' },
@@ -50,14 +55,14 @@ const DB: Record<string, any[]> = {
   ],
 
   social_monthly_mix: [
-    { client_name: 'Culture Construction', month: '2026-08', slot: 1, content_type: 'Post',
+    { client_name: 'Culture Construction', month: '2026-08-01', slot: 1, content_type: 'Post',
       post_type: 'Post', pillar: 'Value', topic: 'Fall roof maintenance tips',
       caption_text: 'Fall is coming. Here are 5 things every homeowner should check.',
       hashtags: '#roofing #fallprep', status: 'Ready', scheduled_date: '2026-08-12' },
-    { client_name: 'Culture Construction', month: '2026-08', slot: 2, content_type: 'Video',
+    { client_name: 'Culture Construction', month: '2026-08-01', slot: 2, content_type: 'Video',
       post_type: 'Video', pillar: 'Story', topic: 'Team spotlight',
       caption_text: 'Meet the crew.', hashtags: '#team', status: 'Draft', scheduled_date: null },
-    { client_name: 'Richards Building Supply', month: '2026-08', slot: 1, content_type: 'Post',
+    { client_name: 'Richards Building Supply', month: '2026-08-01', slot: 1, content_type: 'Post',
       post_type: 'Post', pillar: 'Value', topic: 'RBS SECRET SOCIAL',
       caption_text: 'RBS SECRET CAPTION', hashtags: '#rbs', status: 'Ready', scheduled_date: '2026-08-13' },
   ],
@@ -118,6 +123,7 @@ async function main() {
     ['Null-status task included',       t.includes('Concept round 2')],
     ['Done task excluded',              !t.includes('Finished thing')],
     ['Date renders correctly',          t.includes('Aug 12, 2026')],
+    ['Social month matched real format', t.includes('### 2026-08') && !t.includes('2026-08-01')],
     ['Social caption included',         t.includes('Fall is coming')],
     ['Social pillar included',          t.includes('Value')],
     ['Hashtags survive sanitising', t.includes('#roofing')],

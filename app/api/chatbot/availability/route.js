@@ -84,7 +84,11 @@ async function handlePost(request) {
           slots.push({
             start: cursor.toISOString(),
             end: slotEnd.toISOString(),
-            label: local.toLocaleString("en-US", {
+            // `cursor`, not `local`. `local` has already been shifted into
+            // Chicago time by toChicagoDate(), so formatting it *with* a
+            // timeZone option applies the offset a second time and every slot
+            // was labelled 5 hours early — 8:00 AM CDT rendered as 3:00 AM CDT.
+            label: cursor.toLocaleString("en-US", {
               weekday: "long",
               month: "short",
               day: "numeric",
