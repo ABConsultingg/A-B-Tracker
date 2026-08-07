@@ -186,6 +186,7 @@ export default function ClientsClient({
   clientRates: initialRates,
   portalUsers,
   recurringServices = [],
+  twilioNumbers = {},
   brandProfiles = [],
 }: {
   clients: Client[]
@@ -196,6 +197,7 @@ export default function ClientsClient({
   brandProfiles?: BrandProfile[]
   portalUsers: PortalUser[]
   recurringServices?: { client_id: string; amount: number; active: boolean }[]
+  twilioNumbers?: Record<string, string>
 }) {
   // Client management is open to admin, owner and sales. The clients table's
   // admin_sales insert/update policies are the real enforcement; this just
@@ -986,6 +988,7 @@ export default function ClientsClient({
                     seo_agent_enabled: selected.seo_agent_enabled,
                     reputation_mgmt_enabled: selected.reputation_mgmt_enabled,
                   }}
+                  twilioNumber={twilioNumbers[selected.id] ?? null}
                 />
               )}
 

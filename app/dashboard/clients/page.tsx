@@ -36,6 +36,21 @@ export default async function ClientsPage() {
     .from('portal_users')
     .select('id, client_id, name, email, role, auth_user_id, active, last_login_at')
 
+  // The receptionist panel shows the assigned Twilio line read-only. Keyed by
+  // tracker_client_id because call_intelligence_clients.client_id is its own
+  // namespace and does not match clients.id.
+  const { data: callClients } = await supabase
+    .from('call_intelligence_clients')
+    .select('tracker_client_id, twilio_number')
+    .not('tracker_client_id', 'is', null)
+
+  const twilioNumbers: Record<string, string> = {}
+  for (const row of callClients || []) {
+    if (row.tracker_client_id && row.twilio_number) {
+      twilioNumbers[row.tracker_client_id] = row.twilio_number
+    }
+  }
+
   return (
     <ClientsClient
       clients={clients || []}
@@ -46,6 +61,7 @@ export default async function ClientsPage() {
       brandProfiles={brandProfiles || []}
       portalUsers={portalUsers || []}
       recurringServices={recurringServices || []}
+      twilioNumbers={twilioNumbers}
     />
   )
 }

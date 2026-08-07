@@ -18,6 +18,20 @@ export type AiServiceConfig = {
     brand_color?: string | null
     booking_enabled?: boolean
   }
+  seo?: {
+    seo_frequency?: string
+    github_repo?: string | null
+    target_keywords?: string[]
+    seo_notification_email?: string | null
+  }
+  reputation?: {
+    google_place_id?: string | null
+    review_platforms?: string[]
+    review_request_sms_template?: string
+    review_request_email_template?: string
+    review_trigger?: string
+    aggregation_page_enabled?: boolean
+  }
 }
 
 export type AiServiceFlags = {
@@ -30,8 +44,8 @@ export type AiServiceFlags = {
 const SERVICES = [
   { key: 'chatbot_enabled',         label: 'Website Chatbot',   hint: 'Chat widget answers visitors on their site', panel: 'chatbot' },
   { key: 'receptionist_enabled',    label: 'AI Receptionist',   hint: 'Alex answers inbound phone calls',           panel: 'receptionist' },
-  { key: 'seo_agent_enabled',       label: 'SEO Agent',         hint: 'Automated SEO work',                         panel: null },
-  { key: 'reputation_mgmt_enabled', label: 'Reputation Mgmt',   hint: 'Review monitoring and responses',            panel: null },
+  { key: 'seo_agent_enabled',       label: 'SEO Agent',         hint: 'Automated SEO work',                         panel: 'seo' },
+  { key: 'reputation_mgmt_enabled', label: 'Reputation Manager', hint: 'Review requests and the public review page', panel: 'reputation' },
 ] as const
 
 const DAYS: Array<[string, string]> = [
@@ -43,17 +57,24 @@ const L = 'block text-[11px] font-semibold text-gray-500 uppercase mb-1'
 const I = 'w-full rounded border px-2 py-1.5 text-sm'
 const BORDER = { borderColor: '#e5e7eb' }
 
+// Mirrors DEFAULT_REVIEW_SMS in lib/reviews/defaults.ts
+const DEFAULT_TEMPLATE =
+  "Hi {customer_name}, thank you for choosing {business_name}! We'd love your feedback — it only takes 30 seconds: {review_link}"
+
 /** Admin/owner only — the parent decides whether to render this at all. */
 export default function ServiceToggles({
   clientId,
   initial,
   initialConfig = {},
   initialDomains = [],
+  twilioNumber = null,
 }: {
   clientId: string
   initial: AiServiceFlags
   initialConfig?: AiServiceConfig
   initialDomains?: string[]
+  /** Read-only: assigned in call_intelligence_clients, not editable here. */
+  twilioNumber?: string | null
 }) {
   const [flags, setFlags] = useState<AiServiceFlags>(initial)
   const [cfg, setCfg] = useState<AiServiceConfig>(initialConfig)
@@ -104,6 +125,27 @@ export default function ServiceToggles({
 
   const contacts: TransferContact[] = rec.transfer_contacts ?? []
   const hours = rec.business_hours ?? {}
+
+  const seo = cfg.seo ?? {}
+  const rep = cfg.reputation ?? {}
+  const setSeo = (patch: Record<string, unknown>) =>
+    setCfg(c => ({ ...c, seo: { ...(c.seo ?? {}), ...patch } }))
+  const setRep = (patch: Record<string, unknown>) =>
+    setCfg(c => ({ ...c, reputation: { ...(c.reputation ?? {}), ...patch } }))
+
+  const platforms = rep.review_platforms ?? []
+  const togglePlatform = (name: string, on: boolean) =>
+    setRep({
+      review_platforms: on
+        ? Array.from(new Set([...platforms, name]))
+        : platforms.filter(p => p !== name),
+    })
+
+  // Derived, never stored — they must not drift from place id / slug.
+  const reviewLink = rep.google_place_id
+    ? `https://search.google.com/local/writereview?placeid=${rep.google_place_id}`
+    : ''
+  const aggUrl = `app.abconsultingg.com/reviews/${clientId}`
 
   return (
     <div className="mt-6 border-t pt-5">
@@ -244,6 +286,15 @@ export default function ServiceToggles({
                     </div>
                   </div>
 
+                  <div className="mt-3">
+                    <label className={L}>
+                      Twilio number
+                      <span className="ml-1 font-normal normal-case text-gray-400">— assigned, read-only</span>
+                    </label>
+                    <input className={I + ' bg-gray-100 text-gray-500'} style={BORDER} readOnly
+                      value={twilioNumber ?? 'Not assigned'} />
+                  </div>
+
                   <button type="button" disabled={busy === 'receptionist'}
                     onClick={() => send({ config: { receptionist: rec } }, 'receptionist')}
                     className="mt-3 px-3 py-1.5 rounded text-sm font-semibold text-white disabled:opacity-50"
@@ -268,9 +319,14 @@ export default function ServiceToggles({
                     </div>
                     <div>
                       <label className={L}>Brand colour</label>
-                      <input className={I} style={BORDER} value={bot.brand_color ?? ''}
-                        placeholder="#1a2b4a"
-                        onChange={e => setBot({ brand_color: e.target.value })} />
+                      <div className="flex gap-2 items-center">
+                        <input type="color" className="h-8 w-10 rounded border" style={BORDER}
+                          value={/^#[0-9a-fA-F]{6}$/.test(bot.brand_color ?? '') ? (bot.brand_color as string) : '#1a2b4a'}
+                          onChange={e => setBot({ brand_color: e.target.value })} />
+                        <input className={I} style={BORDER} value={bot.brand_color ?? ''}
+                          placeholder="#1a2b4a"
+                          onChange={e => setBot({ brand_color: e.target.value })} />
+                      </div>
                     </div>
                   </div>
 
@@ -318,6 +374,142 @@ export default function ServiceToggles({
                   {savedNote === 'chatbot' && (
                     <span className="ml-2 text-xs text-green-700">✓ Saved</span>
                   )}
+                </div>
+              )}
+
+              {/* ── SEO Agent settings ── */}
+              {expanded && s.panel === 'seo' && (
+                <div className="ml-12 mt-3 mb-2 p-3 rounded-lg bg-gray-50 border" style={BORDER}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={L}>Frequency</label>
+                      <select className={I} style={BORDER} value={seo.seo_frequency ?? 'monthly'}
+                        onChange={e => setSeo({ seo_frequency: e.target.value })}>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={L}>Notification email</label>
+                      <input className={I} style={BORDER} value={seo.seo_notification_email ?? ''}
+                        placeholder="seo@abconsultingg.com"
+                        onChange={e => setSeo({ seo_notification_email: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className={L}>GitHub repo</label>
+                    <input className={I} style={BORDER} value={seo.github_repo ?? ''}
+                      placeholder="Adrian-AB-17/culture-construction"
+                      onChange={e => setSeo({ github_repo: e.target.value })} />
+                  </div>
+                  <div className="mt-3">
+                    <label className={L}>
+                      Target keywords
+                      <span className="ml-1 font-normal normal-case text-gray-400">— comma separated</span>
+                    </label>
+                    <textarea className={I} style={BORDER} rows={2}
+                      value={(seo.target_keywords ?? []).join(', ')}
+                      placeholder="roofing chicago, storm damage repair"
+                      onChange={e => setSeo({ target_keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean) })} />
+                  </div>
+                  <button type="button" disabled={busy === 'seo'}
+                    onClick={() => send({ config: { seo } }, 'seo')}
+                    className="mt-3 px-3 py-1.5 rounded text-sm font-semibold text-white disabled:opacity-50"
+                    style={{ background: '#1a2b4a' }}>
+                    {busy === 'seo' ? 'Saving…' : 'Save SEO settings'}
+                  </button>
+                  {savedNote === 'seo' && <span className="ml-2 text-xs text-green-700">✓ Saved</span>}
+                </div>
+              )}
+
+              {/* ── Reputation Manager settings ── */}
+              {expanded && s.panel === 'reputation' && (
+                <div className="ml-12 mt-3 mb-2 p-3 rounded-lg bg-gray-50 border" style={BORDER}>
+                  <div>
+                    <label className={L}>Google Place ID</label>
+                    <input className={I} style={BORDER} value={rep.google_place_id ?? ''}
+                      placeholder="ChIJ..."
+                      onChange={e => setRep({ google_place_id: e.target.value })} />
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={L}>
+                      Review link
+                      <span className="ml-1 font-normal normal-case text-gray-400">— generated from the Place ID</span>
+                    </label>
+                    <input className={I + ' bg-gray-100 text-gray-500'} style={BORDER} readOnly
+                      value={reviewLink || 'Enter a Place ID to generate'} />
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={L}>Platforms</label>
+                    <div className="flex flex-wrap gap-3">
+                      {[['google','Google'],['yelp','Yelp'],['bbb','BBB'],['facebook','Facebook']].map(([id,lbl]) => (
+                        <label key={id} className="flex items-center gap-1.5 text-sm text-gray-700">
+                          <input type="checkbox" checked={platforms.includes(id)}
+                            onChange={e => togglePlatform(id, e.target.checked)} />
+                          {lbl}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      The public page shows Google reviews only for now; the others are recorded for later.
+                    </p>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={L}>SMS request template</label>
+                    <textarea className={I} style={BORDER} rows={3}
+                      value={rep.review_request_sms_template ?? DEFAULT_TEMPLATE}
+                      onChange={e => setRep({ review_request_sms_template: e.target.value })} />
+                  </div>
+                  <div className="mt-3">
+                    <label className={L}>Email request template</label>
+                    <textarea className={I} style={BORDER} rows={3}
+                      value={rep.review_request_email_template ?? DEFAULT_TEMPLATE}
+                      onChange={e => setRep({ review_request_email_template: e.target.value })} />
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Placeholders: {'{customer_name}'}, {'{business_name}'}, {'{review_link}'}
+                  </p>
+
+                  <div className="mt-3">
+                    <label className={L}>Request trigger</label>
+                    <select className={I} style={BORDER} value={rep.review_trigger ?? 'manual'}
+                      onChange={e => setRep({ review_trigger: e.target.value })}>
+                      <option value="manual">Manual</option>
+                      <option value="after_wo_completion">After WO completion</option>
+                      <option value="automated_3_day">Automated (3-day delay)</option>
+                    </select>
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Sending is not built yet — this records the intent only.
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
+                    <input type="checkbox" checked={rep.aggregation_page_enabled === true}
+                      onChange={e => setRep({ aggregation_page_enabled: e.target.checked })} />
+                    Publish the public review page
+                  </label>
+
+                  <div className="mt-2">
+                    <label className={L}>Public page</label>
+                    <input className={I + ' bg-gray-100 text-gray-500'} style={BORDER} readOnly value={aggUrl} />
+                    <div className="flex gap-3 mt-1">
+                      <a href={`/reviews/${clientId}`} target="_blank" rel="noreferrer"
+                        className="text-[11px] text-blue-700 hover:underline">Open page</a>
+                      <a href={`/reviews/${clientId}/qr`}
+                        className="text-[11px] text-blue-700 hover:underline">Download QR (PNG)</a>
+                    </div>
+                  </div>
+
+                  <button type="button" disabled={busy === 'reputation'}
+                    onClick={() => send({ config: { reputation: rep } }, 'reputation')}
+                    className="mt-3 px-3 py-1.5 rounded text-sm font-semibold text-white disabled:opacity-50"
+                    style={{ background: '#1a2b4a' }}>
+                    {busy === 'reputation' ? 'Saving…' : 'Save reputation settings'}
+                  </button>
+                  {savedNote === 'reputation' && <span className="ml-2 text-xs text-green-700">✓ Saved</span>}
                 </div>
               )}
             </div>

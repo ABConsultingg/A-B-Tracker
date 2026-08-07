@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { DEFAULT_REVIEW_SMS, DEFAULT_REVIEW_EMAIL } from '@/lib/reviews/defaults'
 
 const TOGGLES = [
   'chatbot_enabled',
@@ -23,6 +24,10 @@ const TOGGLES = [
 const TONES = ['professional', 'friendly', 'casual']
 const AFTER_HOURS = ['voicemail', 'transfer', 'both']
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+const SEO_FREQ = ['weekly', 'monthly']
+const REVIEW_TRIGGERS = ['manual', 'after_wo_completion', 'automated_3_day']
+const REVIEW_PLATFORMS = ['google', 'yelp', 'bbb', 'facebook']
+
 
 const str = (v: unknown, max = 400): string | null => {
   if (typeof v !== 'string') return null
@@ -81,6 +86,36 @@ function cleanChatbot(input: Record<string, unknown>) {
   }
 }
 
+function cleanSeo(input: Record<string, unknown>) {
+  const kw = Array.isArray(input.target_keywords)
+    ? input.target_keywords
+    : String(input.target_keywords ?? '').split(',')
+  return {
+    seo_frequency: SEO_FREQ.includes(String(input.seo_frequency)) ? String(input.seo_frequency) : 'monthly',
+    github_repo: str(input.github_repo, 200),
+    seo_notification_email: str(input.seo_notification_email, 200),
+    target_keywords: kw.map(k => String(k).trim()).filter(Boolean).slice(0, 100),
+  }
+}
+
+function cleanReputation(input: Record<string, unknown>) {
+  const platforms = Array.isArray(input.review_platforms) ? input.review_platforms : []
+  return {
+    google_place_id: str(input.google_place_id, 200),
+    review_platforms: platforms
+      .map(p => String(p).toLowerCase())
+      .filter(p => REVIEW_PLATFORMS.includes(p)),
+    review_request_sms_template: str(input.review_request_sms_template, 1000) ?? DEFAULT_REVIEW_SMS,
+    review_request_email_template: str(input.review_request_email_template, 2000) ?? DEFAULT_REVIEW_EMAIL,
+    review_trigger: REVIEW_TRIGGERS.includes(String(input.review_trigger))
+      ? String(input.review_trigger)
+      : 'manual',
+    aggregation_page_enabled: input.aggregation_page_enabled === true,
+    // review_link and aggregation_page_url are derived, never stored: storing
+    // them would let them drift from google_place_id and the client slug.
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
 
@@ -129,6 +164,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     if (incoming.chatbot && typeof incoming.chatbot === 'object') {
       merged.chatbot = cleanChatbot(incoming.chatbot as Record<string, unknown>)
+    }
+    if (incoming.seo && typeof incoming.seo === 'object') {
+      merged.seo = cleanSeo(incoming.seo as Record<string, unknown>)
+    }
+    if (incoming.reputation && typeof incoming.reputation === 'object') {
+      merged.reputation = cleanReputation(incoming.reputation as Record<string, unknown>)
     }
     updates.ai_service_config = merged
   }
