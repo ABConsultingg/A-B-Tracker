@@ -12,6 +12,8 @@ import ServiceToggles from './ServiceToggles'
 type ClientStatus = 'active' | 'paused' | 'archived'
 
 type Client = {
+  ai_service_config?: Record<string, unknown> | null
+  website_domain?: string[] | null
   chatbot_enabled?: boolean | null
   receptionist_enabled?: boolean | null
   seo_agent_enabled?: boolean | null
@@ -976,6 +978,8 @@ export default function ClientsClient({
               {!isNew && selected && isAdminOrOwner && (
                 <ServiceToggles
                   clientId={selected.id}
+                  initialConfig={(selected.ai_service_config as never) || {}}
+                  initialDomains={selected.website_domain || []}
                   initial={{
                     chatbot_enabled: selected.chatbot_enabled,
                     receptionist_enabled: selected.receptionist_enabled,
