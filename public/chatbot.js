@@ -414,12 +414,16 @@
       if (data.message) {
         addMsg("bot", data.message);
         messages.push({ role: "assistant", content: data.message });
-        transcript.push(`: `);
+        transcript.push(`Assistant: ${data.message}`);
       }
 
       // Lead captured — store and attempt booking if slot pending
-      if (data.lead) {
-        lead = data.lead;
+      // `data.lead` is only present on the single turn the lead is first
+      // captured. A visitor almost always picks a slot on a *later* turn, so
+      // gating on it alone meant the booking silently never happened. Fall
+      // back to the cached `lead` from an earlier turn.
+      if (data.lead) lead = data.lead;
+      if (lead) {
         if (root._pendingSlot) {
           await bookAppointment(lead, root._pendingSlot);
           root._pendingSlot = null;

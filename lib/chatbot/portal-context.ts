@@ -93,14 +93,22 @@ function todayIso(now: Date): string {
   }).format(now)
 }
 
-/** YYYY-MM for the current month + `offset`, derived from the same instant. */
+/**
+ * The month key for the current month + `offset`, in the exact format the
+ * social hub stores.
+ *
+ * social_monthly_mix.month is written as a first-of-month DATE string —
+ * `${year}-${month}-01` — by app/dashboard/social/planning/page.tsx and read
+ * back the same way by social/review. A bare 'YYYY-MM' matches nothing, which
+ * silently emptied the whole social section.
+ */
 function monthKey(now: Date, offset = 0): string {
   const iso = todayIso(now)
   const y = Number(iso.slice(0, 4))
   const m = Number(iso.slice(5, 7)) - 1 + offset
   const year = y + Math.floor(m / 12)
   const month = ((m % 12) + 12) % 12
-  return `${year}-${String(month + 1).padStart(2, '0')}`
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`
 }
 
 // Every query is checked. Supabase returns errors in-band, so destructuring
@@ -309,7 +317,8 @@ export async function buildPortalContext(
     for (const p of social) {
       if (p.month !== currentMonth) {
         currentMonth = p.month
-        L.push(`### ${safe(currentMonth, 10)}`)
+        // Display the month without the storage format's '-01' day part.
+        L.push(`### ${safe(String(currentMonth).slice(0, 7), 10)}`)
       }
       // Format: Slot 3 · Post · Value — Fall roof maintenance — Aug 12, 2026 [Ready]
       const kind = [p.content_type || p.post_type, p.pillar].map((x) => safe(x, 40)).filter(Boolean).join(' · ')
