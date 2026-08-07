@@ -186,6 +186,8 @@ export default function PipelineClient({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null)
   const [lineCard, setLineCard] = useState<Lead | null>(null)
   const [events, setEvents] = useState<StageEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
@@ -377,6 +379,26 @@ export default function PipelineClient({
     }
   }
 
+  // Dropping a card on a column is a stage change, so it goes through the same
+  // patch() as the modal buttons — meaning it also fires the AC sync and the
+  // pipeline notifications.
+  async function handleDrop(stageId: Stage) {
+    const id = draggingId
+    setDraggingId(null)
+    setDragOverStage(null)
+    if (!id) return
+    const lead = leads.find(l => l.id === id)
+    if (!lead || lead.status === stageId) return
+
+    // Disqualified requires a reason, so it is not a drop target — same rule as
+    // the Move to Stage row. Use the Disqualify action in the detail modal.
+    if (stageId === 'disqualified') {
+      setError('To disqualify a lead, open it and use Disqualify so a reason is recorded.')
+      return
+    }
+    await patch(id, { status: stageId })
+  }
+
   async function openLineCard(lead: Lead) {
     setLineCard(lead)
     setEvents([])
@@ -397,7 +419,12 @@ export default function PipelineClient({
       {/* Header */}
       <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Sales Pipeline</h1>
+          {/* /pipeline sits outside the /dashboard layout, so it has no sidebar —
+              this is the only way back. */}
+          <a href="/dashboard" style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none' }}>
+            ← Dashboard
+          </a>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '2px 0 0' }}>Sales Pipeline</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>
             {visible.length} lead{visible.length === 1 ? '' : 's'}
             {filtering && ` of ${leads.length}`} · {kpis.activeDeals} active · {kpis.wonCount} won
@@ -535,7 +562,19 @@ export default function PipelineClient({
             const colLeads = visible.filter(l => l.status === stage.id)
             const colValue = colLeads.reduce((s, l) => s + val(l), 0)
             return (
-              <div key={stage.id} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
+              <div
+                key={stage.id}
+                onDragOver={e => { e.preventDefault(); if (dragOverStage !== stage.id) setDragOverStage(stage.id) }}
+                onDragLeave={() => setDragOverStage(cur => (cur === stage.id ? null : cur))}
+                onDrop={e => { e.preventDefault(); handleDrop(stage.id) }}
+                style={{
+                  flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+                  borderRight: '1px solid var(--border)', overflow: 'hidden',
+                  background: dragOverStage === stage.id && stage.id !== 'disqualified'
+                    ? 'var(--brand-accent-soft, rgba(99,102,241,0.08))' : 'transparent',
+                  transition: 'background 0.15s',
+                }}
+              >
                 <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
@@ -552,7 +591,12 @@ export default function PipelineClient({
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
                   {colLeads.map(lead => (
-                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)} assignedName={memberName(lead.assigned_to)} canSeeFinancials={canSeeFinancials} onClick={() => setSelected(lead)} />
+                    <Card key={lead.id} lead={lead} today={today} overdue={isOverdue(lead)}
+                      assignedName={memberName(lead.assigned_to)} canSeeFinancials={canSeeFinancials}
+                      dragging={draggingId === lead.id}
+                      onDragStart={() => setDraggingId(lead.id)}
+                      onDragEnd={() => { setDraggingId(null); setDragOverStage(null) }}
+                      onClick={() => setSelected(lead)} />
                   ))}
                   {colLeads.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '28px 8px', color: 'var(--text-muted)', fontSize: 11 }}>No leads</div>
@@ -670,7 +714,11 @@ function Kpi({ label, value, subtitle, accent }: { label: string; value: string;
   )
 }
 
-function Card({ lead, today, overdue, assignedName, canSeeFinancials, onClick }: { lead: Lead; today: string; overdue: boolean; assignedName: string | null; canSeeFinancials: boolean; onClick: () => void }) {
+function Card({ lead, today, overdue, assignedName, canSeeFinancials, dragging, onDragStart, onDragEnd, onClick }: {
+  lead: Lead; today: string; overdue: boolean; assignedName: string | null
+  canSeeFinancials: boolean; dragging?: boolean
+  onDragStart?: () => void; onDragEnd?: () => void; onClick: () => void
+}) {
   const src = SOURCE_CONFIG[lead.source] ?? { label: lead.source, icon: '📌' }
   const days = lead.next_action_date ? daysUntil(lead.next_action_date, today) : null
   const dueToday = days === 0
@@ -681,15 +729,19 @@ function Card({ lead, today, overdue, assignedName, canSeeFinancials, onClick }:
 
   return (
     <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.() }}
+      onDragEnd={() => onDragEnd?.()}
       onClick={onClick}
       style={{
+        opacity: dragging ? 0.45 : 1,
         border: `1px solid ${flagged ? '#dc262650' : 'var(--border)'}`,
         borderLeft: flagged ? '3px solid #dc2626' : '1px solid var(--border)',
         borderRadius: 8,
         padding: '9px 10px',
         marginBottom: 8,
         background: 'var(--bg-elevated)',
-        cursor: 'pointer',
+        cursor: 'grab',
         fontSize: 12,
       }}
     >
