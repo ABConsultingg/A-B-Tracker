@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
-import { notifyStageChange } from '@/lib/notifyStageChange'
 
 type WO = { id: string; title: string; stage: string; deliverables_link: string | null;
   due_date?: string | null; description?: string | null; notes?: string | null; branch?: string | null;
@@ -65,19 +64,21 @@ export default function PortalApprovalModal({
     setBusy(true)
 
     // 1) Move the work order (RLS only permits sent-for-approval -> approved|revisions-received).
-    const { error: upErr } = await supabase
-      .from('work_orders').update({ stage: toStage }).eq('id', wo.id)
-    if (upErr) { setBusy(false); alert('Could not update: ' + upErr.message); return }
-
-    // Notify owner + assignees of client decision
-    notifyStageChange({
-      stage: toStage,
-      woId: wo.id,
-      woTitle: wo.title,
-      clientId: null,
-      ownerAuthId,
-      assigneeAuthIds,
+    // Via the API so the server notifies owner + assignees. RLS
+    // (portal_approves_own_wo) still enforces that this WO is
+    // sent-for-approval, belongs to this client, and that toStage is one of
+    // approved | revisions-received.
+    const res = await fetch(`/api/work-orders/${wo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: toStage }),
     })
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}))
+      setBusy(false)
+      alert('Could not update: ' + (b.error || res.status))
+      return
+    }
 
     // 2) Post a client-visible comment capturing the decision / feedback.
     const body = toStage === 'approved'

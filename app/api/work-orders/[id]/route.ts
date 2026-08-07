@@ -23,8 +23,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
+  // Portal users reach this route too, via the client approval flow. They are
+  // limited to `stage`; the portal_approves_own_wo policy on work_orders does
+  // the real enforcement (must currently be sent-for-approval, must belong to
+  // their client, target must be approved|revisions-received). Because the
+  // update below runs on the user-scoped client, that policy still applies.
+  let isPortal = false
   if (!member?.active) {
-    return NextResponse.json({ error: 'Active team member required' }, { status: 403 })
+    const { data: pu } = await supabase
+      .from('portal_users')
+      .select('client_id, active')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+    if (!pu || pu.active === false) {
+      return NextResponse.json({ error: 'Active team member or portal user required' }, { status: 403 })
+    }
+    isPortal = true
   }
 
   const body = await req.json().catch(() => null)
@@ -32,8 +46,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
+  const allowedKeys = isPortal ? (['stage'] as const) : UPDATABLE
   const updates: Record<string, unknown> = {}
-  for (const key of UPDATABLE) {
+  for (const key of allowedKeys) {
     if (key in body) updates[key] = body[key]
   }
   if (Object.keys(updates).length === 0) {

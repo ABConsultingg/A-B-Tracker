@@ -4,7 +4,6 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { STAGES, type WorkOrder, type WoStage, type ClientRate, type PrintProduct, type PrintProductTier } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import { useViewMode } from '@/lib/useViewMode'
-import { notifyStageChange } from '@/lib/notifyStageChange'
 import { ACTIVE_DELIVERY_STAGES, isStale, isOverdue } from '@/lib/sla'
 import { priceFor } from '@/lib/pricing'
 import { isCampaignService, CAMPAIGN_ITEMS, campaignItemCost, type CampaignPick } from '@/lib/campaign-items'
@@ -294,25 +293,19 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
   async function moveStage(woId: string, newStage: WoStage) {
     const prevState = workOrders
     setWorkOrders(prev => prev.map(w => w.id === woId ? { ...w, stage: newStage } : w))
-    const { data, error } = await supabase.from('work_orders').update({ stage: newStage, stage_entered_at: new Date().toISOString() }).eq('id', woId).select()
-    if (error) { alert('Move failed: ' + error.message); setWorkOrders(prevState); return }
-    // Fire notifications
-    const wo = workOrders.find(w => w.id === woId)
-    if (wo) {
-      const ownerMember = team.find((t: any) => t.id === wo.owner_id)
-      const woAssignees = (assignmentsByWo ?? {})[woId] || []
-      const assigneeAuthIds = woAssignees
-        .map((id: string) => team.find((t: any) => t.id === id)?.auth_user_id)
-        .filter(Boolean) as string[]
-      notifyStageChange({
-        stage: newStage,
-        woId: wo.id,
-        woTitle: wo.title,
-        clientId: wo.client_id,
-        ownerAuthId: ownerMember?.auth_user_id || null,
-        assigneeAuthIds,
-        senderName: (currentMember as any)?.name || undefined,
-      })
+    // Route through the API so the server sets stage_entered_at and fires the
+    // notification logic. Writing straight to Supabase here is what caused
+    // stage changes and assignments to notify nobody.
+    const res = await fetch(`/api/work-orders/${woId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: newStage }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      alert('Move failed: ' + (body.error || res.status))
+      setWorkOrders(prevState)
+      return
     }
   }
 
@@ -323,7 +316,11 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
     const updated = { ...wo, ...patch }
     setSelectedWo(updated)
     setWorkOrders(prev => prev.map(w => w.id === wo.id ? updated : w))
-    await supabase.from('work_orders').update(patch).eq('id', wo.id)
+    await fetch(`/api/work-orders/${wo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
     setSaving(false)
     setJustSaved(true)
     setTimeout(() => setJustSaved(false), 2000)
@@ -332,18 +329,8 @@ export default function BoardClient({ initialWorkOrders, clients, services, team
         .select('*').eq('work_order_id', wo.id)
         .order('changed_at', { ascending: false }).limit(20)
       setStageHistory(data || [])
-      const ownerMember = team.find((t: any) => t.id === wo.owner_id)
-      const assigneeMemberIds = assignees
-      const assigneeAuthIds = assigneeMemberIds
-        .map(id => team.find((t: any) => t.id === id)?.auth_user_id)
-        .filter(Boolean) as string[]
-      notifyStageChange({
-        stage: patch.stage as string,
-        woId: wo.id, woTitle: wo.title, clientId: wo.client_id,
-        ownerAuthId: ownerMember?.auth_user_id || null,
-        assigneeAuthIds,
-        senderName: ownerMember?.name || undefined,
-      })
+      // No notifyStageChange here: the PATCH above already notified. Calling it
+      // again would send every stage change from this drawer twice.
     }
   }
 

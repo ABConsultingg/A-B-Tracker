@@ -20,7 +20,6 @@ import { useViewMode } from '@/lib/useViewMode'
 import { DeliverablePreview } from '@/lib/deliverablePreview'
 import WoFilesTab, { type WoLink } from './WoFilesTab'
 import { stageView } from '@/lib/portal/stages'
-import { notifyStageChange } from '@/lib/notifyStageChange'
 
 type Tab =
   | 'overview'
@@ -403,11 +402,18 @@ function OverviewTab({
     setSavingField(field)
     const patch: Record<string, any> = { [field]: norm, updated_at: new Date().toISOString(), ...(extra || {}) }
     setWoState((s: any) => ({ ...s, ...patch }))
-    const { error } = await supabaseEdit.from('work_orders').update(patch).eq('id', wo.id)
+    // Through the API so owner changes and stage moves reach the notification
+    // logic; a direct Supabase write bypasses it entirely.
+    const res = await fetch(`/api/work-orders/${wo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
     setSavingField(null)
-    if (error) {
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
       setWoState((s: any) => ({ ...s, [field]: prev }))
-      alert('Save failed: ' + error.message)
+      alert('Save failed: ' + (body.error || res.status))
       return
     }
     setSavedField(field)
@@ -482,15 +488,8 @@ function OverviewTab({
           <Row label="Stage" value={isAdmin ? (
             <select defaultValue={woState.stage}
               onChange={e => {
-                saveField('stage', e.target.value, { stage_entered_at: new Date().toISOString() })
-                notifyStageChange({
-                  stage: e.target.value,
-                  woId: wo.id,
-                  woTitle: wo.title,
-                  clientId: (wo as any).client_id || null,
-                  ownerAuthId: team.find(t => t.id === woState.owner_id)?.auth_user_id || null,
-                  assigneeAuthIds: assignees.map(a => team.find(t => t.id === a.id)?.auth_user_id).filter(Boolean) as string[],
-                })
+                // PATCH /api/work-orders/[id] sets stage_entered_at and notifies.
+                saveField('stage', e.target.value)
               }}
               className="rounded border px-2 py-0.5 text-sm"
               style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }}>

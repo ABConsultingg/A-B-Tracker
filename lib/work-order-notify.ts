@@ -179,6 +179,25 @@ export async function notifyWoStageChanged(woId: string, newStage: string) {
       wo.clientEmail
     )
   }
+  // These two client emails previously came from the client-side
+  // notifyStageChange -> /api/notify path. That call is gone now that all WO
+  // mutations route through the API, so they are reproduced here to avoid
+  // silently dropping client-facing mail on those stages.
+  if (newStage === 'ordered' && wo.clientEmail) {
+    await clientEmail(
+      `Items have been ordered for "${wo.title}"`,
+      `<p>Hi ${wo.clientHello},</p><p>Great news — the items for <strong>${wo.title}</strong> have been ordered and are on their way. We'll notify you once everything is ready.</p><p><a href="${wo.portalLink}">View your project</a></p><p>— The A&B Team</p>`,
+      wo.clientEmail
+    )
+  }
+  if (newStage === 'deliverables-executed' && wo.clientEmail) {
+    await clientEmail(
+      `"${wo.title}" has been delivered`,
+      `<p>Hi ${wo.clientHello},</p><p><strong>${wo.title}</strong> has been marked as delivered.</p><p><a href="${wo.portalLink}">View your project</a></p><p>— The A&B Team</p>`,
+      wo.clientEmail
+    )
+  }
+
   if (newStage === 'deliverables-completed' && wo.owner_id) {
     await sendNotification({
       recipientMemberId: wo.owner_id, sourceType: 'wo_stage', workOrderId: woId,
