@@ -1,4 +1,5 @@
 import { preflight, guard, withCors } from "@/lib/chatbot/cors";
+import { resolveChatbotClient, brandProfilePrompt } from "@/lib/chatbot/brand-context";
 import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -59,7 +60,7 @@ async function fetchSiteKnowledge(origin) {
 }
 
 // Called once per request. clientConfig is passed from the embed script.
-function buildSystemPrompt(clientConfig, siteKnowledge = "") {
+function buildSystemPrompt(clientConfig, siteKnowledge = "", brandKnowledge = "", resolvedName = null) {
   const isAB = !clientConfig || clientConfig.isABSite;
 
   // Identity used inside the shared core. These were previously hardcoded to
@@ -71,7 +72,7 @@ function buildSystemPrompt(clientConfig, siteKnowledge = "") {
   const selfIntro = isAB
     ? `"I'm Alex — part of the team here. I work with every visitor to make sure
    you get to the right person fast."`
-    : `"I'm the assistant for ${clientConfig?.businessName || "this business"} — I help
+    : `"I'm the assistant for ${resolvedName || clientConfig?.businessName || "this business"} — I help
    visitors get answers and get connected with the team."`;
 
   // Shared sales intelligence
@@ -368,7 +369,7 @@ You help visitors learn about ${businessName}'s services and get connected with 
 ## SERVICES ${businessName.toUpperCase()} OFFERS
 ${serviceList.length ? serviceList.map((s) => `- ${s}`).join("\n") : "- (ask the visitor what they need and capture it for the team)"}
 
-${customContext ? `## ABOUT ${businessName.toUpperCase()}\n${customContext}\n` : ""}${siteKnowledge ? `## CONTENT FROM ${businessName.toUpperCase()}'S WEBSITE\nUse this as the source of truth about the business. If it contradicts anything else, trust this.\n${siteKnowledge}\n` : ""}
+${brandKnowledge ? `## BRAND PROFILE (from the tracker — authoritative)\nThis is maintained by the A&B team and outranks anything inferred. Follow the voice, respect the hard rules, and never contradict it.\n${brandKnowledge}\n` : ""}${customContext ? `## ABOUT ${businessName.toUpperCase()}\n${customContext}\n` : ""}${siteKnowledge ? `## CONTENT FROM ${businessName.toUpperCase()}'S WEBSITE\nUse this as the source of truth about the business. If it contradicts anything else, trust this.\n${siteKnowledge}\n` : ""}
 ## YOUR JOB
 1. Answer questions about ${businessName}'s services.
 2. Help the visitor work out whether they need the service.
@@ -482,13 +483,32 @@ async function handlePost(request) {
   try {
     const { messages, context, clientConfig } = await request.json();
 
-    // On client sites, ground the bot in that client's own website content.
-    // The Origin header is already validated against the CORS allowlist, so
-    // this only ever fetches a site we deliberately permitted.
-    const isClientSite = clientConfig && clientConfig.isABSite === false;
-    const siteKnowledge = isClientSite
-      ? await fetchSiteKnowledge(request.headers.get("origin"))
-      : "";
+    const origin = request.headers.get("origin");
+
+    // Identity comes from the Origin header matched against
+    // clients.website_domain — not from clientConfig, which the embed script
+    // supplies and could claim anything. social_brand_profiles is then read by
+    // client_id, so the chatbot, receptionist, Social Hub and Pancho all share
+    // one source of truth.
+    const clientCtx = await resolveChatbotClient(origin, clientConfig?.isABSite);
+
+    // Per-client kill switch. A&B's own widget is never gated.
+    if (clientCtx.clientId && !clientCtx.chatbotEnabled) {
+      return Response.json(
+        { error: "Chatbot is not enabled for this site." },
+        { status: 403 }
+      );
+    }
+
+    const brandKnowledge = brandProfilePrompt(clientCtx);
+
+    // On client sites, also ground the bot in that client's own website content.
+    // The Origin was already validated against the CORS allowlist, so this only
+    // ever fetches a site we deliberately permitted.
+    const isClientSite = clientCtx.clientId
+      ? !clientCtx.isAB
+      : clientConfig && clientConfig.isABSite === false;
+    const siteKnowledge = isClientSite ? await fetchSiteKnowledge(origin) : "";
 
     // Build context prefix for first message
     const ctxPrefix = context
@@ -505,7 +525,7 @@ async function handlePost(request) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 450,
-      system: buildSystemPrompt(clientConfig, siteKnowledge),
+      system: buildSystemPrompt(clientConfig, siteKnowledge, brandKnowledge, clientCtx.clientName),
       messages: enrichedMessages,
     });
 
