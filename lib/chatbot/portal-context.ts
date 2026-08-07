@@ -24,17 +24,23 @@
 // (owner-only — carries `amount`), wo_comments, team_members, est_cost,
 // add_cost, and every other client's anything.
 
-import { stageView, HIDDEN_STAGES } from '@/lib/portal/stages'
+// Relative, not '@/lib/portal/stages', so portal-context.test.ts can run this
+// module directly under node --experimental-strip-types. Next resolves both.
+import { stageView, HIDDEN_STAGES } from '../portal/stages.ts'
 
 type Sb = ReturnType<typeof import('@/lib/supabase/server').createClient>
 
+type PortalContextErrorCode = 'no_client' | 'inactive_client' | 'query_failed'
+
 export class PortalContextError extends Error {
-  constructor(
-    message: string,
-    readonly code: 'no_client' | 'inactive_client' | 'query_failed'
-  ) {
+  // A plain field, not a `readonly` constructor parameter property — the latter
+  // is unsupported by node's strip-only TypeScript mode, which the test uses.
+  code: PortalContextErrorCode
+
+  constructor(message: string, code: PortalContextErrorCode) {
     super(message)
     this.name = 'PortalContextError'
+    this.code = code
   }
 }
 
@@ -53,7 +59,9 @@ function safe(v: unknown, max = 200): string {
   return v
     .replace(/[\u0000-\u001F\u007F]+/g, ' ') // control chars, incl. newlines
     .replace(/={3,}/g, '=') // === fence markers
-    .replace(/^\s*#{1,6}\s+/gm, '') // markdown headers
+    .replace(/^\s*#{1,6}\s+/gm, '') // markdown headers at line start
+    .replace(/#{2,}/g, '') // ...and mid-line '##', which survives newline flattening.
+    //                        Runs of 2+ only: '#roofing' in hashtags must survive.
     .trim()
     .slice(0, max)
 }

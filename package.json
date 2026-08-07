@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:context": "node --experimental-strip-types lib/chatbot/portal-context.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
