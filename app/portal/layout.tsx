@@ -55,6 +55,12 @@ export default async function PortalLayout({ children }: { children: React.React
                      transition: 'background 0.15s' }}>
             📊 Monthly Report
           </a>
+          <a href="/portal/chat-inbox"
+            style={{ color: 'rgba(255,255,255,0.75)', textDecoration: 'none', fontSize: 13,
+                     fontWeight: 500, padding: '6px 12px', borderRadius: 6,
+                     transition: 'background 0.15s' }}>
+            💬 Chat Inbox
+          </a>
         </div>
 
         <span style={{ flex: 1 }} />
