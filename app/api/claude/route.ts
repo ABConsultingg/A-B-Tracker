@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createSessionClient } from '@/lib/supabase/server'
+import { findClientMentioned, brandKnowledgeForClient } from '@/lib/chatbot/brand-context'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -929,7 +930,35 @@ export async function POST(req: NextRequest) {
     const authUserId = user.id
     const memberName = me.name || 'Teammate'
     const level = getUserLevel(authUserId, me.role)
-    const systemPrompt = await buildContext(level, authUserId, memberName)
+    let systemPrompt = await buildContext(level, authUserId, memberName)
+
+    // If the teammate is asking about a specific client, load that client's
+    // brand profile — the same social_brand_profiles row the chatbot, the AI
+    // receptionist and the Social Hub read. Update the profile once and every
+    // one of them knows.
+    const lastUser = [...(messages || [])]
+      .reverse()
+      .find((m: { role?: string }) => m?.role === 'user')
+    const lastText =
+      typeof lastUser?.content === 'string'
+        ? lastUser.content
+        : Array.isArray(lastUser?.content)
+          ? lastUser.content
+              .filter((b: { type?: string }) => b?.type === 'text')
+              .map((b: { text?: string }) => b.text || '')
+              .join(' ')
+          : ''
+
+    const mentioned = await findClientMentioned(lastText)
+    if (mentioned) {
+      const brand = await brandKnowledgeForClient(mentioned.id)
+      if (brand) {
+        systemPrompt +=
+          `\n\nThe teammate is asking about ${mentioned.name}. ` +
+          `Use this maintained brand profile as the authority on that client:` +
+          brand
+      }
+    }
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return NextResponse.json({ ok: false, error: 'No ANTHROPIC_API_KEY' }, { status: 500 })

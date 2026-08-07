@@ -84,12 +84,13 @@ export async function resolveChatbotClient(
       .maybeSingle()
     client = data ?? null
   } else if (host) {
+    // website_domain is text[] — a client can front several domains.
     const { data } = await sb
       .from('clients')
       .select('id, name, chatbot_enabled')
-      .ilike('website_domain', host)
-      .maybeSingle()
-    client = data ?? null
+      .contains('website_domain', [host])
+      .limit(1)
+    client = data?.[0] ?? null
   }
 
   if (!client) {
@@ -147,4 +148,59 @@ export function brandProfilePrompt(ctx: ChatbotClientContext): string {
   if (avoid.length) out += `Hard rules: ${avoid.join('; ')}\n`
 
   return out
+}
+
+
+/**
+ * Brand profile for a known client id, rendered for a system prompt.
+ * Used by the AI receptionist and by Pancho, so all three products read the
+ * same row. Returns '' when the client has no profile.
+ */
+export async function brandKnowledgeForClient(clientId: string | null | undefined): Promise<string> {
+  if (!clientId) return ''
+  const sb = createServiceClient()
+
+  const [{ data: client }, { data: profile }] = await Promise.all([
+    sb.from('clients').select('id, name').eq('id', clientId).maybeSingle(),
+    sb.from('social_brand_profiles').select(PROFILE_COLUMNS).eq('client_id', clientId).maybeSingle(),
+  ])
+  if (!profile) return ''
+
+  return brandProfilePrompt({
+    clientId,
+    clientName: client?.name ?? null,
+    isAB: clientId === AB_CLIENT_ID,
+    chatbotEnabled: true,
+    profile: profile as BrandProfileRow,
+  })
+}
+
+/**
+ * Best-effort: find which client a team member is asking about, by looking for a
+ * client name or id in their message. Longest name first so "Richards Building
+ * Supply Branches" is preferred over "RBS".
+ */
+export async function findClientMentioned(text: string): Promise<{ id: string; name: string } | null> {
+  if (!text || text.trim().length < 3) return null
+  const haystack = text.toLowerCase()
+  const sb = createServiceClient()
+
+  const { data } = await sb
+    .from('clients')
+    .select('id, name')
+    .eq('status', 'active')
+
+  const candidates = (data ?? [])
+    .map(c => ({ id: c.id, name: (c.name ?? '').trim() }))
+    .filter(c => c.name.length >= 3)
+    .sort((a, b) => b.name.length - a.name.length)
+
+  for (const c of candidates) {
+    if (haystack.includes(c.name.toLowerCase())) return c
+  }
+  // Fall back to the slug, which is how staff often refer to clients.
+  for (const c of candidates) {
+    if (c.id.length >= 3 && haystack.includes(c.id.toLowerCase())) return c
+  }
+  return null
 }

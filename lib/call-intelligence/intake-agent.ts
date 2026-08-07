@@ -6,6 +6,7 @@
 // even if not yet asked, and answered questions are never re-asked.
 
 import type { CIClient, CICall } from "./supabase";
+import { brandKnowledgeForClient } from '@/lib/chatbot/brand-context';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 const MODEL = process.env.CI_CLAUDE_MODEL || "claude-haiku-4-5-20251001";
@@ -113,10 +114,10 @@ function missingFields(profile: Profile, state: IntakeFields): string[] {
   );
 }
 
-function systemPrompt(client: CIClient, profile: Profile, state: IntakeFields, isBusinessHours: boolean, callerNumber: string | null): string {
+function systemPrompt(client: CIClient, profile: Profile, state: IntakeFields, isBusinessHours: boolean, callerNumber: string | null, brandKnowledge = ""): string {
   const missing = missingFields(profile, state);
   const lastFour = callerNumber ? callerNumber.slice(-4).split("").join(" ") : null;
-  return `${profile.persona} You are on a LIVE PHONE CALL. The caller's words arrive as speech-to-text and may contain transcription errors — interpret charitably.
+  return `${profile.persona}${brandKnowledge} You are on a LIVE PHONE CALL. The caller's words arrive as speech-to-text and may contain transcription errors — interpret charitably.
 
 YOUR JOB — collect these fields, in roughly this order, ONE question at a time:
 ${profile.fieldGuide}
@@ -157,6 +158,11 @@ export async function runIntakeTurn(
   const profile = getProfile(client);
   const state = (call.ai_state?.fields as IntakeFields) || {};
 
+  // Same social_brand_profiles row the chatbot and Social Hub use, so Alex
+  // knows this client's services, service area and differentiators without a
+  // second copy of that knowledge.
+  const brandKnowledge = await brandKnowledgeForClient(client.client_id);
+
   const history = (call.transcript || []).slice(-12).map((t) => ({
     role: t.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: t.text,
@@ -174,7 +180,7 @@ export async function runIntakeTurn(
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 150,
-      system: systemPrompt(client, profile, state, isBusinessHours, call.caller_number),
+      system: systemPrompt(client, profile, state, isBusinessHours, call.caller_number, brandKnowledge),
       messages,
     }),
   });
