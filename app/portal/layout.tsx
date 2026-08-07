@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import AssistantBubble from './AssistantBubble'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -61,6 +62,12 @@ export default async function PortalLayout({ children }: { children: React.React
                      transition: 'background 0.15s' }}>
             💬 Chat Inbox
           </a>
+          <a href="/portal/assistant"
+            style={{ color: 'rgba(255,255,255,0.75)', textDecoration: 'none', fontSize: 13,
+                     fontWeight: 500, padding: '6px 12px', borderRadius: 6,
+                     transition: 'background 0.15s' }}>
+            ✨ Assistant
+          </a>
         </div>
 
         <span style={{ flex: 1 }} />
@@ -76,6 +83,7 @@ export default async function PortalLayout({ children }: { children: React.React
         </form>
       </div>
       {children}
+      <AssistantBubble clientName={client?.company || displayName} />
     </div>
   )
 }
