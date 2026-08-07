@@ -27,6 +27,11 @@ export default async function ClientsPage() {
     .from('recurring_services')
     .select('client_id, amount, active')
 
+  const { data: brandProfiles } = await supabase
+    .from('social_brand_profiles')
+    .select('*')
+    .not('client_id', 'is', null)
+
   const { data: portalUsers } = await supabase
     .from('portal_users')
     .select('id, client_id, name, email, role, auth_user_id, active, last_login_at')
@@ -38,6 +43,7 @@ export default async function ClientsPage() {
       currentMember={currentMember}
       services={services || []}
       clientRates={clientRates || []}
+      brandProfiles={brandProfiles || []}
       portalUsers={portalUsers || []}
       recurringServices={recurringServices || []}
     />

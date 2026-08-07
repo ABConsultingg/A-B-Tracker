@@ -6,10 +6,16 @@ import { STAGES } from '@/lib/types'
 import type { ClientRate } from '@/lib/types'
 import { priceFor, priceDiff } from '@/lib/pricing'
 import PortalAccess, { type PortalUser } from './PortalAccess'
+import BrandProfileSection, { type BrandProfile } from './BrandProfileSection'
+import ServiceToggles from './ServiceToggles'
 
 type ClientStatus = 'active' | 'paused' | 'archived'
 
 type Client = {
+  chatbot_enabled?: boolean | null
+  receptionist_enabled?: boolean | null
+  seo_agent_enabled?: boolean | null
+  reputation_mgmt_enabled?: boolean | null
   id: string
   name: string
   status: ClientStatus
@@ -178,12 +184,14 @@ export default function ClientsClient({
   clientRates: initialRates,
   portalUsers,
   recurringServices = [],
+  brandProfiles = [],
 }: {
   clients: Client[]
   workOrders: WO[]
   currentMember?: { id: string; role: string } | null
   services: Service[]
   clientRates: ClientRate[]
+  brandProfiles?: BrandProfile[]
   portalUsers: PortalUser[]
   recurringServices?: { client_id: string; amount: number; active: boolean }[]
 }) {
@@ -194,6 +202,8 @@ export default function ClientsClient({
     currentMember?.role === 'admin' ||
     currentMember?.role === 'owner' ||
     currentMember?.role === 'sales'
+  const isAdminOrOwner =
+    currentMember?.role === 'admin' || currentMember?.role === 'owner'
   const portalByClient = useMemo(() => {
     const m: Record<string, PortalUser[]> = {}
     portalUsers.forEach(p => { if (!m[p.client_id]) m[p.client_id] = []; m[p.client_id].push(p) })
@@ -950,6 +960,28 @@ export default function ClientsClient({
                   defaultEmail={selected.contact_email}
                   defaultName={selected.contact_name}
                   initial={portalByClient[selected.id]?.[0] || null}
+                />
+              )}
+
+              {/* ─── Brand profile: the source the AI products read ─── */}
+              {!isNew && selected && isAdmin && (
+                <BrandProfileSection
+                  clientId={selected.id}
+                  clientName={selected.name}
+                  initial={brandProfiles.find(b => b.client_id === selected.id) || null}
+                />
+              )}
+
+              {/* ─── AI service toggles (admin/owner only) ─── */}
+              {!isNew && selected && isAdminOrOwner && (
+                <ServiceToggles
+                  clientId={selected.id}
+                  initial={{
+                    chatbot_enabled: selected.chatbot_enabled,
+                    receptionist_enabled: selected.receptionist_enabled,
+                    seo_agent_enabled: selected.seo_agent_enabled,
+                    reputation_mgmt_enabled: selected.reputation_mgmt_enabled,
+                  }}
                 />
               )}
 
