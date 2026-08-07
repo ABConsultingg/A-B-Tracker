@@ -107,6 +107,19 @@ function unwrap<T>(res: { data: T | null; error: any }, what: string): T[] {
   return (res.data as unknown as T[]) || []
 }
 
+// Supplementary data. A failure here degrades one section rather than taking
+// down the whole assistant — the client can still ask about their projects if
+// the social hub schema shifts under us. Core data (clients, work_orders)
+// stays fatal, because an answer built without it would be wrong rather than
+// incomplete.
+function soft<T>(res: { data: T | null; error: any }, what: string): { rows: T[]; failed: boolean } {
+  if (res.error) {
+    console.error(`[portal-context] optional query failed: ${what} — ${res.error.message}`)
+    return { rows: [], failed: true }
+  }
+  return { rows: ((res.data as unknown as T[]) || []), failed: false }
+}
+
 export async function buildPortalContext(
   supabase: Sb,
   clientId: string
@@ -203,19 +216,27 @@ export async function buildPortalContext(
   //   - two clients sharing a name would see each other's plan.
   // Matched against both name and company to improve the hit rate. An empty
   // name can never match, because of the guards above.
+  // Columns verified against what app/dashboard/social/planning writes:
+  //   client_name, month, slot, pillar, post_type, content_type, topic,
+  //   caption_text, hashtags, design_brief, status, scheduled_date, assignee,
+  //   notes, caption_id, asset_url, asset_type, asset_filename
+  // design_brief, notes and assignee are internal production fields and are
+  // deliberately not read — a client should not see who is assigned or what
+  // the brief to the designer said.
   const socialNames = Array.from(new Set([clientName, companyName].filter(Boolean)))
-  const social = socialNames.length
-    ? unwrap<any>(
+  const socialRes = socialNames.length
+    ? soft<any>(
         await supabase
           .from('social_monthly_mix')
-          .select('month, slot, platform, content_type, topic, status, scheduled_date')
+          .select('month, slot, content_type, post_type, pillar, topic, caption_text, hashtags, status, scheduled_date')
           .in('client_name', socialNames)
           .in('month', [monthKey(now, 0), monthKey(now, 1)])
           .order('slot', { ascending: true })
           .limit(120),
         'social_monthly_mix'
       )
-    : []
+    : { rows: [], failed: false }
+  const social = socialRes.rows
 
   // ── Assemble ──────────────────────────────────────────────────────────────
   const L: string[] = []
@@ -282,14 +303,26 @@ export async function buildPortalContext(
         currentMonth = p.month
         L.push(`### ${safe(currentMonth, 10)}`)
       }
-      const bits = [p.platform, p.content_type, p.topic]
-        .map((x) => safe(x, 80))
-        .filter(Boolean)
-        .join(' · ')
+      // Format: Slot 3 · Post · Value — Fall roof maintenance — Aug 12, 2026 [Ready]
+      const kind = [p.content_type || p.post_type, p.pillar].map((x) => safe(x, 40)).filter(Boolean).join(' · ')
+      const topic = safe(p.topic, 120)
       const when = p.scheduled_date ? ` — ${fmtDate(p.scheduled_date)}` : ''
       const st = p.status ? ` [${safe(p.status, 24)}]` : ''
-      L.push(`- Slot ${safe(String(p.slot ?? ''), 6)}: ${bits || 'planned post'}${when}${st}`)
+      L.push(`- Slot ${safe(String(p.slot ?? ''), 6)}${kind ? ` · ${kind}` : ''}${topic ? ` — ${topic}` : ''}${when}${st}`)
+
+      // The caption is the thing clients most often want to read back or
+      // approve, so it is included in full rather than summarised.
+      const caption = safe(p.caption_text, 600)
+      if (caption) L.push(`    Caption: ${caption}`)
+      const tags = safe(p.hashtags, 200)
+      if (tags) L.push(`    Hashtags: ${tags}`)
     }
+    L.push('')
+  } else if (socialRes.failed) {
+    // Say so explicitly. Otherwise the model, told the context is everything it
+    // knows, would state confidently that there is no social plan.
+    L.push('## Social media plan')
+    L.push('The social plan could not be loaded right now. Do not tell the client they have no social plan — say the plan is temporarily unavailable and offer to have their account manager confirm it.')
     L.push('')
   }
 
