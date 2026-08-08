@@ -136,6 +136,28 @@ function soft<T>(res: { data: T | null; error: any }, what: string): { rows: T[]
   return { rows: ((res.data as unknown as T[]) || []), failed: false }
 }
 
+/**
+ * soft() for a query that might *throw* rather than return an error in-band.
+ *
+ * soft(await query) awaits before soft() is ever called, so a rejection — a
+ * network failure, a malformed request rejected by the client library — escapes
+ * and takes down the whole context, which is the opposite of what soft() is
+ * for. Taking a thunk lets the await happen inside the try.
+ */
+async function softCall<T>(
+  run: () => PromiseLike<{ data: T | null; error: any }>,
+  what: string
+): Promise<{ rows: T[]; failed: boolean }> {
+  try {
+    return soft<T>(await run(), what)
+  } catch (e) {
+    console.error(
+      `[portal-context] optional query threw: ${what} — ${e instanceof Error ? e.message : String(e)}`
+    )
+    return { rows: [], failed: true }
+  }
+}
+
 export async function buildPortalContext(
   supabase: Sb,
   clientId: string
@@ -241,14 +263,15 @@ export async function buildPortalContext(
   // the brief to the designer said.
   const socialNames = Array.from(new Set([clientName, companyName].filter(Boolean)))
   const socialRes = socialNames.length
-    ? soft<any>(
-        await supabase
-          .from('social_monthly_mix')
-          .select('month, slot, content_type, post_type, pillar, topic, caption_text, hashtags, status, scheduled_date')
-          .in('client_name', socialNames)
-          .in('month', [monthKey(now, 0), monthKey(now, 1)])
-          .order('slot', { ascending: true })
-          .limit(120),
+    ? await softCall<any>(
+        () =>
+          supabase
+            .from('social_monthly_mix')
+            .select('month, slot, content_type, post_type, pillar, topic, caption_text, hashtags, status, scheduled_date')
+            .in('client_name', socialNames)
+            .in('month', [monthKey(now, 0), monthKey(now, 1)])
+            .order('slot', { ascending: true })
+            .limit(120),
         'social_monthly_mix'
       )
     : { rows: [], failed: false }

@@ -109,6 +109,20 @@ async function main() {
   console.log('═'.repeat(72))
 
   const t = ctx.text
+  // Same build, but social_monthly_mix rejects instead of answering.
+  let throwCtx: string | null = null
+  try {
+    const sb = makeClient() as any
+    const realFrom = sb.from.bind(sb)
+    sb.from = (table: string) =>
+      table === 'social_monthly_mix'
+        ? { select: () => { throw new Error('simulated network failure') } }
+        : realFrom(table)
+    throwCtx = (await buildPortalContext(sb, 'culture')).text
+  } catch {
+    throwCtx = null
+  }
+
   const checks: [string, boolean][] = [
     ['No RBS work order leaked',        !t.includes('RBS SECRET CAMPAIGN')],
     ['No RBS task leaked',              !t.includes('RBS SECRET TASK')],
@@ -129,6 +143,10 @@ async function main() {
     ['Hashtags survive sanitising', t.includes('#roofing')],
     ['No cost fields',                  !/est_cost|add_cost|\$\d/.test(t)],
     ['No team member names',            !/Emily|Tanya|Majo|Adrian/.test(t)],
+    // The social hub is optional data. A throw from it — not just an in-band
+    // error — must degrade that one section, never the whole context.
+    ['Social throw degrades only social', throwCtx !== null],
+    ['Projects survive a social throw',   !!throwCtx && throwCtx.includes('Active projects')],
   ]
 
   console.log('\nCHECKS')
