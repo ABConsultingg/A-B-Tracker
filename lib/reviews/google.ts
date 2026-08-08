@@ -50,6 +50,14 @@ async function fetchGoogleReviews(placeId: string): Promise<{
     return { rating: null, total: null, reviews: [], error: 'GOOGLE_PLACES_API_KEY is not configured' }
   }
 
+  // The page degrades quietly on purpose, which makes a broken key or an
+  // unauthorised referrer invisible. Log the reason so it is diagnosable
+  // without reproducing it — the key itself is never logged.
+  const fail = (error: string) => {
+    console.error('[reviews] Places lookup failed', { placeId, error })
+    return { rating: null, total: null, reviews: [], error }
+  }
+
   const url =
     `https://maps.googleapis.com/maps/api/place/details/json` +
     `?place_id=${encodeURIComponent(placeId)}` +
@@ -58,14 +66,11 @@ async function fetchGoogleReviews(placeId: string): Promise<{
 
   try {
     const res = await fetch(url, { next: { revalidate: 3600 } })
-    if (!res.ok) return { rating: null, total: null, reviews: [], error: `Places HTTP ${res.status}` }
+    if (!res.ok) return fail(`Places HTTP ${res.status}`)
 
     const json = await res.json()
     if (json.status !== 'OK') {
-      return {
-        rating: null, total: null, reviews: [],
-        error: `Places status ${json.status}${json.error_message ? `: ${json.error_message}` : ''}`,
-      }
+      return fail(`Places status ${json.status}${json.error_message ? `: ${json.error_message}` : ''}`)
     }
 
     const r = json.result ?? {}
@@ -84,10 +89,7 @@ async function fetchGoogleReviews(placeId: string): Promise<{
       error: null,
     }
   } catch (e) {
-    return {
-      rating: null, total: null, reviews: [],
-      error: e instanceof Error ? e.message : 'Places request failed',
-    }
+    return fail(e instanceof Error ? e.message : 'Places request failed')
   }
 }
 
