@@ -11,7 +11,7 @@ import { getReviewPageData, reviewLinkFor } from '@/lib/reviews/google'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
-  const data = await getReviewPageData(params.slug)
+  const data = await getReviewPageData(params.slug, { withReviews: false })
   if (!data) return new NextResponse('Not found', { status: 404 })
   if (!data.placeId) {
     return NextResponse.json(

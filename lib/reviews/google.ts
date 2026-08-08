@@ -97,7 +97,10 @@ async function fetchGoogleReviews(placeId: string): Promise<{
  * Everything the public page needs. Returns null when the slug is not a client,
  * so the page can 404 rather than leak which slugs exist.
  */
-export async function getReviewPageData(slug: string): Promise<ReviewPageData | null> {
+export async function getReviewPageData(
+  slug: string,
+  opts: { withReviews?: boolean } = {}
+): Promise<ReviewPageData | null> {
   const sb = createServiceClient()
 
   const { data: client } = await sb
@@ -119,7 +122,10 @@ export async function getReviewPageData(slug: string): Promise<ReviewPageData | 
   const placeId = rep.google_place_id?.trim() || null
   const enabled = client.reputation_mgmt_enabled === true && rep.aggregation_page_enabled === true
 
-  const g = placeId
+  // The QR route needs only the place id and the brand colour, so it opts out:
+  // billing a Places call per PNG download bought nothing and gave the download
+  // a way to fail on a third party.
+  const g = placeId && opts.withReviews !== false
     ? await fetchGoogleReviews(placeId)
     : { rating: null, total: null, reviews: [], error: null }
 
