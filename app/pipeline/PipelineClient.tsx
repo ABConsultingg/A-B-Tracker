@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
+import AssessmentsTab from '@/components/reports/AssessmentsTab'
 
 // Slugs must match the leads_status_check constraint on public.leads.
 const STAGES = [
@@ -167,10 +168,12 @@ export default function PipelineClient({
   teamMembers,
   today,
   canSeeFinancials,
+  initialTab = 'pipeline',
 }: {
   initialLeads: Lead[]
   teamMembers: TeamMember[]
   today: string
+  initialTab?: 'pipeline' | 'assessments'
   /**
    * From team_members.sales_access. When false, every dollar figure is hidden —
    * card values, the Pipeline/Won KPI tiles, per-column $/mo, the list Value
@@ -182,6 +185,7 @@ export default function PipelineClient({
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [selected, setSelected] = useState<Lead | null>(null)
+  const [pane, setPane] = useState<'pipeline' | 'assessments'>(initialTab)
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -431,6 +435,7 @@ export default function PipelineClient({
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {pane === 'pipeline' && (
           <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             {(['board', 'list'] as const).map(v => (
               <button
@@ -446,6 +451,7 @@ export default function PipelineClient({
               </button>
             ))}
           </div>
+          )}
           <button
             onClick={() => setAdding(true)}
             style={{
@@ -473,6 +479,28 @@ export default function PipelineClient({
         </div>
       )}
 
+      {/* Pane tabs. Assessments moved here from the client report page so the
+          sales-facing views live together; it is not per-client data. */}
+      <div style={{ display: 'flex', gap: 4, padding: '0 24px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        {([['pipeline', 'Pipeline'], ['assessments', 'Assessments']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setPane(id)}
+            style={{
+              padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600,
+              color: pane === id ? 'var(--text)' : 'var(--text-muted)',
+              borderBottom: `2px solid ${pane === id ? 'var(--brand-accent, #6366f1)' : 'transparent'}`,
+              marginBottom: -1,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {pane === 'pipeline' && (
+      <>
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '16px 24px', flexShrink: 0 }}>
         {/* Money tiles are omitted entirely without sales_access — not blanked
@@ -656,6 +684,15 @@ export default function PipelineClient({
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      </>
+      )}
+
+      {pane === 'assessments' && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+          <AssessmentsTab />
         </div>
       )}
 

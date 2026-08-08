@@ -4,7 +4,11 @@ import PipelineClient from './PipelineClient'
 
 export const dynamic = 'force-dynamic'
 
-export default async function SalesPipelinePage() {
+export default async function SalesPipelinePage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string }
+}) {
   // This route sits outside /dashboard, so it inherits neither the middleware
   // matcher nor the dashboard layout's guard — gate it here. Sales data is
   // restricted to owner/sales, matching the RLS policy on public.leads.
@@ -34,6 +38,10 @@ export default async function SalesPipelinePage() {
       teamMembers={teamMembers || []}
       today={today}
       canSeeFinancials={canSeeFinancials}
+      // Resolved here rather than from the browser's query string so the first
+      // render already shows the right tab — reading it client-side would flash
+      // the board before switching, or mismatch hydration.
+      initialTab={searchParams?.tab === 'assessments' ? 'assessments' : 'pipeline'}
     />
   )
 }

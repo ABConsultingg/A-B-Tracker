@@ -1,7 +1,7 @@
 'use client'
 import AcquisitionTab from '@/components/reports/AcquisitionTab'
 import ChatbotTab from '@/components/reports/ChatbotTab'
-import AssessmentsTab from '@/components/reports/AssessmentsTab'
+import AssessmentsSummaryCard from '@/components/reports/AssessmentsSummaryCard'
 import CallsTab from '@/components/reports/CallsTab'
 import ApprovalTab from '@/components/reports/ApprovalTab'
 import React, { useState, useMemo, useEffect } from 'react'
@@ -1122,7 +1122,7 @@ function pct(n: number | null | undefined) {
   return `${n.toFixed(2)}%`
 }
 
-type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve' | 'calls' | 'acquisition' | 'chatbot' | 'assessments'
+type TabId = 'social' | 'meta' | 'google' | 'website' | 'email' | 'overview' | 'live' | 'gmb' | 'leads' | 'approve' | 'calls' | 'acquisition' | 'chatbot'
 
 export default function ReportDashboard({
   clientId, clientName, clientInitials, clientColor, clientIndustry,
@@ -1376,7 +1376,6 @@ export default function ReportDashboard({
     { id: 'calls',    label: 'Calls',      icon: '📞' },
     { id: 'acquisition', label: 'Acquisition Cost', icon: '💰' },
     ...(isAdmin ? [{ id: 'chatbot' as TabId, label: 'Chatbot', icon: '🤖' }] : []),
-    ...(isAdmin ? [{ id: 'assessments' as TabId, label: 'Assessments', icon: '📊' }] : []),
     ...(isAdmin ? [{ id: 'approve' as TabId,  label: 'Approve',    icon: '✅' }] : []),
   ]
 
@@ -1484,6 +1483,11 @@ export default function ReportDashboard({
         {/* ── OVERVIEW ────────────────────────────────────────────────────── */}
         {tab === 'overview' && (
           <>
+            {/* Assessments are A&B's own lead-gen rather than client reporting,
+                so the full table lives on /pipeline and only A&B's report
+                carries the headline numbers. */}
+            {isAdmin && clientId === 'a-b-consulting-group' && <AssessmentsSummaryCard />}
+
             {/* KPI cards */}
             {(() => {
               const metaSpend      = metrics.metaSpend      ?? liveAds?.metaSpend      ?? null
@@ -1747,10 +1751,6 @@ export default function ReportDashboard({
 
         {tab === 'calls' && (
           <CallsTab clientId={clientId} month={month} />
-        )}
-
-        {tab === 'assessments' && isAdmin && (
-          <AssessmentsTab />
         )}
 
         {tab === 'chatbot' && isAdmin && (
