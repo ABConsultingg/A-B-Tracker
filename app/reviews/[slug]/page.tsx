@@ -6,7 +6,9 @@ import { getReviewPageData, reviewLinkFor } from '@/lib/reviews/google'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
-  const data = await getReviewPageData(params.slug)
+  // Title and description need only the name and the publish flag, so this skips
+  // the Places call the page body makes.
+  const data = await getReviewPageData(params.slug, { withReviews: false })
   // Same withholding as the page body — metadata must not name a client whose
   // page is not published.
   if (!data || !data.enabled) return { title: 'Reviews' }
