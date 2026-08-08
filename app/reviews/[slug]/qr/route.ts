@@ -41,7 +41,12 @@ export async function GET(req: NextRequest, { params }: { params: { slug: string
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${params.slug}-google-review-qr.png"`,
-        'Cache-Control': 'public, max-age=86400',
+        // force-dynamic stops Next caching the route, but the CDN obeys this
+        // header — with max-age=86400 a brand-colour or Place ID change took up
+        // to a day to reach the download. Observed: the PNG kept rendering the
+        // previous brand colour on a cache HIT while a fresh cache key rendered
+        // the new one.
+        'Cache-Control': 'no-store',
       },
     })
   } catch (e) {

@@ -972,6 +972,7 @@ export default function ClientsClient({
               {/* ─── Brand profile: the source the AI products read ─── */}
               {!isNew && selected && isAdmin && (
                 <BrandProfileSection
+                  key={selected.id}
                   clientId={selected.id}
                   clientName={selected.name}
                   initial={brandProfiles.find(b => b.client_id === selected.id) || null}
@@ -981,6 +982,7 @@ export default function ClientsClient({
               {/* ─── AI service toggles (admin/owner only) ─── */}
               {!isNew && selected && isAdminOrOwner && (
                 <ServiceToggles
+                  key={selected.id}
                   clientId={selected.id}
                   initialConfig={(selected.ai_service_config as never) || {}}
                   initialDomains={selected.website_domain || []}
