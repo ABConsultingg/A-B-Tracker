@@ -275,7 +275,7 @@ async function loadPage(slug: string) {
   const { data: client } = await sb
     .from('clients')
     .select(
-      'id, name, company, address, contact_phone, contact_email, website_domain, report_color, ai_service_config, reputation_mgmt_enabled, chatbot_enabled'
+      'id, name, company, address, contact_phone, contact_email, website_domain, report_color, logo_url, ai_service_config, reputation_mgmt_enabled, chatbot_enabled'
     )
     .eq('id', slug)
     .maybeSingle()
@@ -318,7 +318,9 @@ async function loadPage(slug: string) {
     businessName,
     tagline: profile?.tagline || profile?.one_sentence || null,
     brandColor: bot.brand_color || cfg.brand_color || client.report_color || DEFAULT_BRAND,
-    brandLogoUrl: (cfg.brand_logo_url as string | null) || null,
+    // clients.logo_url is what the Reputation Management panel writes;
+    // ai_service_config.brand_logo_url is the older key, kept as a fallback.
+    brandLogoUrl: client.logo_url || (cfg.brand_logo_url as string | null) || null,
     socialLinks: (cfg.social_links ?? {}) as SocialLinks,
     chatbotEnabled: client.chatbot_enabled === true,
     services,

@@ -8,6 +8,7 @@ import { priceFor, priceDiff } from '@/lib/pricing'
 import PortalAccess, { type PortalUser } from './PortalAccess'
 import BrandProfileSection, { type BrandProfile } from './BrandProfileSection'
 import ServiceToggles from './ServiceToggles'
+import ReputationPanel from './ReputationPanel'
 
 type ClientStatus = 'active' | 'paused' | 'archived'
 
@@ -18,6 +19,7 @@ type Client = {
   receptionist_enabled?: boolean | null
   seo_agent_enabled?: boolean | null
   reputation_mgmt_enabled?: boolean | null
+  logo_url?: string | null
   id: string
   name: string
   status: ClientStatus
@@ -989,6 +991,17 @@ export default function ClientsClient({
                     reputation_mgmt_enabled: selected.reputation_mgmt_enabled,
                   }}
                   twilioNumber={twilioNumbers[selected.id] ?? null}
+                />
+              )}
+
+              {/* ─── Reputation Management: everything the public review page reads ─── */}
+              {!isNew && selected && isAdminOrOwner && (
+                <ReputationPanel
+                  key={selected.id}
+                  clientId={selected.id}
+                  initialLogoUrl={selected.logo_url ?? null}
+                  initialChatbotEnabled={selected.chatbot_enabled === true}
+                  initialConfig={(selected.ai_service_config as Record<string, unknown>) || {}}
                 />
               )}
 
