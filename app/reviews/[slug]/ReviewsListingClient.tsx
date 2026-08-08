@@ -224,55 +224,37 @@ export default function ReviewsListingClient(props: Props) {
   return (
     <div style={{ minHeight: '100vh', background: PAGE, color: INK, fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' }}>
       {/* ── Sticky brand header ── */}
+      {/* Layout and type are Tailwind so the md: breakpoints work; only the
+          runtime brand colours stay inline. */}
       <header
+        className="sticky top-0 z-50"
         style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
           background: brandColor,
           color: onBrand,
           boxShadow: '0 1px 8px rgba(0,0,0,0.15)',
         }}
       >
-        <div
-          style={{
-            maxWidth: 1120,
-            margin: '0 auto',
-            padding: '12px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
+        <div className="mx-auto flex max-w-[1120px] items-center gap-4 px-5 py-4 md:gap-5 md:py-5">
           {brandLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={brandLogoUrl}
               alt={businessName}
-              style={{ height: 36, width: 'auto', maxWidth: 160, objectFit: 'contain', borderRadius: 6 }}
+              className="h-10 w-auto max-w-[180px] rounded-md object-contain"
             />
           ) : (
             <div
               aria-hidden="true"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                background: rgba(onBrand === '#ffffff' ? '#ffffff' : '#000000', 0.16),
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: 14,
-              }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-base font-bold"
+              style={{ background: rgba(onBrand === '#ffffff' ? '#ffffff' : '#000000', 0.16) }}
             >
               {initialsOf(businessName)}
             </div>
           )}
 
-          <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: -0.2 }}>{businessName}</span>
+          <span className="truncate text-lg font-bold tracking-tight md:text-xl">{businessName}</span>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="ml-auto flex items-center gap-2.5 md:gap-3">
             {socials.map(s => (
               <a
                 key={s.kind}
@@ -280,16 +262,13 @@ export default function ReviewsListingClient(props: Props) {
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={platformLabel(s.kind)}
+                className="inline-flex rounded-lg p-2 opacity-85 transition-opacity hover:opacity-100"
                 style={{
                   color: onBrand,
-                  opacity: 0.85,
-                  display: 'inline-flex',
-                  padding: 6,
-                  borderRadius: 8,
                   background: rgba(onBrand === '#ffffff' ? '#ffffff' : '#000000', 0.12),
                 }}
               >
-                <SocialIcon kind={s.kind} />
+                <SocialIcon kind={s.kind} size={18} />
               </a>
             ))}
             {reviewLink && (
@@ -297,16 +276,8 @@ export default function ReviewsListingClient(props: Props) {
                 href={reviewLink}
                 target="_blank"
                 rel="noreferrer noopener"
-                style={{
-                  background: onBrand,
-                  color: brandColor,
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                  whiteSpace: 'nowrap',
-                }}
+                className="whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-bold no-underline"
+                style={{ background: onBrand, color: brandColor }}
               >
                 Write a Review
               </a>
