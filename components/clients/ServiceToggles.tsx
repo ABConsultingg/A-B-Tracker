@@ -358,7 +358,7 @@ export default function ServiceToggles({
                       </span>
                     </label>
                     <input className={I} style={BORDER} value={domains}
-                      placeholder="cultureccc.com, cultureconstruction.com"
+                      placeholder="cultureccc.com"
                       onChange={e => setDomains(e.target.value)} />
                   </div>
 
