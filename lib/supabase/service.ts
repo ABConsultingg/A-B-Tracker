@@ -23,5 +23,15 @@ export function createServiceClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: {
+      // supabase-js goes through global fetch, which Next.js patches — so its
+      // REST reads can land in the Data Cache. That cache outlives a
+      // deployment, so a row read here can be arbitrarily stale: the public
+      // review page kept serving a client's pre-update config after the row
+      // had changed, and the QR route reported no Place ID when one was set.
+      // A cached database read is never what this client wants.
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: 'no-store' }),
+    },
   })
 }

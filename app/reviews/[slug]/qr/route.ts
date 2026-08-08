@@ -6,6 +6,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import QRCode from 'qrcode'
 import { getReviewPageData, reviewLinkFor } from '@/lib/reviews/google'
 
+// Reads the client's live config, so it must not be cached at the route level
+// either — a Place ID change has to take effect on the next download.
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
   const data = await getReviewPageData(params.slug)
   if (!data) return new NextResponse('Not found', { status: 404 })
