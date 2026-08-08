@@ -5,7 +5,7 @@
  * ─────────────────────────────────────────────────────
  * <script>
  *   window.ABChatConfig = {
- *     apiBase: "https://www.abconsultingg.com",   // your Vercel domain
+ *     apiBase: "https://app.abconsultingg.com",   // defaults to this if omitted
  *
  *     // ── For A&B's own site ──
  *     isABSite: true,
@@ -33,7 +33,7 @@
  * Adrian in the greeting, CTA, transcript, or system prompt. The only A&B
  * branding is the "Powered by A&B AI" footer, which is intentional.
  * </script>
- * <script src="https://www.abconsultingg.com/chatbot.js" async></script>
+ * <script src="https://app.abconsultingg.com/chatbot.js?v=6" async></script>
  * ─────────────────────────────────────────────────────
  */
 
@@ -42,7 +42,11 @@
 
   // ─── Config ────────────────────────────────────────────────────────────────
   const cfg = window.ABChatConfig || {};
-  const API = (cfg.apiBase || "https://www.abconsultingg.com").replace(/\/$/, "");
+  // Defaults to the tracker, which is where this file and the chatbot API are
+  // served from. The marketing site still hosts an older copy of both; an
+  // install that omitted apiBase used to load the widget from one host and call
+  // the API on the other.
+  const API = (cfg.apiBase || "https://app.abconsultingg.com").replace(/\/$/, "");
   const IS_AB       = cfg.isABSite !== false;
   const BRAND_COLOR = cfg.brandColor || "#E8541A";
   // Header colour. On a client site it follows their brandColor unless they

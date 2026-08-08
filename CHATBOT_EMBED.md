@@ -40,13 +40,17 @@ Paste this immediately before `</body>` on every page of the client site.
 <script src="https://app.abconsultingg.com/chatbot.js?v=6" async></script>
 ```
 
-### `apiBase` is required
+### `apiBase`
 
-The widget still **defaults** to `https://www.abconsultingg.com` when `apiBase`
-is omitted, which sends traffic to the old marketing-site copy. Always set it
-explicitly. `app.abconsultingg.com` has no apex/`www` variant and does not
-redirect, so the preflight problem that affected the old host does not apply
-here.
+Defaults to `https://app.abconsultingg.com`, so omitting it is safe — but set it
+explicitly anyway, since it documents which backend a given install talks to.
+`app.abconsultingg.com` has no apex/`www` variant and does not redirect, so the
+preflight problem that affected the old host does not apply here.
+
+This default only applies to the copy served from the tracker. A snippet whose
+`<script src>` still points at `www.abconsultingg.com` loads that project's
+older widget, which keeps its own default — repoint the `src`, not just
+`apiBase`.
 
 Bump the `?v=` on the `<script src>` whenever `public/chatbot.js` changes —
 browsers on client sites cache it aggressively, and a stale widget silently
@@ -58,7 +62,7 @@ Every key the widget actually reads:
 
 | Key | Required | Notes |
 |---|---|---|
-| `apiBase` | yes | `https://app.abconsultingg.com`. Defaults to the old `www` host if unset |
+| `apiBase` | recommended | `https://app.abconsultingg.com`, which is also the default |
 | `isABSite` | yes | `false` on client sites. `true` only on abconsultingg.com |
 | `businessName` | yes | The bot introduces itself as this business, not as A&B |
 | `industry` | yes | Shapes the system prompt |
