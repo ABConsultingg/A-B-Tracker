@@ -55,14 +55,14 @@ const DB: Record<string, any[]> = {
   ],
 
   social_monthly_mix: [
-    { client_name: 'Culture Construction', month: '2026-08-01', slot: 1, content_type: 'Post',
+    { client_id: 'culture', client_name: 'Culture Construction', month: '2026-08-01', slot: 1, content_type: 'Post',
       post_type: 'Post', pillar: 'Value', topic: 'Fall roof maintenance tips',
       caption_text: 'Fall is coming. Here are 5 things every homeowner should check.',
       hashtags: '#roofing #fallprep', status: 'Ready', scheduled_date: '2026-08-12' },
-    { client_name: 'Culture Construction', month: '2026-08-01', slot: 2, content_type: 'Video',
+    { client_id: 'culture', client_name: 'Culture Construction', month: '2026-08-01', slot: 2, content_type: 'Video',
       post_type: 'Video', pillar: 'Story', topic: 'Team spotlight',
       caption_text: 'Meet the crew.', hashtags: '#team', status: 'Draft', scheduled_date: null },
-    { client_name: 'Richards Building Supply', month: '2026-08-01', slot: 1, content_type: 'Post',
+    { client_id: 'rbs', client_name: 'Richards Building Supply', month: '2026-08-01', slot: 1, content_type: 'Post',
       post_type: 'Post', pillar: 'Value', topic: 'RBS SECRET SOCIAL',
       caption_text: 'RBS SECRET CAPTION', hashtags: '#rbs', status: 'Ready', scheduled_date: '2026-08-13' },
   ],

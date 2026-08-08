@@ -14,8 +14,9 @@
 //      on any one table is therefore not sufficient to leak another tenant.
 //
 // Layer 2 exists because layer 1 cannot be verified from the code: wo_tasks
-// and wo_schedule are not part of the portal UI, and social_monthly_mix has no
-// client_id column at all.
+// and wo_schedule are not part of the portal UI. social_monthly_mix now has a
+// client_id column and is filtered on it; it previously matched on a free-text
+// client_name, which was the weakest boundary here.
 //
 // Do NOT swap these calls to createServiceClient(). It bypasses RLS, and the
 // TypeScript type below cannot tell the difference.
@@ -246,35 +247,30 @@ export async function buildPortalContext(
     : []
 
   // ── Social media hub ──────────────────────────────────────────────────────
-  // This table is keyed by a free-text client_name with no client_id FK, so a
-  // string match is the only tenant boundary available. Two known weaknesses,
-  // both needing a schema change to fix properly (see CHATBOT_PORTAL.md):
-  //   - names in social_monthly_mix do not always match clients.name, so this
-  //     can legitimately return nothing for a client who does have a plan;
-  //   - two clients sharing a name would see each other's plan.
-  // Matched against both name and company to improve the hit rate. An empty
-  // name can never match, because of the guards above.
+  // Keyed by client_id. It used to match on the free-text client_name, which
+  // was the only tenant boundary available and had two failure modes: names in
+  // social_monthly_mix did not always match clients.name, so a client with a
+  // plan could legitimately get nothing, and two clients sharing a name would
+  // see each other's plan. The column was added and every existing row
+  // backfilled, so neither applies now.
   // Columns verified against what app/dashboard/social/planning writes:
-  //   client_name, month, slot, pillar, post_type, content_type, topic,
-  //   caption_text, hashtags, design_brief, status, scheduled_date, assignee,
-  //   notes, caption_id, asset_url, asset_type, asset_filename
+  //   client_name, client_id, month, slot, pillar, post_type, content_type,
+  //   topic, caption_text, hashtags, design_brief, status, scheduled_date,
+  //   assignee, notes, caption_id, asset_url, asset_type, asset_filename
   // design_brief, notes and assignee are internal production fields and are
   // deliberately not read — a client should not see who is assigned or what
   // the brief to the designer said.
-  const socialNames = Array.from(new Set([clientName, companyName].filter(Boolean)))
-  const socialRes = socialNames.length
-    ? await softCall<any>(
-        () =>
-          supabase
-            .from('social_monthly_mix')
-            .select('month, slot, content_type, post_type, pillar, topic, caption_text, hashtags, status, scheduled_date')
-            .in('client_name', socialNames)
-            .in('month', [monthKey(now, 0), monthKey(now, 1)])
-            .order('slot', { ascending: true })
-            .limit(120),
-        'social_monthly_mix'
-      )
-    : { rows: [], failed: false }
+  const socialRes = await softCall<any>(
+    () =>
+      supabase
+        .from('social_monthly_mix')
+        .select('month, slot, content_type, post_type, pillar, topic, caption_text, hashtags, status, scheduled_date')
+        .eq('client_id', clientId)
+        .in('month', [monthKey(now, 0), monthKey(now, 1)])
+        .order('slot', { ascending: true })
+        .limit(120),
+    'social_monthly_mix'
+  )
   const social = socialRes.rows
 
   // ── Assemble ──────────────────────────────────────────────────────────────
