@@ -4,8 +4,9 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// This route awaits the /api/assessment pipeline (which runs PageSpeed up to
-// 35s), so its duration must cover that plus the chat completion.
+// This route awaits the /api/assessment pipeline on the marketing site, which
+// still runs close to its own 60s ceiling, so its duration must cover that plus
+// the chat completion.
 export const maxDuration = 60;
 
 // ─── Master system prompt factory ───────────────────────────────────────────
