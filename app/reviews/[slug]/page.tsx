@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: { slug: string } }) {
   const data = await getReviewPageData(params.slug)
-  if (!data) return { title: 'Reviews' }
+  // Same withholding as the page body — metadata must not name a client whose
+  // page is not published.
+  if (!data || !data.enabled) return { title: 'Reviews' }
   return {
     title: `${data.businessName} — Reviews`,
     description: `Read reviews for ${data.businessName} and leave your own.`,
@@ -27,6 +29,11 @@ function Stars({ rating, color }: { rating: number; color: string }) {
 export default async function ReviewsPage({ params }: { params: { slug: string } }) {
   const data = await getReviewPageData(params.slug)
   if (!data) notFound()
+
+  // The publish switch has to actually withhold the page, otherwise every
+  // client has a live public URL the moment they exist. 404 rather than a
+  // "not published" notice, so the URL reveals nothing before it is ready.
+  if (!data.enabled) notFound()
 
   const brand = data.brandColor
   const link = data.placeId ? reviewLinkFor(data.placeId) : null

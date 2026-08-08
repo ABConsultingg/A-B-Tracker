@@ -491,6 +491,9 @@ export default function ServiceToggles({
                       onChange={e => setRep({ aggregation_page_enabled: e.target.checked })} />
                     Publish the public review page
                   </label>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Until this is checked the URL returns 404 — nothing is public.
+                  </p>
 
                   <div className="mt-2">
                     <label className={L}>Public page</label>
