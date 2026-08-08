@@ -9,10 +9,10 @@
 // each is accepted automatically; nothing else is.
 const ALLOWED_HOSTS = new Set([
   "abconsultingg.com",
-  // Culture's live site is cultureccc.com. cultureconstruction.com resolves to
-  // a different host and is kept in case it is also in use.
+  // Culture's live site. cultureconstruction.com was also listed but is not in
+  // use, so it was removed. Note clients.website_domain for `culture` still
+  // carries it, which now resolves a client the CORS gate rejects first.
   "cultureccc.com",
-  "cultureconstruction.com",
   "apollosupplyevents.com",
   "mvpchiropractic.com",
   "richardsbuildingsupply.com",

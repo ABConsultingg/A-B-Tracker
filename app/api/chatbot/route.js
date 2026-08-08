@@ -9,58 +9,16 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export const maxDuration = 60;
 
 // ─── Master system prompt factory ───────────────────────────────────────────
-// ─── Client site content ────────────────────────────────────────────────────
-// So a client-site bot answers from the client's own website rather than from
-// A&B's knowledge. Fetched at request time and cached, because the widget is a
-// single static file shared by every client — there is no per-client build step
-// at which this could be baked in.
-//
-// Cache is in-memory per serverless instance, so a cold instance pays one
-// fetch. Failures are cached briefly so a down site doesn't retry every message.
-const siteCache = new Map();
-const SITE_TTL_MS = 6 * 60 * 60 * 1000;
-const SITE_FAIL_TTL_MS = 10 * 60 * 1000;
-
-async function fetchSiteKnowledge(origin) {
-  if (!origin) return "";
-
-  const hit = siteCache.get(origin);
-  if (hit && Date.now() - hit.at < (hit.text ? SITE_TTL_MS : SITE_FAIL_TTL_MS)) {
-    return hit.text;
-  }
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(origin, {
-      signal: controller.signal,
-      headers: { "User-Agent": "ABChatbot/1.0 (+https://www.abconsultingg.com)" },
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const text = (await res.text())
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 4000);
-
-    siteCache.set(origin, { text, at: Date.now() });
-    return text;
-  } catch (e) {
-    console.warn(`[chat] site knowledge fetch failed for ${origin}:`, e.message);
-    siteCache.set(origin, { text: "", at: Date.now() });
-    return "";
-  }
-}
+// ─── Business knowledge ─────────────────────────────────────────────────────
+// The bot is grounded in the client's social_brand_profiles row, resolved by
+// client_id from the validated Origin. That row is maintained by the A&B team
+// and shared with the receptionist, the Social Hub and Pancho, so all of them
+// answer from one source. It replaces the previous approach of scraping the
+// client's homepage at request time, which grounded the bot in whatever
+// marketing copy happened to be on the page.
 
 // Called once per request. clientConfig is passed from the embed script.
-function buildSystemPrompt(clientConfig, siteKnowledge = "", brandKnowledge = "", resolvedName = null) {
+function buildSystemPrompt(clientConfig, brandKnowledge = "", resolvedName = null) {
   const isAB = !clientConfig || clientConfig.isABSite;
 
   // Identity used inside the shared core. These were previously hardcoded to
@@ -369,7 +327,7 @@ You help visitors learn about ${businessName}'s services and get connected with 
 ## SERVICES ${businessName.toUpperCase()} OFFERS
 ${serviceList.length ? serviceList.map((s) => `- ${s}`).join("\n") : "- (ask the visitor what they need and capture it for the team)"}
 
-${brandKnowledge ? `## BRAND PROFILE (from the tracker — authoritative)\nThis is maintained by the A&B team and outranks anything inferred. Follow the voice, respect the hard rules, and never contradict it.\n${brandKnowledge}\n` : ""}${customContext ? `## ABOUT ${businessName.toUpperCase()}\n${customContext}\n` : ""}${siteKnowledge ? `## CONTENT FROM ${businessName.toUpperCase()}'S WEBSITE\nUse this as the source of truth about the business. If it contradicts anything else, trust this.\n${siteKnowledge}\n` : ""}
+${brandKnowledge ? `## BRAND PROFILE (from the tracker — authoritative)\nThis is maintained by the A&B team and outranks anything inferred. Follow the voice, respect the hard rules, and never contradict it.\n${brandKnowledge}\n` : ""}${customContext ? `## ABOUT ${businessName.toUpperCase()}\n${customContext}\n` : ""}
 ## YOUR JOB
 1. Answer questions about ${businessName}'s services.
 2. Help the visitor work out whether they need the service.
@@ -407,6 +365,21 @@ output the [LEAD_CAPTURED ...] line as described above so the team gets it.
 }
 
 // ─── Supabase session logger ─────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The widget's session id, or null.
+ *
+ * Caller-supplied and interpolated into a PostgREST filter, so anything that is
+ * not a UUID is dropped rather than escaped — chatbot_sessions.id is uuid, so a
+ * non-UUID could not identify a row anyway.
+ */
+function sessionIdOf(context) {
+  const raw = context?.sessionId;
+  return typeof raw === "string" && UUID_RE.test(raw) ? raw : null;
+}
+
 async function logSession(sessionId, data) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -502,14 +475,6 @@ async function handlePost(request) {
 
     const brandKnowledge = brandProfilePrompt(clientCtx);
 
-    // On client sites, also ground the bot in that client's own website content.
-    // The Origin was already validated against the CORS allowlist, so this only
-    // ever fetches a site we deliberately permitted.
-    const isClientSite = clientCtx.clientId
-      ? !clientCtx.isAB
-      : clientConfig && clientConfig.isABSite === false;
-    const siteKnowledge = isClientSite ? await fetchSiteKnowledge(origin) : "";
-
     // Build context prefix for first message
     const ctxPrefix = context
       ? `[Visitor is on page: "${context.page}" | Time on page: ${context.timeOnPage}s | Referrer: "${context.referrer || "direct"}" | Device: "${context.device}"]`
@@ -525,7 +490,7 @@ async function handlePost(request) {
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 450,
-      system: buildSystemPrompt(clientConfig, siteKnowledge, brandKnowledge, clientCtx.clientName),
+      system: buildSystemPrompt(clientConfig, brandKnowledge, clientCtx.clientName),
       messages: enrichedMessages,
     });
 
@@ -592,19 +557,57 @@ async function handlePost(request) {
       .replace(/\[LEAD_CAPTURED[^\]]*\]/g, "").replace(/\[SEND_SCORECARD[^\]]*\]/g, "")
       .trim();
 
-    return Response.json({
-      message,
-      showBooking,
-      lead: leadMatch
-        ? {
-            name: leadMatch[1],
-            email: leadMatch[2],
-            company: leadMatch[3],
-            industry: leadMatch[4],
-            notes: leadMatch[5],
-          }
-        : null,
-    });
+    const lead = leadMatch
+      ? {
+          name: leadMatch[1],
+          email: leadMatch[2],
+          company: leadMatch[3],
+          industry: leadMatch[4],
+          notes: leadMatch[5],
+        }
+      : null;
+
+    // The API is stateless and turn-based, so there is no "conversation ended"
+    // signal to hang this off. Logging every turn against the widget's session
+    // id upserts one row per conversation, which after the final turn holds the
+    // complete transcript — the same end state, without depending on the
+    // visitor closing the widget politely.
+    //
+    // Awaited: a serverless instance can freeze the moment the response is
+    // returned, so a floating promise here would often never run.
+    const sessionId = sessionIdOf(context);
+    if (sessionId) {
+      const fullTranscript = [...messages, { role: "assistant", content: message }]
+        .map(m => `${String(m.role).toUpperCase()}: ${m.content}`)
+        .join("\n\n");
+
+      await logSession(sessionId, {
+        page_url: context?.page ?? null,
+        referrer: context?.referrer || null,
+        device: context?.device ?? null,
+        time_on_page_seconds: Number.isFinite(Number(context?.timeOnPage))
+          ? Math.round(Number(context.timeOnPage))
+          : null,
+        message_count: messages.filter(m => m.role === "user").length,
+        duration_seconds: Number.isFinite(Number(context?.timeOnPage))
+          ? Math.round(Number(context.timeOnPage))
+          : null,
+        is_ab_site: clientCtx.isAB,
+        client_id: clientCtx.clientId,
+        client_name: clientCtx.clientName,
+        services_mentioned: detectTopics(messages),
+        lead_captured: !!lead?.email,
+        lead_name: lead?.name || null,
+        lead_email: lead?.email || null,
+        lead_company: lead?.company || null,
+        lead_industry: lead?.industry || null,
+        lead_notes: lead?.notes || null,
+        transcript: fullTranscript,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    return Response.json({ message, showBooking, lead });
   } catch (err) {
     console.error("Chat API error:", err);
     return Response.json({ error: "Service unavailable" }, { status: 500 });

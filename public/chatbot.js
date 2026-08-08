@@ -102,9 +102,24 @@
   let slots       = [];
   let sessionStart = Date.now();
 
+  // One id per page load. The chat API is stateless, so this is what lets it
+  // upsert a single chatbot_sessions row per conversation instead of one per
+  // message. randomUUID needs a secure context; the fallback keeps the format
+  // valid on plain http so the server never discards it.
+  const sessionId = (function () {
+    try {
+      if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch (e) {}
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  })();
+
   // ─── Behavior tracking ─────────────────────────────────────────────────────
   function getContext() {
     return {
+      sessionId:   sessionId,
       page:        window.location.pathname,
       referrer:    document.referrer,
       timeOnPage:  Math.round((Date.now() - sessionStart) / 1000),
