@@ -961,6 +961,7 @@ export default function ClientsClient({
               {/* ─── Portal access (existing clients only, admin only) ─── */}
               {!isNew && selected && isAdmin && (
                 <PortalAccess
+                  key={selected.id}
                   clientId={selected.id}
                   clientName={selected.name}
                   defaultEmail={selected.contact_email}
