@@ -402,6 +402,12 @@ export default function ClientsClient({
     setDraft(prev => ({ ...prev, ...patch }))
   }
 
+  // These fields are controlled, deliberately. They used to be uncontrolled
+  // (defaultValue + onBlur, no onChange), which meant draft never tracked what
+  // was typed. Saving toggles the "Saving..." / "✓ Saved" spans rendered above
+  // them, which shifts sibling positions and remounts the inputs; each remount
+  // re-read defaultValue from a draft still holding the value the client was
+  // opened with, so a successful save visibly reverted the field.
   // Auto-save on field blur for existing clients (admin only)
   async function autoSaveField(field: keyof Draft, value: any) {
     if (!isAdmin || !selected || isNew) return
@@ -411,13 +417,23 @@ export default function ClientsClient({
     setSaving(true)
     // Booleans need to be passed as-is, not coerced
     const dbValue = typeof value === 'boolean' ? value : (value || null)
-    const { error } = await supabase
+    // .select() so we can tell an applied update from one RLS filtered to zero
+    // rows. The clients update policy is is_admin() OR role = 'sales', and
+    // is_admin() is admin-only — an OWNER passes this component's isAdmin check
+    // but matches no policy. Postgres reports that as success with no rows, so
+    // without this the field showed "✓ Saved" and nothing was written.
+    const { data: updated, error } = await supabase
       .from('clients')
       .update({ [field]: dbValue, updated_at: new Date().toISOString() })
       .eq('id', selected.id)
+      .select('id')
     setSaving(false)
     if (error) {
       alert('Save failed: ' + error.message)
+      return
+    }
+    if (!updated || updated.length === 0) {
+      alert('Save did not apply — your role cannot edit clients. Reload to see the stored value.')
       return
     }
     // Update local state
@@ -720,7 +736,8 @@ export default function ClientsClient({
                           placeholder="e.g. RBS"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="text" defaultValue={draft.name}
+                        <input type="text" value={draft.name}
+                          onChange={e => updateDraft({ name: e.target.value })}
                           onBlur={e => autoSaveField('name', e.target.value)}
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       )
@@ -759,7 +776,8 @@ export default function ClientsClient({
                           placeholder="e.g. Richards Building Supply"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="text" defaultValue={draft.company}
+                        <input type="text" value={draft.company}
+                          onChange={e => updateDraft({ company: e.target.value })}
                           onBlur={e => autoSaveField('company', e.target.value)}
                           placeholder="e.g. Richards Building Supply"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
@@ -777,7 +795,8 @@ export default function ClientsClient({
                           onChange={e => updateDraft({ contact_name: e.target.value })}
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="text" defaultValue={draft.contact_name}
+                        <input type="text" value={draft.contact_name}
+                          onChange={e => updateDraft({ contact_name: e.target.value })}
                           onBlur={e => autoSaveField('contact_name', e.target.value)}
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       )
@@ -795,7 +814,8 @@ export default function ClientsClient({
                           placeholder="name@company.com"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="email" defaultValue={draft.contact_email}
+                        <input type="email" value={draft.contact_email}
+                          onChange={e => updateDraft({ contact_email: e.target.value })}
                           onBlur={e => autoSaveField('contact_email', e.target.value)}
                           placeholder="name@company.com"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
@@ -814,7 +834,8 @@ export default function ClientsClient({
                           placeholder="(555) 123-4567"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="text" defaultValue={draft.contact_phone}
+                        <input type="text" value={draft.contact_phone}
+                          onChange={e => updateDraft({ contact_phone: e.target.value })}
                           onBlur={e => autoSaveField('contact_phone', e.target.value)}
                           placeholder="(555) 123-4567"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
@@ -833,7 +854,8 @@ export default function ClientsClient({
                           placeholder="Street, City, State, ZIP"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <input type="text" defaultValue={draft.address}
+                        <input type="text" value={draft.address}
+                          onChange={e => updateDraft({ address: e.target.value })}
                           onBlur={e => autoSaveField('address', e.target.value)}
                           placeholder="Street, City, State, ZIP"
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
@@ -853,7 +875,8 @@ export default function ClientsClient({
                           placeholder="Internal notes about this client..."
                           className="w-full text-sm px-3 py-2 border border-gray-200 rounded resize-none focus:border-blue-500 focus:outline-none" />
                       ) : (
-                        <textarea defaultValue={draft.notes}
+                        <textarea value={draft.notes}
+                          onChange={e => updateDraft({ notes: e.target.value })}
                           onBlur={e => autoSaveField('notes', e.target.value)}
                           rows={3}
                           placeholder="Internal notes about this client..."
@@ -942,7 +965,8 @@ export default function ClientsClient({
                             placeholder="https://lookerstudio.google.com/embed/reporting/..."
                             className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
                         ) : (
-                          <input type="url" defaultValue={draft.looker_url}
+                          <input type="url" value={draft.looker_url}
+                            onChange={e => updateDraft({ looker_url: e.target.value })}
                             onBlur={e => autoSaveField('looker_url', e.target.value)}
                             placeholder="https://lookerstudio.google.com/embed/reporting/..."
                             className="w-full text-sm px-3 py-2 border border-gray-200 rounded focus:border-blue-500 focus:outline-none" />
